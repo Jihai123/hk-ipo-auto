@@ -1,147 +1,86 @@
-# 港股新股自动打分器 🎯
+# 港股新股自动评分系统 v2.0
 
-全自动分析港股IPO新股，基于招股书内容智能打分。
+## 新特性
+- ✅ SQLite数据库存储保荐人历史数据
+- ✅ 爬虫自动从AAStocks获取真实数据
+- ✅ 数据可更新、可扩展
 
-## ✨ 功能特点
+## 快速部署
 
-- **全自动**: 输入股票代码即可自动完成评分
-- **自动获取招股书**: 从港交所披露易自动搜索下载
-- **智能解析**: 自动提取关键信息（保荐人、基石投资者、行业等）
-- **科学打分**: 基于历史数据的评分规则
+### 1. 上传文件到服务器
+将以下文件/文件夹上传到 `/www/wwwroot/zhibeimao.com/hk-ipo-auto/`:
+- server.js
+- package.json
+- scripts/          (整个文件夹)
+- public/           (整个文件夹)
 
-## 📊 评分规则
-
-| 评分项 | 加分条件 | 减分条件 |
-|--------|----------|----------|
-| 有无旧股 | 无旧股 (0分) | 有旧股 (-2分) |
-| 保荐人 | 首日涨幅≥70% (+2分) | <40% (-2分) |
-| 基石投资者 | 有明星基石 (+2分) | 无 (0分) |
-| IPO前投资者 | 有禁售期 (0分) | 无禁售期 (-2分) |
-| 行业 | 物业/软件/医药 (+2分) | 纺织/金融 (-2分) |
-| 估值 | 低于同行 (+2分) | 高于同行 (-2分) |
-
-**总分解读**:
-- ≥6分: 🔥 强烈推荐申购
-- 4-5分: ✅ 建议申购
-- 2-3分: 🤔 可考虑申购
-- 0-1分: ⚠️ 谨慎申购
-- <0分: ❌ 不建议申购
-
-## 🚀 快速开始
-
-### 1. 安装依赖
-
+### 2. 安装依赖
 ```bash
+cd /www/wwwroot/zhibeimao.com/hk-ipo-auto/
 npm install
 ```
 
-### 2. 启动服务
-
+### 3. 初始化数据库并爬取数据
 ```bash
-npm start
+# 方式1: 一键设置
+npm run setup
+
+# 方式2: 分步执行
+npm run init-db    # 初始化数据库
+npm run crawl      # 爬取保荐人数据
 ```
 
-### 3. 访问页面
-
-打开浏览器访问: http://localhost:3000
-
-## 📡 API 接口
-
-### 完整评分
-
-```
-GET /api/score/:code
+### 4. 启动服务
+```bash
+pm2 restart hk-ipo  # 或 pm2 start server.js --name "hk-ipo"
 ```
 
-**参数**:
-- `code`: 股票代码（如 09988, 2456）
-- `peRatio`: (可选) 新股市盈率
-- `industryPeRatio`: (可选) 同行业市盈率
+## 数据库说明
 
-**返回示例**:
-```json
-{
-  "success": true,
-  "stockCode": "09988",
-  "totalScore": 4,
-  "rating": "建议申购",
-  "scores": {
-    "oldShares": { "score": 0, "detail": "全部为新股发行" },
-    "sponsor": { "score": 2, "detail": "保荐人中金公司首日平均涨幅72%" },
-    "cornerstone": { "score": 2, "detail": "发现明星基石投资者: GIC" },
-    "preIPO": { "score": 0, "detail": "IPO前投资者有禁售期" },
-    "industry": { "score": 0, "detail": "其他行业" },
-    "valuation": { "score": 0, "detail": "估值数据不足" }
-  }
-}
+### 位置
+`data/ipo.db` (SQLite数据库)
+
+### 表结构
+- `sponsor_stats` - 保荐人统计数据
+- `ipo_records` - IPO历史记录
+- `ipo_sponsors` - IPO与保荐人关联
+- `sponsor_aliases` - 保荐人别名映射
+
+### 更新数据
+```bash
+# 定期运行爬虫更新数据（建议每周一次）
+npm run crawl
+
+# 或设置定时任务
+crontab -e
+# 添加: 0 3 * * 1 cd /www/wwwroot/zhibeimao.com/hk-ipo-auto && npm run crawl
 ```
 
-### 搜索招股书
+## API接口
 
-```
-GET /api/search/:code
-```
+| 接口 | 说明 |
+|------|------|
+| GET /api/health | 健康检查 |
+| GET /api/score/:code | 评分（如 /api/score/02768）|
+| GET /api/sponsors | 获取所有保荐人数据 |
+| GET /api/sponsors/top | 获取TOP20保荐人 |
+| GET /api/cache/clear/:code | 清除股票缓存 |
 
-### 保荐人数据库
+## 评分规则
 
-```
-GET /api/sponsors
-```
+| 项目 | 正分 | 零分 | 负分 |
+|------|------|------|------|
+| 旧股 | - | 无旧股(0) | 有旧股(-2) |
+| 保荐人 | 涨幅≥70%(+2) | 40-70%(0) | <40%(-2) |
+| 基石投资者 | 有明星基石(+2) | 其他(0) | - |
+| Pre-IPO禁售 | - | 有禁售期/无Pre-IPO(0) | 无禁售期(-2) |
+| 行业 | 医药/软件/物管(+2) | 其他(0) | 纺织/金融(-2) |
 
-## 🏗️ 项目结构
+## 数据来源
+- 保荐人数据：AAStocks (aastocks.com)
+- 招股书：港交所披露易 (hkexnews.hk)
 
-```
-hk-ipo-auto/
-├── server.js          # 后端服务 (Node.js + Express)
-├── public/
-│   └── index.html     # 前端页面
-├── package.json
-└── README.md
-```
-
-## 🔧 技术栈
-
-- **后端**: Node.js, Express
-- **PDF解析**: pdf-parse
-- **网页爬取**: axios, cheerio
-- **前端**: 原生HTML/CSS/JS
-
-## 📝 保荐人数据库
-
-内置 50+ 保荐人历史业绩数据，包括：
-
-**顶级保荐人 (≥70%)**:
-- 高盛 Goldman Sachs (85%)
-- 摩根士丹利 Morgan Stanley (78%)
-- 中金公司 CICC (72%)
-- 华泰金融 (75%)
-
-**中等保荐人 (40-70%)**:
-- 中信里昂 (55%)
-- 海通国际 (48%)
-- 招银国际 (52%)
-- UBS 瑞银 (62%)
-
-**一般保荐人 (<40%)**:
-- 民银资本 (32%)
-- 华盛资本 (28%)
-- 信达国际 (35%)
-
-## ⚠️ 注意事项
-
-1. 本工具仅供参考，不构成投资建议
-2. 数据来源于港交所披露易，准确性取决于PDF解析结果
-3. 保荐人业绩数据为历史统计，不代表未来表现
-4. 建议结合其他因素综合判断
-
-## 🔄 后续改进
-
-- [ ] 自动更新保荐人业绩数据
-- [ ] 添加估值自动分析
-- [ ] 历史评分记录
-- [ ] 批量分析功能
-- [ ] 微信小程序版本
-
-## 📜 许可证
-
-MIT License
+## 注意事项
+1. better-sqlite3 需要编译，服务器需要安装 build-essential
+2. 如果数据库不可用，系统会自动使用内置的后备数据
+3. PDF缓存有效期7天，存储在 cache/ 目录

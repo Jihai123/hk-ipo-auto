@@ -1,0 +1,96 @@
+{
+  "updatedAt": "2026-01-28T13:39:03.670Z",
+  "source": "aastocks",
+  "sponsors": [
+    {
+      "name": "中國國際金融香港證券",
+      "count": 64,
+      "upCount": 44,
+      "downCount": 20,
+      "avgFirstDay": 27.96,
+      "avgCumulative": 64.68,
+      "winRate": 68.75
+    },
+    {
+      "name": "中信證券(香港)",
+      "count": 42,
+      "upCount": 35,
+      "downCount": 7,
+      "avgFirstDay": 41.62,
+      "avgCumulative": 59.89,
+      "winRate": 83.33
+    },
+    {
+      "name": "華泰金融控股(香港)",
+      "count": 33,
+      "upCount": 19,
+      "downCount": 14,
+      "avgFirstDay": 6.86,
+      "avgCumulative": 29.48,
+      "winRate": 57.58
+    },
+    {
+      "name": "摩根士丹利亞洲",
+      "count": 15,
+      "upCount": 12,
+      "downCount": 3,
+      "avgFirstDay": 21.91,
+      "avgCumulative": 61.82,
+      "winRate": 80
+    },
+    {
+      "name": "高盛(亞洲)有限責任公司",
+      "count": 12,
+      "upCount": 8,
+      "downCount": 4,
+      "avgFirstDay": 5.58,
+      "avgCumulative": 43.04,
+      "winRate": 66.67
+    },
+    {
+      "name": "建銀國際金融",
+      "count": 12,
+      "upCount": 10,
+      "downCount": 2,
+      "avgFirstDay": 11.38,
+      "avgCumulative": -2.95,
+      "winRate": 83.33
+    },
+    {
+      "name": "海通國際資本",
+      "count": 11,
+      "upCount": 10,
+      "downCount": 1,
+      "avgFirstDay": 31.22,
+      "avgCumulative": 12.96,
+      "winRate": 90.91
+    },
+    {
+      "name": "國泰君安融資",
+      "count": 11,
+      "upCount": 9,
+      "downCount": 2,
+      "avgFirstDay": 23.18,
+      "avgCumulative": 70.78,
+      "winRate": 81.82
+    },
+    {
+      "name": "瑞銀證券香港",
+      "count": 10,
+      "upCount": 7,
+      "downCount": 3,
+      "avgFirstDay": 16.22,
+      "avgCumulative": 32.21,
+      "winRate": 70
+    },
+    {
+      "name": "招銀國際融資",
+      "count": 10,
+      "upCount": 7,
+      "downCount": 3,
+      "avgFirstDay": 25.56,
+      "avgCumulative": 44.21,
+      "winRate": 70
+    }
+  ]
+}

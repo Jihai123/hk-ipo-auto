@@ -3,7 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>港股新股自动打分器</title>
+  <title>港股新股自动打分器 - 智能IPO评分系统 | 招股书分析 | 保荐人评级</title>
+  <meta name="description" content="港股新股自动打分器，智能分析IPO招股书，自动评估保荐人业绩、基石投资者、行业前景等维度，为港股打新提供科学评分参考。支持自动下载港交所招股书PDF并解析评分。">
+  <meta name="keywords" content="港股打新,IPO评分,新股评分,港股新股,招股书分析,保荐人评级,基石投资者,港交所,披露易,港股申购,新股分析,IPO分析工具,港股投资">
+  <meta name="author" content="智享AI">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://zhibeimao.com/hk/">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zhibeimao.com/hk/">
+  <meta property="og:title" content="港股新股自动打分器 - 智能IPO评分系统">
+  <meta property="og:description" content="智能分析IPO招股书，自动评估保荐人、基石投资者、行业前景，为港股打新提供科学评分。">
+  <meta property="og:image" content="https://zhibeimao.com/hk/og-image.png">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="港股新股自动打分器 - 智能IPO评分系统">
+  <meta name="twitter:description" content="智能分析IPO招股书，自动评估保荐人、基石投资者、行业前景，为港股打新提供科学评分。">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -43,9 +64,15 @@
       letter-spacing: 2px;
     }
     
-    .header p {
+    .header .subtitle {
+      font-size: 18px;
+      color: #ccd6f6;
+      margin-bottom: 8px;
+    }
+    
+    .header .sub-desc {
+      font-size: 14px;
       color: #8892b0;
-      font-size: 16px;
     }
     
     .header .badge {
@@ -59,94 +86,121 @@
       margin-top: 12px;
     }
     
-    /* 搜索区域 */
+    /* 顶部导航 */
+    .top-nav {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .top-nav a {
+      color: #8892b0;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.3s;
+    }
+    
+    .top-nav a:hover {
+      color: #e94560;
+    }
+    
+    /* 搜索框 */
     .search-box {
-      background: rgba(255,255,255,0.05);
-      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
       padding: 30px;
-      margin-bottom: 24px;
-      border: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     .search-form {
       display: flex;
-      gap: 16px;
-      align-items: flex-end;
-      flex-wrap: wrap;
+      gap: 12px;
     }
     
-    .form-group {
+    .search-input {
       flex: 1;
-      min-width: 200px;
-    }
-    
-    .form-group label {
-      display: block;
-      color: #ccd6f6;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    
-    .form-group input {
-      width: 100%;
-      padding: 14px 18px;
-      font-size: 18px;
-      font-weight: 600;
-      border: 2px solid rgba(233, 69, 96, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.1);
       border-radius: 12px;
-      background: rgba(0,0,0,0.3);
+      padding: 16px 20px;
+      font-size: 18px;
       color: #fff;
       outline: none;
-      transition: all 0.3s ease;
+      transition: all 0.3s;
     }
     
-    .form-group input:focus {
+    .search-input::placeholder {
+      color: #8892b0;
+    }
+    
+    .search-input:focus {
       border-color: #e94560;
-      box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.2);
+      background: rgba(255, 255, 255, 0.15);
     }
     
-    .form-group input::placeholder {
-      color: #5a6a8a;
-    }
-    
-    .btn-primary {
-      padding: 14px 32px;
+    .search-btn {
       background: linear-gradient(135deg, #e94560, #ff6b6b);
-      color: #fff;
       border: none;
       border-radius: 12px;
+      padding: 16px 32px;
       font-size: 16px;
       font-weight: 600;
+      color: #fff;
       cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      transition: all 0.3s;
       white-space: nowrap;
     }
     
-    .btn-primary:hover {
+    .search-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(233, 69, 96, 0.4);
+      box-shadow: 0 10px 30px rgba(233, 69, 96, 0.3);
     }
     
-    .btn-primary:disabled {
-      opacity: 0.6;
+    .search-btn:disabled {
+      opacity: 0.7;
       cursor: not-allowed;
       transform: none;
     }
     
-    /* 加载状态 */
+    .search-tips {
+      margin-top: 16px;
+      font-size: 13px;
+      color: #8892b0;
+    }
+    
+    .search-tips span {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin: 4px 4px 4px 0;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .search-tips span:hover {
+      background: rgba(233, 69, 96, 0.3);
+      color: #fff;
+    }
+    
+    /* 加载动画 */
     .loading {
       text-align: center;
-      padding: 60px;
+      padding: 60px 20px;
+      display: none;
+    }
+    
+    .loading.active {
+      display: block;
     }
     
     .spinner {
-      width: 60px;
-      height: 60px;
-      border: 4px solid rgba(233, 69, 96, 0.2);
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
       border-top-color: #e94560;
       border-radius: 50%;
       animation: spin 1s linear infinite;
@@ -162,242 +216,265 @@
       font-size: 16px;
     }
     
-    .loading-step {
+    .loading-sub {
       color: #8892b0;
       font-size: 14px;
       margin-top: 8px;
     }
     
-    /* 结果展示 */
-    .result-box {
-      background: rgba(255,255,255,0.05);
-      border-radius: 20px;
+    /* 结果卡片 */
+    .result-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
       padding: 30px;
-      margin-bottom: 24px;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: none;
     }
     
-    .result-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-      gap: 16px;
+    .result-card.active {
+      display: block;
     }
     
-    .stock-info h2 {
-      font-size: 24px;
-      color: #fff;
-      margin-bottom: 4px;
-    }
-    
-    .stock-info .code {
-      color: #8892b0;
-      font-size: 14px;
-    }
-    
-    .stock-info .code a {
-      color: #64b5f6;
-      text-decoration: none;
-    }
-    
-    .stock-info .code a:hover {
-      text-decoration: underline;
-    }
-    
-    /* 总分展示 */
+    /* 总分区域 */
     .total-score {
       text-align: center;
       padding: 30px;
+      background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(255, 107, 107, 0.1));
       border-radius: 16px;
-      margin-bottom: 24px;
+      margin-bottom: 30px;
     }
     
-    .total-score.positive {
-      background: linear-gradient(135deg, rgba(46, 213, 115, 0.2), rgba(46, 213, 115, 0.05));
-      border: 2px solid rgba(46, 213, 115, 0.5);
+    .stock-info {
+      margin-bottom: 20px;
     }
     
-    .total-score.neutral {
-      background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 193, 7, 0.05));
-      border: 2px solid rgba(255, 193, 7, 0.5);
-    }
-    
-    .total-score.negative {
-      background: linear-gradient(135deg, rgba(255, 71, 87, 0.2), rgba(255, 71, 87, 0.05));
-      border: 2px solid rgba(255, 71, 87, 0.5);
-    }
-    
-    .score-label {
-      color: #8892b0;
-      font-size: 14px;
+    .stock-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
       margin-bottom: 8px;
     }
     
-    .score-value {
-      font-size: 72px;
-      font-weight: 800;
-      line-height: 1;
-      margin-bottom: 12px;
+    .stock-code {
+      font-size: 16px;
+      color: #8892b0;
     }
     
-    .total-score.positive .score-value { color: #2ed573; }
-    .total-score.neutral .score-value { color: #ffc107; }
-    .total-score.negative .score-value { color: #ff4757; }
+    .score-display {
+      font-size: 72px;
+      font-weight: 800;
+      margin: 20px 0;
+    }
     
-    .rating {
-      font-size: 20px;
+    .score-positive { color: #2ed573; }
+    .score-neutral { color: #feca57; }
+    .score-negative { color: #ff6b6b; }
+    
+    .rating-badge {
+      display: inline-block;
+      padding: 8px 24px;
+      border-radius: 30px;
+      font-size: 18px;
       font-weight: 600;
     }
     
-    .total-score.positive .rating { color: #2ed573; }
-    .total-score.neutral .rating { color: #ffc107; }
-    .total-score.negative .rating { color: #ff4757; }
+    .rating-strong { background: linear-gradient(135deg, #2ed573, #7bed9f); color: #000; }
+    .rating-buy { background: linear-gradient(135deg, #1dd1a1, #55efc4); color: #000; }
+    .rating-consider { background: linear-gradient(135deg, #feca57, #fed330); color: #000; }
+    .rating-caution { background: linear-gradient(135deg, #ff9f43, #ee5a24); color: #fff; }
+    .rating-avoid { background: linear-gradient(135deg, #ff6b6b, #e94560); color: #fff; }
     
-    /* 评分明细 */
+    /* 评分详情 */
     .score-details {
       display: grid;
       gap: 16px;
     }
     
     .score-item {
-      background: rgba(0,0,0,0.2);
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 12px;
       padding: 20px;
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 1fr auto;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
+      gap: 16px;
     }
     
-    .score-item-left {
-      flex: 1;
-      min-width: 200px;
-    }
-    
-    .score-item-name {
+    .score-item-info h3 {
       font-size: 16px;
       font-weight: 600;
       color: #ccd6f6;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     
-    .score-item-detail {
-      font-size: 13px;
+    .score-item-info p {
+      font-size: 14px;
       color: #8892b0;
     }
     
     .score-item-value {
       font-size: 24px;
       font-weight: 700;
-      padding: 8px 16px;
-      border-radius: 10px;
-      min-width: 70px;
+      min-width: 60px;
       text-align: center;
     }
     
-    .score-item-value.positive {
-      background: rgba(46, 213, 115, 0.2);
-      color: #2ed573;
+    .score-item-value.positive { color: #2ed573; }
+    .score-item-value.neutral { color: #8892b0; }
+    .score-item-value.negative { color: #ff6b6b; }
+    .score-item-value.warning { color: #feca57; }
+    
+    /* 行业标签 */
+    .industry-tag {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
     }
     
-    .score-item-value.neutral {
-      background: rgba(255, 193, 7, 0.2);
-      color: #ffc107;
+    .industry-hot { background: linear-gradient(135deg, #e94560, #ff6b6b); color: #fff; }
+    .industry-growth { background: linear-gradient(135deg, #1dd1a1, #55efc4); color: #000; }
+    .industry-neutral { background: rgba(255, 255, 255, 0.2); color: #ccd6f6; }
+    .industry-low { background: linear-gradient(135deg, #feca57, #fed330); color: #000; }
+    .industry-avoid { background: linear-gradient(135deg, #636e72, #b2bec3); color: #fff; }
+    
+    /* 保荐人列表 */
+    .sponsors-list {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    .score-item-value.negative {
-      background: rgba(255, 71, 87, 0.2);
-      color: #ff4757;
-    }
-    
-    /* 保荐人标签 */
-    .sponsor-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    
-    .sponsor-tag {
+    .sponsor-item {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.1);
       padding: 4px 10px;
       border-radius: 6px;
       font-size: 12px;
-      font-weight: 500;
+      margin: 4px 4px 4px 0;
+      color: #ccd6f6;
     }
     
-    .sponsor-tag.top {
-      background: rgba(46, 213, 115, 0.2);
+    /* 基石投资者 */
+    .cornerstone-list {
+      margin-top: 12px;
+    }
+    
+    .cornerstone-item {
+      display: inline-block;
+      background: linear-gradient(135deg, rgba(46, 213, 115, 0.2), rgba(123, 237, 159, 0.2));
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin: 4px 4px 4px 0;
       color: #2ed573;
     }
     
-    .sponsor-tag.mid {
-      background: rgba(255, 193, 7, 0.2);
-      color: #ffc107;
+    /* 招股书链接 */
+    .prospectus-link {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
     }
     
-    .sponsor-tag.low {
-      background: rgba(255, 71, 87, 0.2);
-      color: #ff4757;
+    .prospectus-link a {
+      color: #e94560;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.3s;
+    }
+    
+    .prospectus-link a:hover {
+      color: #ff6b6b;
+      text-decoration: underline;
+    }
+    
+    /* 评分规则说明 */
+    .rules-section {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 16px;
+      padding: 30px;
+      margin-top: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .rules-section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ccd6f6;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .rules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+    }
+    
+    .rule-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    
+    .rule-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e94560;
+      margin-bottom: 10px;
+    }
+    
+    .rule-card p {
+      font-size: 13px;
+      color: #8892b0;
+      line-height: 1.6;
+    }
+    
+    .rule-score {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    
+    .rule-score.plus2 { background: #2ed573; color: #000; }
+    .rule-score.plus1 { background: #1dd1a1; color: #000; }
+    .rule-score.zero { background: #636e72; color: #fff; }
+    .rule-score.minus1 { background: #feca57; color: #000; }
+    .rule-score.minus2 { background: #ff6b6b; color: #fff; }
+    
+    /* 底部版权 */
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: #8892b0;
+      font-size: 13px;
+    }
+    
+    .footer a {
+      color: #e94560;
+      text-decoration: none;
     }
     
     /* 错误提示 */
-    .error-box {
-      background: rgba(255, 71, 87, 0.1);
-      border: 1px solid rgba(255, 71, 87, 0.3);
+    .error-message {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
       border-radius: 12px;
       padding: 20px;
       text-align: center;
+      color: #ff6b6b;
+      display: none;
     }
     
-    .error-box h3 {
-      color: #ff4757;
-      margin-bottom: 8px;
-    }
-    
-    .error-box p {
-      color: #ccd6f6;
-      font-size: 14px;
-    }
-    
-    /* 打分标准 */
-    .criteria-box {
-      background: rgba(255,255,255,0.03);
-      border-radius: 16px;
-      padding: 24px;
-      border: 1px solid rgba(255,255,255,0.08);
-      margin-top: 24px;
-    }
-    
-    .criteria-box h4 {
-      color: #8892b0;
-      font-size: 14px;
-      margin-bottom: 16px;
-    }
-    
-    .criteria-box ul {
-      list-style: none;
-      color: #5a6a8a;
-      font-size: 12px;
-      line-height: 2;
-    }
-    
-    .criteria-box li strong {
-      color: #8892b0;
-    }
-    
-    /* 页脚 */
-    .footer {
-      text-align: center;
-      margin-top: 40px;
-      color: #5a6a8a;
-      font-size: 12px;
-    }
-    
-    .footer p {
-      margin-bottom: 8px;
+    .error-message.active {
+      display: block;
     }
     
     /* 响应式 */
@@ -410,306 +487,366 @@
         flex-direction: column;
       }
       
-      .btn-primary {
+      .search-btn {
         width: 100%;
-        justify-content: center;
       }
       
-      .score-value {
+      .score-display {
         font-size: 56px;
+      }
+      
+      .score-item {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      
+      .score-item-value {
+        margin-top: 10px;
       }
     }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- 顶部导航 -->
+    <nav class="top-nav">
+      <a href="https://chatgpt5x.com" target="_blank">智享AI工具导航</a>
+      <a href="https://news.chatgpt5x.com" target="_blank">AI资讯</a>
+      <a href="https://jobtest.chatgpt5x.com" target="_blank">职业测评</a>
+    </nav>
+    
     <!-- 标题 -->
-    <div class="header">
-      <h1>🎯 港股新股自动打分器</h1>
-      <p>输入股票代码 · 自动下载招股书 · 智能分析评分</p>
-      <span class="badge">✨ 全自动版</span>
-    </div>
+    <header class="header">
+      <h1>港股新股自动打分器</h1>
+      <p class="subtitle">智能分析招股书，科学评估IPO投资价值</p>
+      <p class="sub-desc">自动下载港交所招股书PDF → AI解析 → 多维度评分</p>
+      <span class="badge">✨ v2.1 基于炒作逻辑优化行业评分</span>
+    </header>
     
     <!-- 搜索框 -->
     <div class="search-box">
-      <form class="search-form" onsubmit="handleScore(event)">
-        <div class="form-group">
-          <label for="stockCode">股票代码</label>
-          <input 
-            type="text" 
-            id="stockCode" 
-            placeholder="例如: 09988 或 2456"
-            required
-          >
-        </div>
-        <button type="submit" class="btn-primary" id="submitBtn">
-          <span>🔍</span>
-          <span>开始评分</span>
-        </button>
+      <form class="search-form" onsubmit="handleSearch(event)">
+        <input type="text" class="search-input" id="stockCode" placeholder="输入港股代码，如 02768、9688" autocomplete="off">
+        <button type="submit" class="search-btn" id="searchBtn">开始评分</button>
       </form>
-      
-      <div style="margin-top: 16px; padding: 12px; background: rgba(100, 181, 246, 0.1); border-radius: 10px; border: 1px solid rgba(100, 181, 246, 0.2);">
-        <p style="color: #64b5f6; font-size: 13px; margin: 0;">
-          💡 <strong>工作原理：</strong>自动从港交所披露易搜索并下载招股书PDF → 
-          解析提取关键信息 → 按打分规则计算得分
-        </p>
+      <div class="search-tips">
+        热门示例：
+        <span onclick="quickSearch('09660')">新氧 09660</span>
+        <span onclick="quickSearch('02768')">弘业期货 02768</span>
+        <span onclick="quickSearch('09688')">再鼎 09688</span>
+        <span onclick="quickSearch('06160')">百济 06160</span>
       </div>
     </div>
     
-    <!-- 结果区域 -->
-    <div id="resultArea"></div>
-    
-    <!-- 打分标准 -->
-    <div class="criteria-box">
-      <h4>📋 打分标准说明</h4>
-      <ul>
-        <li>• <strong>基础分</strong>: 0分</li>
-        <li>• <strong>有无旧股</strong>: 有旧股-2分，无旧股不加减</li>
-        <li>• <strong>保荐人</strong>: 首日涨幅≥70%加2分，40%-70%不加减，&lt;40%减2分（保荐&lt;8只维持0分）</li>
-        <li>• <strong>基石投资者</strong>: 有明星基石+2分（高瓴/GIC/淡马锡/红杉等），无基石不加减</li>
-        <li>• <strong>IPO前投资者</strong>: 无禁售期-2分，有禁售期不加减</li>
-        <li>• <strong>行业</strong>: 物业管理/软件服务/医药医疗+2分，纺织/服装/金融服务-2分，其他不加减</li>
-        <li>• <strong>估值</strong>: 市盈率低于同行+2分，接近不加减，高于-2分（需手动补充）</li>
-      </ul>
+    <!-- 加载动画 -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">正在分析招股书...</div>
+      <div class="loading-sub" id="loadingStatus">下载PDF中，请稍候（大文件可能需要1-2分钟）</div>
     </div>
     
-    <!-- 页脚 -->
-    <div class="footer">
-      <p>⚠️ 本工具仅供参考，不构成投资建议。投资有风险，入市需谨慎。</p>
-      <p>数据来源：港交所披露易 (hkexnews.hk)</p>
-    </div>
-  </div>
-  
-  <script>
-    // API 基础地址（部署时修改）
-    const API_BASE = '';
+    <!-- 错误提示 -->
+    <div class="error-message" id="errorMessage"></div>
     
-    // 加载状态步骤
-    const loadingSteps = [
-      '正在搜索招股书...',
-      '正在下载PDF文件...',
-      '正在解析招股书内容...',
-      '正在分析评分项目...',
-      '正在计算最终得分...',
-    ];
-    
-    let loadingStepIndex = 0;
-    let loadingInterval = null;
-    
-    // 显示加载状态
-    function showLoading() {
-      loadingStepIndex = 0;
-      const resultArea = document.getElementById('resultArea');
-      resultArea.innerHTML = `
-        <div class="result-box">
-          <div class="loading">
-            <div class="spinner"></div>
-            <div class="loading-text">正在自动评分中...</div>
-            <div class="loading-step" id="loadingStep">${loadingSteps[0]}</div>
-          </div>
+    <!-- 结果卡片 -->
+    <div class="result-card" id="resultCard">
+      <div class="total-score">
+        <div class="stock-info">
+          <div class="stock-name" id="stockName">-</div>
+          <div class="stock-code" id="stockCodeDisplay">-</div>
         </div>
-      `;
+        <div class="score-display" id="totalScore">0</div>
+        <div id="ratingBadge" class="rating-badge">-</div>
+      </div>
       
-      // 模拟步骤进度
-      loadingInterval = setInterval(() => {
-        loadingStepIndex = (loadingStepIndex + 1) % loadingSteps.length;
-        const stepEl = document.getElementById('loadingStep');
-        if (stepEl) {
-          stepEl.textContent = loadingSteps[loadingStepIndex];
-        }
-      }, 3000);
+      <div class="score-details" id="scoreDetails">
+        <!-- 动态生成 -->
+      </div>
+      
+      <div class="prospectus-link" id="prospectusLink">
+        <!-- 动态生成 -->
+      </div>
+    </div>
+    
+    <!-- 评分规则说明 -->
+    <section class="rules-section">
+      <h2>📋 评分规则说明</h2>
+      <div class="rules-grid">
+        <div class="rule-card">
+          <h3>1️⃣ 旧股发售</h3>
+          <p>
+            <span class="rule-score zero">0</span>全部新股<br>
+            <span class="rule-score minus2">-2</span>有旧股（原始股东套现）
+          </p>
+        </div>
+        <div class="rule-card">
+          <h3>2️⃣ 保荐人历史业绩</h3>
+          <p>
+            <span class="rule-score plus2">+2</span>历史涨幅≥70%<br>
+            <span class="rule-score zero">0</span>涨幅40-70%或数据不足<br>
+            <span class="rule-score minus2">-2</span>涨幅&lt;40%
+          </p>
+        </div>
+        <div class="rule-card">
+          <h3>3️⃣ 基石投资者</h3>
+          <p>
+            <span class="rule-score plus2">+2</span>有明星基石（高瓴/红杉/淡马锡/GIC等）<br>
+            <span class="rule-score zero">0</span>无明星基石
+          </p>
+        </div>
+        <div class="rule-card">
+          <h3>4️⃣ Pre-IPO禁售期</h3>
+          <p>
+            <span class="rule-score zero">0</span>有禁售期或无Pre-IPO<br>
+            <span class="rule-score minus2">-2</span>有Pre-IPO但无禁售期
+          </p>
+        </div>
+        <div class="rule-card">
+          <h3>5️⃣ 行业赛道（基于炒作逻辑）</h3>
+          <p>
+            <span class="rule-score plus2">+2</span>🔥热门：AI/机器人/半导体/创新药<br>
+            <span class="rule-score plus1">+1</span>📈成长：医械/新能源/SaaS<br>
+            <span class="rule-score zero">0</span>⚪中性：无明显偏好<br>
+            <span class="rule-score minus1">-1</span>📉低弹：建材/公用事业<br>
+            <span class="rule-score minus2">-2</span>❌回避：物管/内房/小贷
+          </p>
+        </div>
+        <div class="rule-card">
+          <h3>📊 总分评级</h3>
+          <p>
+            <span class="rule-score plus2">≥6</span>强烈推荐<br>
+            <span class="rule-score plus1">4-5</span>建议申购<br>
+            <span class="rule-score zero">2-3</span>可以考虑<br>
+            <span class="rule-score minus1">0-1</span>谨慎申购<br>
+            <span class="rule-score minus2">&lt;0</span>不建议
+          </p>
+        </div>
+      </div>
+    </section>
+    
+    <!-- 底部 -->
+    <footer class="footer">
+      <p>数据来源：港交所披露易 | 仅供参考，不构成投资建议</p>
+      <p style="margin-top: 8px;">© 2024-2026 <a href="https://chatgpt5x.com" target="_blank">智享AI</a></p>
+    </footer>
+  </div>
+
+  <script>
+    const API_BASE = '/hk';
+    
+    // 快速搜索
+    function quickSearch(code) {
+      document.getElementById('stockCode').value = code;
+      handleSearch(new Event('submit'));
     }
     
-    // 停止加载
-    function stopLoading() {
-      if (loadingInterval) {
-        clearInterval(loadingInterval);
-        loadingInterval = null;
+    // 搜索处理
+    async function handleSearch(e) {
+      e.preventDefault();
+      
+      const code = document.getElementById('stockCode').value.trim();
+      if (!code) {
+        showError('请输入股票代码');
+        return;
+      }
+      
+      // 显示加载
+      showLoading();
+      hideError();
+      hideResult();
+      
+      try {
+        updateLoadingStatus('正在搜索招股书...');
+        
+        const response = await fetch(`${API_BASE}/score/${code}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.error || '评分失败');
+        }
+        
+        // 显示结果
+        displayResult(data);
+        
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        hideLoading();
       }
     }
     
-    // 获取分数样式类
+    // 显示结果
+    function displayResult(data) {
+      // 股票信息
+      document.getElementById('stockName').textContent = data.prospectus?.name || '-';
+      document.getElementById('stockCodeDisplay').textContent = `股票代码: ${data.stockCode}`;
+      
+      // 总分
+      const totalScoreEl = document.getElementById('totalScore');
+      totalScoreEl.textContent = data.totalScore > 0 ? `+${data.totalScore}` : data.totalScore;
+      totalScoreEl.className = 'score-display ' + getScoreClass(data.totalScore);
+      
+      // 评级
+      const ratingBadge = document.getElementById('ratingBadge');
+      ratingBadge.textContent = data.rating;
+      ratingBadge.className = 'rating-badge ' + getRatingClass(data.rating);
+      
+      // 详细评分
+      const detailsHtml = generateScoreDetails(data.scores);
+      document.getElementById('scoreDetails').innerHTML = detailsHtml;
+      
+      // 招股书链接
+      if (data.prospectus?.link) {
+        document.getElementById('prospectusLink').innerHTML = `
+          <a href="${data.prospectus.link}" target="_blank">📄 查看完整招股书 (PDF)</a>
+          <span style="margin-left: 16px; color: #8892b0; font-size: 12px;">耗时: ${data.elapsed || '-'}</span>
+        `;
+      }
+      
+      showResult();
+    }
+    
+    // 生成评分详情HTML
+    function generateScoreDetails(scores) {
+      const items = [
+        {
+          key: 'oldShares',
+          title: '旧股发售',
+          icon: '📦'
+        },
+        {
+          key: 'sponsor',
+          title: '保荐人业绩',
+          icon: '🏦'
+        },
+        {
+          key: 'cornerstone',
+          title: '基石投资者',
+          icon: '💎'
+        },
+        {
+          key: 'lockup',
+          title: 'Pre-IPO禁售',
+          icon: '🔒'
+        },
+        {
+          key: 'industry',
+          title: '行业赛道',
+          icon: '🎯'
+        }
+      ];
+      
+      return items.map(item => {
+        const score = scores[item.key];
+        if (!score) return '';
+        
+        let extraHtml = '';
+        
+        // 保荐人列表
+        if (item.key === 'sponsor' && score.sponsors?.length > 0) {
+          const sponsorTags = score.sponsors.map(s => 
+            `<span class="sponsor-item">${s.name.substring(0, 15)} (${s.count}单)</span>`
+          ).join('');
+          extraHtml = `<div class="sponsors-list">${sponsorTags}</div>`;
+        }
+        
+        // 基石投资者列表
+        if (item.key === 'cornerstone' && score.investors?.length > 0) {
+          const investorTags = score.investors.map(inv => 
+            `<span class="cornerstone-item">⭐ ${inv}</span>`
+          ).join('');
+          extraHtml = `<div class="cornerstone-list">${investorTags}</div>`;
+        }
+        
+        // 行业标签
+        if (item.key === 'industry' && score.track) {
+          const trackClass = {
+            'hot': 'industry-hot',
+            'growth': 'industry-growth',
+            'neutral': 'industry-neutral',
+            'low': 'industry-low',
+            'avoid': 'industry-avoid'
+          }[score.track] || 'industry-neutral';
+          extraHtml = `<span class="industry-tag ${trackClass}">${score.reason}</span>`;
+        }
+        
+        const valueClass = getItemScoreClass(score.score);
+        const valueText = score.score > 0 ? `+${score.score}` : score.score;
+        
+        return `
+          <div class="score-item">
+            <div class="score-item-info">
+              <h3>${item.icon} ${item.title} ${item.key === 'industry' ? extraHtml : ''}</h3>
+              <p>${score.reason}: ${score.details}</p>
+              ${item.key !== 'industry' ? extraHtml : ''}
+            </div>
+            <div class="score-item-value ${valueClass}">${valueText}</div>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    // 分数样式类
     function getScoreClass(score) {
+      if (score >= 4) return 'score-positive';
+      if (score >= 0) return 'score-neutral';
+      return 'score-negative';
+    }
+    
+    function getItemScoreClass(score) {
       if (score > 0) return 'positive';
       if (score < 0) return 'negative';
       return 'neutral';
     }
     
-    // 格式化分数显示
-    function formatScore(score) {
-      if (score > 0) return `+${score}`;
-      return score.toString();
+    function getRatingClass(rating) {
+      const map = {
+        '强烈推荐': 'rating-strong',
+        '建议申购': 'rating-buy',
+        '可以考虑': 'rating-consider',
+        '谨慎申购': 'rating-caution',
+        '不建议': 'rating-avoid'
+      };
+      return map[rating] || 'rating-caution';
     }
     
-    // 获取评级图标
-    function getRatingIcon(rating) {
-      if (rating.includes('强烈推荐')) return '🔥';
-      if (rating.includes('建议申购')) return '✅';
-      if (rating.includes('可考虑')) return '🤔';
-      if (rating.includes('谨慎')) return '⚠️';
-      if (rating.includes('不建议')) return '❌';
-      return '🚫';
+    // UI控制函数
+    function showLoading() {
+      document.getElementById('loading').classList.add('active');
+      document.getElementById('searchBtn').disabled = true;
     }
     
-    // 显示结果
-    function showResult(data) {
-      const resultArea = document.getElementById('resultArea');
-      const { stockCode, totalScore, rating, scores, prospectusUrl } = data;
-      
-      const scoreClass = totalScore >= 4 ? 'positive' : totalScore >= 0 ? 'neutral' : 'negative';
-      
-      resultArea.innerHTML = `
-        <div class="result-box">
-          <div class="result-header">
-            <div class="stock-info">
-              <h2>股票代码: ${stockCode}</h2>
-              <p class="code">
-                招股书: <a href="${prospectusUrl}" target="_blank">查看原文 ↗</a>
-              </p>
-            </div>
-          </div>
-          
-          <!-- 总分 -->
-          <div class="total-score ${scoreClass}">
-            <div class="score-label">总得分</div>
-            <div class="score-value">${totalScore}</div>
-            <div class="rating">${getRatingIcon(rating)} ${rating}</div>
-          </div>
-          
-          <!-- 评分明细 -->
-          <div class="score-details">
-            <!-- 旧股 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">1. 有无旧股</div>
-                <div class="score-item-detail">${scores.oldShares.detail}</div>
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.oldShares.score)}">
-                ${formatScore(scores.oldShares.score)}
-              </div>
-            </div>
-            
-            <!-- 保荐人 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">2. 保荐人业绩</div>
-                <div class="score-item-detail">${scores.sponsor.detail}</div>
-                ${scores.sponsor.sponsors.length > 0 ? `
-                  <div class="sponsor-tags">
-                    ${scores.sponsor.sponsors.map(s => `
-                      <span class="sponsor-tag ${s.tier}">${s.name} (${s.avgReturn}%)</span>
-                    `).join('')}
-                  </div>
-                ` : ''}
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.sponsor.score)}">
-                ${formatScore(scores.sponsor.score)}
-              </div>
-            </div>
-            
-            <!-- 基石投资者 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">3. 基石投资者</div>
-                <div class="score-item-detail">${scores.cornerstone.detail}</div>
-                ${scores.cornerstone.cornerstones.length > 0 ? `
-                  <div class="sponsor-tags">
-                    ${scores.cornerstone.cornerstones.slice(0, 5).map(c => `
-                      <span class="sponsor-tag top">⭐ ${c}</span>
-                    `).join('')}
-                  </div>
-                ` : ''}
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.cornerstone.score)}">
-                ${formatScore(scores.cornerstone.score)}
-              </div>
-            </div>
-            
-            <!-- IPO前投资者 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">4. IPO前投资者</div>
-                <div class="score-item-detail">${scores.preIPO.detail}</div>
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.preIPO.score)}">
-                ${formatScore(scores.preIPO.score)}
-              </div>
-            </div>
-            
-            <!-- 行业 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">5. 行业</div>
-                <div class="score-item-detail">${scores.industry.detail}</div>
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.industry.score)}">
-                ${formatScore(scores.industry.score)}
-              </div>
-            </div>
-            
-            <!-- 估值 -->
-            <div class="score-item">
-              <div class="score-item-left">
-                <div class="score-item-name">6. 估值 (可选)</div>
-                <div class="score-item-detail">${scores.valuation.detail}</div>
-              </div>
-              <div class="score-item-value ${getScoreClass(scores.valuation.score)}">
-                ${formatScore(scores.valuation.score)}
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
+    function hideLoading() {
+      document.getElementById('loading').classList.remove('active');
+      document.getElementById('searchBtn').disabled = false;
     }
     
-    // 显示错误
+    function updateLoadingStatus(text) {
+      document.getElementById('loadingStatus').textContent = text;
+    }
+    
+    function showResult() {
+      document.getElementById('resultCard').classList.add('active');
+    }
+    
+    function hideResult() {
+      document.getElementById('resultCard').classList.remove('active');
+    }
+    
     function showError(message) {
-      const resultArea = document.getElementById('resultArea');
-      resultArea.innerHTML = `
-        <div class="result-box">
-          <div class="error-box">
-            <h3>❌ 评分失败</h3>
-            <p>${message}</p>
-          </div>
-        </div>
-      `;
+      const el = document.getElementById('errorMessage');
+      el.textContent = '❌ ' + message;
+      el.classList.add('active');
     }
     
-    // 处理评分请求
-    async function handleScore(event) {
-      event.preventDefault();
-      
-      const stockCode = document.getElementById('stockCode').value.trim();
-      if (!stockCode) return;
-      
-      const submitBtn = document.getElementById('submitBtn');
-      submitBtn.disabled = true;
-      
-      showLoading();
-      
-      try {
-        const response = await fetch(`${API_BASE}/api/score/${stockCode}`);
-        const data = await response.json();
-        
-        stopLoading();
-        
-        if (data.success) {
-          showResult(data);
-        } else {
-          showError(data.error || '评分失败，请稍后重试');
-        }
-      } catch (error) {
-        stopLoading();
-        showError(`请求失败: ${error.message}`);
-      } finally {
-        submitBtn.disabled = false;
-      }
+    function hideError() {
+      document.getElementById('errorMessage').classList.remove('active');
     }
     
-    // 支持回车提交
-    document.getElementById('stockCode').addEventListener('keypress', (e) => {
+    // 回车提交
+    document.getElementById('stockCode').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
-        document.querySelector('.search-form').dispatchEvent(new Event('submit'));
+        handleSearch(e);
       }
     });
   </script>

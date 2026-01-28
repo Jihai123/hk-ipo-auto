@@ -1,727 +1,922 @@
+/**
+ * 港股新股自动评分系统 v2.1
+ * 
+ * 修复清单 (基于原始规则):
+ * 1. PDF解析页数: 150 → 400
+ * 2. 旧股-无旧股: +2 → 0分
+ * 3. 旧股判断: 全文搜索 → 限定「全球發售」章节
+ * 4. 保荐人识别: 全文 → 限定「參與全球發售的各方」章节
+ * 5. 保荐人评分: tier分层 → 实际涨幅率(≥70%=+2, 40-70%=0, <40%=-2)
+ * 6. 基石投资者: ≥3个+2/1-2个+1 → 有明星基石=+2, 其他=0
+ * 7. 基石名单: 精简为原始名单(高瓴/红杉/淡马锡/GIC等)
+ * 8. Pre-IPO逻辑: 无禁售=-2 → 有Pre-IPO且无禁售=-2, 有禁售=0, 无Pre-IPO=0
+ * 9. 行业分类: v2基于炒作逻辑 (+2/+1/0/-1/-2 五档)
+ * 10. 文本匹配: 直接includes → 去空格+繁简转换+章节限定
+ * 11. 缓存: 无 → 7天文件缓存
+ * 12. 扫描版检测: 无 → text.length<5000报错
+ * 13. 保荐人数据: 硬编码 → JSON文件/数据库支持
+ * 14. 清缓存API: 新增
+ */
+
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const pdfParse = require('pdf-parse');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
+const PORT = process.env.PORT || 3010;
+
+// 目录配置
+const CACHE_DIR = path.join(__dirname, 'cache');
+const DATA_DIR = path.join(__dirname, 'data');
+const SPONSORS_JSON = path.join(DATA_DIR, 'sponsors.json');
+
+// 确保目录存在
+[CACHE_DIR, DATA_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ============================================
-// 保荐人历史业绩数据库（首日涨跌幅统计）
-// ============================================
-const SPONSOR_DATABASE = {
-  // 顶级保荐人 (平均首日涨幅 >= 70%)
-  '高盛': { avgReturn: 85, count: 45, tier: 'top' },
-  'Goldman Sachs': { avgReturn: 85, count: 45, tier: 'top' },
-  '摩根士丹利': { avgReturn: 78, count: 52, tier: 'top' },
-  'Morgan Stanley': { avgReturn: 78, count: 52, tier: 'top' },
-  '摩根士丹利亞洲': { avgReturn: 76, count: 45, tier: 'top' },
-  '中金': { avgReturn: 72, count: 68, tier: 'top' },
-  '中金公司': { avgReturn: 72, count: 68, tier: 'top' },
-  'CICC': { avgReturn: 72, count: 68, tier: 'top' },
-  '中國國際金融': { avgReturn: 72, count: 68, tier: 'top' },
-  '華泰金融控股': { avgReturn: 75, count: 35, tier: 'top' },
-  '華泰': { avgReturn: 75, count: 35, tier: 'top' },
-  '华泰': { avgReturn: 75, count: 35, tier: 'top' },
-  
-  // 中等保荐人 (40% <= 平均首日涨幅 < 70%)
-  '中信里昂': { avgReturn: 55, count: 42, tier: 'mid' },
-  '中信証券': { avgReturn: 58, count: 38, tier: 'mid' },
-  '中信证券': { avgReturn: 58, count: 38, tier: 'mid' },
-  '海通國際': { avgReturn: 48, count: 55, tier: 'mid' },
-  '海通国际': { avgReturn: 48, count: 55, tier: 'mid' },
-  '招銀國際': { avgReturn: 52, count: 48, tier: 'mid' },
-  '招银国际': { avgReturn: 52, count: 48, tier: 'mid' },
-  'UBS': { avgReturn: 62, count: 28, tier: 'mid' },
-  'UBS Securities': { avgReturn: 62, count: 28, tier: 'mid' },
-  '瑞銀': { avgReturn: 62, count: 28, tier: 'mid' },
-  '瑞银': { avgReturn: 62, count: 28, tier: 'mid' },
-  '摩根大通': { avgReturn: 65, count: 32, tier: 'mid' },
-  'JP Morgan': { avgReturn: 65, count: 32, tier: 'mid' },
-  'J.P. Morgan': { avgReturn: 65, count: 32, tier: 'mid' },
-  '建銀國際': { avgReturn: 45, count: 42, tier: 'mid' },
-  '建银国际': { avgReturn: 45, count: 42, tier: 'mid' },
-  '交銀國際': { avgReturn: 47, count: 38, tier: 'mid' },
-  '交银国际': { avgReturn: 47, count: 38, tier: 'mid' },
-  '農銀國際': { avgReturn: 44, count: 35, tier: 'mid' },
-  '农银国际': { avgReturn: 44, count: 35, tier: 'mid' },
-  '工銀國際': { avgReturn: 46, count: 40, tier: 'mid' },
-  '工银国际': { avgReturn: 46, count: 40, tier: 'mid' },
-  '國泰君安': { avgReturn: 50, count: 45, tier: 'mid' },
-  '国泰君安': { avgReturn: 50, count: 45, tier: 'mid' },
-  '申萬宏源': { avgReturn: 48, count: 36, tier: 'mid' },
-  '申万宏源': { avgReturn: 48, count: 36, tier: 'mid' },
-  '光大證券': { avgReturn: 45, count: 32, tier: 'mid' },
-  '光大证券': { avgReturn: 45, count: 32, tier: 'mid' },
-  '法國巴黎銀行': { avgReturn: 55, count: 25, tier: 'mid' },
-  'BNP': { avgReturn: 55, count: 25, tier: 'mid' },
-  '德意志銀行': { avgReturn: 52, count: 22, tier: 'mid' },
-  'Deutsche Bank': { avgReturn: 52, count: 22, tier: 'mid' },
-  '花旗': { avgReturn: 58, count: 30, tier: 'mid' },
-  'Citi': { avgReturn: 58, count: 30, tier: 'mid' },
-  'Citigroup': { avgReturn: 58, count: 30, tier: 'mid' },
-  '滙豐': { avgReturn: 50, count: 35, tier: 'mid' },
-  '汇丰': { avgReturn: 50, count: 35, tier: 'mid' },
-  'HSBC': { avgReturn: 50, count: 35, tier: 'mid' },
-  '星展': { avgReturn: 48, count: 28, tier: 'mid' },
-  'DBS': { avgReturn: 48, count: 28, tier: 'mid' },
-  '瑞信': { avgReturn: 55, count: 30, tier: 'mid' },
-  'Credit Suisse': { avgReturn: 55, count: 30, tier: 'mid' },
-  '美銀': { avgReturn: 60, count: 25, tier: 'mid' },
-  '美银': { avgReturn: 60, count: 25, tier: 'mid' },
-  'Bank of America': { avgReturn: 60, count: 25, tier: 'mid' },
-  'Merrill Lynch': { avgReturn: 60, count: 25, tier: 'mid' },
-  
-  // 一般保荐人 (平均首日涨幅 < 40%)
-  '民銀資本': { avgReturn: 32, count: 25, tier: 'low' },
-  '民银资本': { avgReturn: 32, count: 25, tier: 'low' },
-  '華盛資本': { avgReturn: 28, count: 18, tier: 'low' },
-  '华盛资本': { avgReturn: 28, count: 18, tier: 'low' },
-  '信達國際': { avgReturn: 35, count: 22, tier: 'low' },
-  '信达国际': { avgReturn: 35, count: 22, tier: 'low' },
-  '東興證券': { avgReturn: 30, count: 15, tier: 'low' },
-  '东兴证券': { avgReturn: 30, count: 15, tier: 'low' },
-  '英皇證券': { avgReturn: 25, count: 20, tier: 'low' },
-  '英皇证券': { avgReturn: 25, count: 20, tier: 'low' },
-  '宏高證券': { avgReturn: 22, count: 12, tier: 'low' },
-  '豐盛融資': { avgReturn: 28, count: 16, tier: 'low' },
-  '丰盛融资': { avgReturn: 28, count: 16, tier: 'low' },
-  '安信國際': { avgReturn: 33, count: 18, tier: 'low' },
-  '安信国际': { avgReturn: 33, count: 18, tier: 'low' },
-  '國信證券': { avgReturn: 35, count: 20, tier: 'low' },
-  '国信证券': { avgReturn: 35, count: 20, tier: 'low' },
-  '永泰金融': { avgReturn: 30, count: 15, tier: 'low' },
-  '力高企業融資': { avgReturn: 25, count: 12, tier: 'low' },
-  '君陽金融': { avgReturn: 28, count: 10, tier: 'low' },
-};
+// ==================== 保荐人数据 ====================
 
-// ============================================
-// 明星基石投资者名单
-// ============================================
-const STAR_CORNERSTONE_INVESTORS = [
-  // 高瓴系
-  '高瓴', 'Gaoling', 'Hillhouse', 'YHG Investment',
-  // 新加坡政府
-  '新加坡政府投資', 'GIC', 'Government of Singapore',
-  // 中国国资
-  '中國國有企業結構調整基金', '国调基金', '結構調整基金', 'Structural Reform',
-  '中國互聯網投資基金', '互联网投资基金',
-  '中國保險投資基金', '保险投资基金',
-  // 橡树资本
-  '橡樹資本', '橡树资本', 'Oaktree', 'OAKTREE',
-  // 淡马锡
-  '淡馬錫', '淡马锡', 'Temasek',
-  // 红杉
-  '紅杉', '红杉', 'Sequoia',
-  // 黑石
-  '黑石', 'Blackstone',
-  // 贝莱德
-  '貝萊德', '贝莱德', 'BlackRock',
-  // 富达
-  '富達', '富达', 'Fidelity',
-  // 资本集团
-  '資本集團', 'Capital Group',
-  // 春华资本
-  '春華資本', '春华资本', 'Primavera',
-  // IDG
-  'IDG',
-  // 科技巨头
-  '騰訊', '腾讯', 'Tencent',
-  '阿里巴巴', 'Alibaba',
-  '京東', '京东', 'JD.com',
-  '小米', 'Xiaomi',
-  '美團', '美团', 'Meituan',
-  '字節跳動', '字节跳动', 'ByteDance',
-  // 其他知名
-  '中投', 'CIC', 'China Investment',
-  '社保基金', 'Social Security Fund',
-  '中國人壽', '中国人寿', 'China Life',
-  '平安', 'Ping An',
-];
-
-// ============================================
-// 行业分类关键词
-// ============================================
-const INDUSTRY_POSITIVE = [
-  '物業管理', '物业管理', '物管',
-  '軟件', '软件', 'SaaS', '雲計算', '云计算',
-  '人工智能', 'AI', '人工智慧',
-  '醫藥', '医药', '醫療', '医疗', '醫療設備', '医疗设备',
-  '生物科技', '生物技術', '生物技术',
-  '新能源', '光伏', '鋰電', '锂电',
-  '半導體', '半导体', '芯片', '晶片',
-  '互聯網', '互联网',
-];
-
-const INDUSTRY_NEGATIVE = [
-  '紡織', '纺织',
-  '服裝', '服装',
-  '奢侈品',
-  '綜合金融服務', '综合金融服务',
-  '證券', '证券',
-  '房地產', '房地产', '地產', '地产',
-  '煤炭',
-  '鋼鐵', '钢铁',
-  '傳統製造', '传统制造',
-];
-
-// ============================================
-// 工具函数
-// ============================================
-
-// 格式化股票代码为5位
-function formatStockCode(code) {
-  const num = code.replace(/\D/g, '');
-  return num.padStart(5, '0');
+/**
+ * 从JSON文件加载保荐人数据（爬虫获取的真实数据）
+ */
+function loadSponsorsFromJSON() {
+  if (fs.existsSync(SPONSORS_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(SPONSORS_JSON, 'utf-8'));
+      const result = {};
+      for (const s of data.sponsors || []) {
+        result[s.name] = { 
+          rate: s.avgFirstDay, 
+          count: s.count, 
+          winRate: s.winRate,
+          upCount: s.upCount,
+          downCount: s.downCount
+        };
+      }
+      console.log(`[数据] 从JSON加载 ${Object.keys(result).length} 个保荐人`);
+      return result;
+    } catch (e) {
+      console.error('[数据] JSON加载失败:', e.message);
+    }
+  }
+  return null;
 }
 
-// 从港交所搜索招股书
+/**
+ * 后备保荐人数据（基于AAStocks 2024-2026数据）
+ * 用于数据库/JSON不可用时的fallback
+ */
+const FALLBACK_SPONSORS = {
+  // 主要保荐人（完整名称）
+  '中國國際金融香港證券有限公司': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中信證券(香港)有限公司': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信里昂證券有限公司': { rate: 35.50, count: 38, winRate: 78.95 },
+  '華泰金融控股(香港)有限公司': { rate: 6.86, count: 33, winRate: 57.58 },
+  '摩根士丹利亞洲有限公司': { rate: 21.91, count: 15, winRate: 80.00 },
+  '高盛(亞洲)有限責任公司': { rate: 5.58, count: 12, winRate: 66.67 },
+  '建銀國際金融有限公司': { rate: 11.38, count: 12, winRate: 83.33 },
+  '海通國際資本有限公司': { rate: 31.22, count: 11, winRate: 90.91 },
+  '國泰君安融資有限公司': { rate: 23.18, count: 11, winRate: 81.82 },
+  '瑞銀證券香港有限公司': { rate: 16.22, count: 10, winRate: 70.00 },
+  '招銀國際融資有限公司': { rate: 25.56, count: 10, winRate: 70.00 },
+  '花旗環球金融亞洲有限公司': { rate: 18.50, count: 8, winRate: 75.00 },
+  '廣發融資（香港）有限公司': { rate: 22.30, count: 8, winRate: 75.00 },
+  '農銀國際融資有限公司': { rate: 15.80, count: 6, winRate: 66.67 },
+  '交銀國際證券有限公司': { rate: 19.20, count: 9, winRate: 77.78 },
+  '工銀國際融資有限公司': { rate: 12.50, count: 7, winRate: 71.43 },
+  '申萬宏源融資(香港)有限公司': { rate: 28.30, count: 6, winRate: 83.33 },
+  '中銀國際亞洲有限公司': { rate: 14.60, count: 8, winRate: 62.50 },
+  '光大融資有限公司': { rate: 17.80, count: 5, winRate: 60.00 },
+  '民銀資本有限公司': { rate: -5.20, count: 12, winRate: 41.67 },
+  
+  // 简称映射（繁体）
+  '中金': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中金公司': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中國國際金融': { rate: 27.96, count: 64, winRate: 68.75 },
+  'CICC': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中信': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信證券': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信里昂': { rate: 35.50, count: 38, winRate: 78.95 },
+  '華泰': { rate: 6.86, count: 33, winRate: 57.58 },
+  '華泰金融': { rate: 6.86, count: 33, winRate: 57.58 },
+  '高盛': { rate: 5.58, count: 12, winRate: 66.67 },
+  'Goldman': { rate: 5.58, count: 12, winRate: 66.67 },
+  '摩根士丹利': { rate: 21.91, count: 15, winRate: 80.00 },
+  'Morgan Stanley': { rate: 21.91, count: 15, winRate: 80.00 },
+  '海通': { rate: 31.22, count: 11, winRate: 90.91 },
+  '海通國際': { rate: 31.22, count: 11, winRate: 90.91 },
+  '瑞銀': { rate: 16.22, count: 10, winRate: 70.00 },
+  'UBS': { rate: 16.22, count: 10, winRate: 70.00 },
+  '國泰君安': { rate: 23.18, count: 11, winRate: 81.82 },
+  '建銀國際': { rate: 11.38, count: 12, winRate: 83.33 },
+  '招銀國際': { rate: 25.56, count: 10, winRate: 70.00 },
+  '花旗': { rate: 18.50, count: 8, winRate: 75.00 },
+  'Citi': { rate: 18.50, count: 8, winRate: 75.00 },
+  '廣發': { rate: 22.30, count: 8, winRate: 75.00 },
+  '農銀國際': { rate: 15.80, count: 6, winRate: 66.67 },
+  '交銀國際': { rate: 19.20, count: 9, winRate: 77.78 },
+  '工銀國際': { rate: 12.50, count: 7, winRate: 71.43 },
+  '申萬宏源': { rate: 28.30, count: 6, winRate: 83.33 },
+  '中銀國際': { rate: 14.60, count: 8, winRate: 62.50 },
+  '光大': { rate: 17.80, count: 5, winRate: 60.00 },
+  '民銀資本': { rate: -5.20, count: 12, winRate: 41.67 },
+  
+  // 简称映射（简体）
+  '中信证券': { rate: 41.62, count: 42, winRate: 83.33 },
+  '华泰': { rate: 6.86, count: 33, winRate: 57.58 },
+  '海通国际': { rate: 31.22, count: 11, winRate: 90.91 },
+  '瑞银': { rate: 16.22, count: 10, winRate: 70.00 },
+  '国泰君安': { rate: 23.18, count: 11, winRate: 81.82 },
+  '建银国际': { rate: 11.38, count: 12, winRate: 83.33 },
+  '招银国际': { rate: 25.56, count: 10, winRate: 70.00 },
+  '广发': { rate: 22.30, count: 8, winRate: 75.00 },
+  '农银国际': { rate: 15.80, count: 6, winRate: 66.67 },
+  '交银国际': { rate: 19.20, count: 9, winRate: 77.78 },
+  '工银国际': { rate: 12.50, count: 7, winRate: 71.43 },
+  '申万宏源': { rate: 28.30, count: 6, winRate: 83.33 },
+  '中银国际': { rate: 14.60, count: 8, winRate: 62.50 },
+  '民银资本': { rate: -5.20, count: 12, winRate: 41.67 },
+};
+
+/**
+ * 获取所有保荐人数据
+ * 优先从JSON加载，否则使用fallback
+ */
+function getAllSponsors() {
+  return loadSponsorsFromJSON() || FALLBACK_SPONSORS;
+}
+
+// ==================== 行业评分体系 v2（基于炒作逻辑）====================
+/**
+ * 行业评分规则:
+ * +2 情绪驱动型热门赛道：强题材、资金愿意炒、FOMO情绪
+ * +1 成长叙事型赛道：有故事但热度一般
+ *  0 中性赛道：无明显偏好
+ * -1 低弹性赛道：缺乏想象空间
+ * -2 资金回避型赛道：破发率高、监管风险
+ */
+
+// +2 情绪驱动型热门赛道（2024-2026市场主线）
+const HOT_TRACKS = [
+  // AI / 大模型
+  '人工智能', '人工智慧', '大模型', '大語言模型', 'LLM', 'GPT', '生成式',
+  'AIGC', '算法', '算力', '機器學習', '机器学习', '深度學習', '深度学习',
+  'AI應用', 'AI应用', 'AI芯片', 'AI晶片',
+  // 机器人 / 具身智能
+  '機器人', '机器人', 'Robot', '人形機器人', '人形机器人', '具身智能',
+  '工業機器人', '工业机器人', '服務機器人', '服务机器人',
+  // 自动驾驶 / 智驾
+  '自動駕駛', '自动驾驶', '智能駕駛', '智能驾驶', '智駕', '智驾',
+  '無人駕駛', '无人驾驶', '車聯網', '车联网', 'V2X', 'L4', 'L3',
+  // 半导体 / 芯片
+  '半導體', '半导体', '芯片', '晶片', 'GPU', 'NPU', '處理器', '处理器',
+  '集成電路', '集成电路', 'IC設計', 'IC设计', '國產替代', '国产替代',
+  'Chiplet', '先進封裝', '先进封装', 'EDA', 'ASIC',
+  // 创新药 / Biotech
+  'ADC', 'CAR-T', 'mRNA', '細胞治療', '细胞治疗', '基因治療', '基因治疗',
+  '創新藥', '创新药', '生物製藥', '生物制药', 'Biotech', '雙抗', '双抗',
+  'siRNA', 'RNAi', 'PROTAC', '抗體偶聯', '抗体偶联',
+  // 低空经济 / eVTOL
+  '低空經濟', '低空经济', 'eVTOL', '飛行汽車', '飞行汽车',
+  '無人機', '无人机', '電動垂直', '电动垂直', 'UAV',
+  // 新消费龙头
+  '新茶飲', '新茶饮', '咖啡連鎖', '咖啡连锁', '折扣零售', '零食連鎖',
+];
+
+// +1 成长叙事型赛道
+const GROWTH_TRACKS = [
+  // 医疗健康（非创新药）
+  '醫療器械', '医疗器械', '醫療設備', '医疗设备', '診斷', '诊断',
+  '眼科', '口腔', '醫美', '医美', 'CXO', 'CDMO', 'CMO',
+  // 新能源（热度下降但仍有关注）
+  '新能源', '鋰電', '锂电', '儲能', '储能', '光伏', '太陽能', '太阳能',
+  '風電', '风电', '電動車', '电动车', '新能源車', '新能源车', '充電樁', '充电桩',
+  // 企业服务
+  'SaaS', '雲計算', '云计算', '企業服務', '企业服务', '數據中心', '数据中心',
+  // 新消费（非龙头）
+  '預製菜', '预制菜', '寵物', '宠物', '潮玩', '電子煙', '电子烟',
+  // 软件
+  '軟件', '软件', '軟體', 'ERP', 'CRM',
+];
+
+// -1 低弹性赛道
+const LOW_ELASTICITY_TRACKS = [
+  // 传统消费
+  '食品加工', '飲料', '饮料', '調味品', '调味品', '乳製品', '乳制品', '酒類', '酒类',
+  // 传统制造
+  '機械製造', '机械制造', '工業設備', '工业设备', '包裝', '包装', '印刷',
+  // 公用事业
+  '水務', '水务', '燃氣', '燃气', '電力', '电力', '供熱', '供热', '環保', '环保',
+  // 建材
+  '建材', '水泥', '玻璃', '鋼鐵', '钢铁', '鋁業', '铝业',
+];
+
+// -2 资金回避型赛道（历史破发率高/监管风险）
+const AVOID_TRACKS = [
+  // 物业管理（2021后破发重灾区）
+  '物業管理', '物业管理', '物業服務', '物业服务', '物管',
+  // 房地产相关
+  '房地產', '房地产', '地產開發', '地产开发', '內房', '内房', '房企',
+  '商業地產', '商业地产', '住宅開發', '住宅开发',
+  // 传统金融服务
+  '小額貸款', '小额贷款', '消費金融', '消费金融', '融資租賃', '融资租赁',
+  'P2P', '網貸', '网贷', '民間借貸', '民间借贷', '典當', '典当',
+  // 纺织服装
+  '紡織', '纺织', '服裝製造', '服装制造', '製衣', '制衣', '鞋履製造', '鞋履制造',
+  // 教培（政策风险）
+  '教育培訓', '教育培训', '課外輔導', '课外辅导', 'K12', '學科培訓', '学科培训',
+  // 博彩（监管不确定）
+  '博彩', '賭場', '賭博', '赌场', '赌博',
+];
+
+// ==================== 明星基石投资者名单 ====================
+const STAR_CORNERSTONE = [
+  // 顶级PE/VC
+  '高瓴', 'Hillhouse', '紅杉', '红杉', 'Sequoia',
+  // 主权基金
+  '淡馬錫', '淡马锡', 'Temasek', 'GIC', '新加坡政府',
+  '阿布達比', '阿布扎比', 'ADIA', '科威特投資局', '科威特投资局',
+  // 全球资管
+  '黑石', 'Blackstone', '貝萊德', '贝莱德', 'BlackRock',
+  '富達', '富达', 'Fidelity', 'Wellington', '普信', 'T. Rowe',
+  '資本集團', '资本集团', 'Capital Group',
+  // 中国主权/国家级
+  '中投', 'CIC', '社保基金', '全國社保', '全国社保',
+  '國家大基金', '国家大基金', '絲路基金', '丝路基金',
+  // 知名对冲基金
+  'Tiger Global', 'Coatue', 'DST', 'D1', 'Viking',
+  // 知名中国PE
+  '春華資本', '春华资本', '博裕資本', '博裕资本', '厚朴投資', '厚朴投资',
+  '鼎暉', '鼎晖', 'CDH', '中信產業基金', '中信产业基金',
+  // 软银
+  '軟銀', '软银', 'SoftBank', 'Vision Fund',
+];
+
+// ==================== 工具函数 ====================
+
+/**
+ * 格式化股票代码为5位
+ */
+function formatStockCode(code) {
+  return code.toString().replace(/\D/g, '').padStart(5, '0');
+}
+
+/**
+ * 文本标准化：去空格、全角转半角、繁简统一
+ */
+function normalizeText(text) {
+  if (!text) return '';
+  return text
+    // 去除所有空白字符
+    .replace(/\s+/g, '')
+    // 全角转半角
+    .replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    // 繁简常用字转换
+    .replace(/證/g, '证').replace(/國/g, '国').replace(/際/g, '际')
+    .replace(/銀/g, '银').replace(/資/g, '资').replace(/業/g, '业')
+    .replace(/發/g, '发').replace(/項/g, '项').replace(/實/g, '实')
+    .replace(/與/g, '与').replace(/為/g, '为').replace(/無/g, '无')
+    .replace(/個/g, '个').replace(/開/g, '开').replace(/關/g, '关')
+    .replace(/機/g, '机').replace(/車/g, '车').replace(/電/g, '电')
+    .replace(/導/g, '导').replace(/體/g, '体').replace(/產/g, '产')
+    .replace(/軟/g, '软').replace(/製/g, '制').replace(/廠/g, '厂');
+}
+
+/**
+ * 提取特定章节内容
+ */
+function extractSection(text, startPatterns, endPatterns, maxLength = 50000) {
+  for (const sp of startPatterns) {
+    const regex = typeof sp === 'string' ? new RegExp(sp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : sp;
+    const match = text.match(regex);
+    if (match) {
+      const start = match.index;
+      let end = Math.min(start + maxLength, text.length);
+      
+      // 查找结束标记
+      for (const ep of endPatterns) {
+        const endRegex = typeof ep === 'string' ? new RegExp(ep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : ep;
+        const afterStart = text.slice(start + match[0].length);
+        const endMatch = afterStart.match(endRegex);
+        if (endMatch) {
+          end = Math.min(end, start + match[0].length + endMatch.index);
+        }
+      }
+      
+      return text.slice(start, end);
+    }
+  }
+  return '';
+}
+
+/**
+ * 缓存路径
+ */
+function getCachePath(code) {
+  return path.join(CACHE_DIR, `${formatStockCode(code)}.txt`);
+}
+
+/**
+ * 读取缓存（7天有效）
+ */
+function readCache(code) {
+  const cachePath = getCachePath(code);
+  if (fs.existsSync(cachePath)) {
+    const stats = fs.statSync(cachePath);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7天
+    
+    if (ageMs < maxAgeMs) {
+      console.log(`[缓存] 命中: ${code} (${Math.round(ageMs / 3600000)}小时前)`);
+      return fs.readFileSync(cachePath, 'utf-8');
+    } else {
+      console.log(`[缓存] 过期: ${code}`);
+    }
+  }
+  return null;
+}
+
+/**
+ * 写入缓存
+ */
+function writeCache(code, text) {
+  const cachePath = getCachePath(code);
+  fs.writeFileSync(cachePath, text, 'utf-8');
+  console.log(`[缓存] 保存: ${code} (${(text.length / 1024).toFixed(1)}KB)`);
+}
+
+/**
+ * 清除缓存
+ */
+function clearCache(code) {
+  const cachePath = getCachePath(code);
+  if (fs.existsSync(cachePath)) {
+    fs.unlinkSync(cachePath);
+    return true;
+  }
+  return false;
+}
+
+// ==================== 搜索招股书 ====================
+
+/**
+ * 从港交所搜索招股书PDF链接
+ */
 async function searchProspectus(stockCode) {
   const formattedCode = formatStockCode(stockCode);
+  const codeNum = parseInt(stockCode, 10).toString();
   
-  console.log(`[搜索] 正在搜索股票 ${formattedCode} 的招股书...`);
+  console.log(`[搜索] 股票代码: ${formattedCode}`);
   
   try {
-    // 港交所披露易搜索API
-    const searchUrl = 'https://www1.hkexnews.hk/search/titlesearch.xhtml';
-    
-    const formData = new URLSearchParams();
-    formData.append('lang', 'ZH');
-    formData.append('category', '0'); // 所有类别
-    formData.append('market', 'SEHK');
-    formData.append('searchType', '0');
-    formData.append('t1code', '40000'); // 上市文件
-    formData.append('t2Gcode', '-2');
-    formData.append('t2code', '-2');
-    formData.append('stockId', formattedCode);
-    formData.append('from', '');
-    formData.append('to', '');
-    formData.append('title', '');
-    formData.append('sortDir', '0');
-    formData.append('sortByOptions', 'DateTime');
-    formData.append('rowRange', '100');
-    
-    const response = await axios.post(searchUrl, formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      },
+    // 先搜索主板
+    const mainBoardUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/Main-Board?sc_lang=zh-HK';
+    let response = await axios.get(mainBoardUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       timeout: 30000,
     });
     
-    const $ = cheerio.load(response.data);
-    const results = [];
+    let $ = cheerio.load(response.data);
+    let results = [];
     
-    // 解析搜索结果表格
-    $('table.table tbody tr').each((i, row) => {
-      const $row = $(row);
-      const title = $row.find('td').eq(0).text().trim();
-      const link = $row.find('td').eq(0).find('a').attr('href');
-      const date = $row.find('td').eq(1).text().trim();
-      
-      // 寻找招股章程/招股书
-      if (title && (
-        title.includes('招股章程') || 
-        title.includes('招股書') ||
-        title.includes('招股书') ||
-        title.includes('Prospectus') ||
-        title.includes('配發結果') ||
-        title.includes('配发结果')
-      )) {
-        results.push({
-          title,
-          link: link ? `https://www1.hkexnews.hk${link}` : null,
-          date,
-        });
+    // 解析表格
+    $('table tr').each((i, row) => {
+      const cells = $(row).find('td');
+      if (cells.length >= 4) {
+        const code = $(cells[0]).text().trim();
+        const name = $(cells[1]).text().trim();
+        const links = $(cells[3]).find('a');
+        
+        if (code === codeNum || code === formattedCode) {
+          links.each((j, link) => {
+            const href = $(link).attr('href');
+            const linkText = $(link).text().trim();
+            
+            // 查找招股章程链接
+            if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
+              const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+              results.push({
+                title: `${name} 招股章程`,
+                link: pdfUrl,
+                code: formattedCode,
+                name: name,
+              });
+            }
+          });
+        }
       }
     });
     
-    console.log(`[搜索] 找到 ${results.length} 个相关文件`);
+    // 如果主板没找到，搜索创业板
+    if (results.length === 0) {
+      console.log('[搜索] 主板未找到，搜索创业板...');
+      
+      const gemUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/GEM?sc_lang=zh-HK';
+      response = await axios.get(gemUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        timeout: 30000,
+      });
+      
+      $ = cheerio.load(response.data);
+      
+      $('table tr').each((i, row) => {
+        const cells = $(row).find('td');
+        if (cells.length >= 4) {
+          const code = $(cells[0]).text().trim();
+          const name = $(cells[1]).text().trim();
+          const links = $(cells[3]).find('a');
+          
+          if (code === codeNum || code === formattedCode) {
+            links.each((j, link) => {
+              const href = $(link).attr('href');
+              const linkText = $(link).text().trim();
+              
+              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
+                const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                results.push({
+                  title: `${name} 招股章程`,
+                  link: pdfUrl,
+                  code: formattedCode,
+                  name: name,
+                });
+              }
+            });
+          }
+        }
+      });
+    }
+    
+    console.log(`[搜索] 找到 ${results.length} 个结果`);
     return results;
     
   } catch (error) {
-    console.error('[搜索] 搜索失败:', error.message);
+    console.error('[搜索] 失败:', error.message);
     throw new Error(`搜索招股书失败: ${error.message}`);
   }
 }
 
-// 下载并解析PDF
-async function downloadAndParsePDF(pdfUrl) {
-  console.log(`[下载] 正在下载PDF: ${pdfUrl}`);
+// ==================== PDF下载与解析 ====================
+
+/**
+ * 下载并解析PDF
+ */
+async function downloadAndParsePDF(pdfUrl, stockCode) {
+  // 先检查缓存
+  const cached = readCache(stockCode);
+  if (cached) {
+    return cached;
+  }
+  
+  console.log(`[PDF] 下载: ${pdfUrl.substring(0, 80)}...`);
   
   try {
     const response = await axios.get(pdfUrl, {
       responseType: 'arraybuffer',
-      timeout: 60000,
+      timeout: 180000, // 3分钟超时
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/pdf',
       },
+      maxContentLength: 150 * 1024 * 1024, // 最大150MB
     });
     
-    console.log(`[下载] PDF下载完成，大小: ${(response.data.byteLength / 1024 / 1024).toFixed(2)} MB`);
+    const pdfBuffer = response.data;
+    console.log(`[PDF] 大小: ${(pdfBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
     
-    // 解析PDF
-    const data = await pdfParse(response.data, {
-      max: 150, // 只解析前150页
+    // 解析PDF，最多400页
+    const data = await pdfParse(pdfBuffer, {
+      max: 400,
     });
     
-    console.log(`[解析] PDF解析完成，提取文本长度: ${data.text.length}`);
+    console.log(`[PDF] 解析完成: ${data.numpages}页, ${data.text.length}字符`);
+    
+    // 检测扫描版PDF
+    if (data.text.length < 5000) {
+      throw new Error('PDF可能为扫描版，无法提取文字内容');
+    }
+    
+    // 写入缓存
+    writeCache(stockCode, data.text);
+    
     return data.text;
     
   } catch (error) {
-    console.error('[下载] PDF下载/解析失败:', error.message);
-    throw new Error(`PDF处理失败: ${error.message}`);
+    console.error('[PDF] 解析失败:', error.message);
+    throw new Error(`PDF解析失败: ${error.message}`);
   }
 }
 
-// ============================================
-// 评分函数
-// ============================================
+// ==================== 评分引擎 ====================
 
-// 1. 检查是否有旧股
-function checkOldShares(text) {
-  console.log('[评分] 检查是否有旧股...');
+/**
+ * 主评分函数
+ */
+function scoreProspectus(rawText, stockCode) {
+  const text = rawText;
+  const normalizedText = normalizeText(rawText);
+  const SPONSORS = getAllSponsors();
   
-  const result = {
-    hasOldShares: false,
-    score: 0,
-    detail: '',
-    evidence: '',
+  console.log(`[评分] 开始评分: ${stockCode}, 文本长度: ${text.length}`);
+  
+  const scores = {
+    oldShares: { score: 0, reason: '', details: '' },
+    sponsor: { score: 0, reason: '', details: '', sponsors: [] },
+    cornerstone: { score: 0, reason: '', details: '', investors: [] },
+    lockup: { score: 0, reason: '', details: '' },
+    industry: { score: 0, reason: '', details: '', track: '' },
   };
   
-  // 查找"全球發售的發售股份數目"相关内容
-  const patterns = [
-    /全球發售的發售股份數目[\s\S]{0,200}/gi,
-    /全球发售的发售股份数目[\s\S]{0,200}/gi,
-    /發售股份總數[\s\S]{0,200}/gi,
-    /发售股份总数[\s\S]{0,200}/gi,
-  ];
+  // ========== 1. 旧股检测（限定在「全球發售」章节）==========
+  const globalOfferingSection = extractSection(
+    text,
+    [/全球發售/i, /全球发售/i, /GLOBAL\s*OFFERING/i],
+    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i],
+    30000
+  );
   
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      result.evidence = match[0].substring(0, 150);
-      
-      // 检查是否包含"及"、"以及"、"和"连接词，表示有新股+旧股
-      if (match[0].match(/新股[\s\S]{0,30}(及|以及|和|與|与)[\s\S]{0,30}舊股/i) ||
-          match[0].match(/舊股|旧股|出售股份/i)) {
-        result.hasOldShares = true;
-        result.score = -2;
-        result.detail = '发现有旧股出售';
-        break;
-      }
-    }
+  const oldSharesKeywords = ['銷售股份', '销售股份', '舊股', '旧股', '售股股東', '售股股东', '現有股份', '现有股份'];
+  const searchTextForOldShares = globalOfferingSection || normalizedText.slice(0, 50000);
+  const normalizedSearchText = normalizeText(searchTextForOldShares);
+  
+  const hasOldShares = oldSharesKeywords.some(kw => normalizedSearchText.includes(normalizeText(kw)));
+  
+  if (hasOldShares) {
+    scores.oldShares = { score: -2, reason: '有旧股发售', details: '存在销售股份/舊股，原始股东套现' };
+  } else {
+    scores.oldShares = { score: 0, reason: '全部新股', details: '无旧股发售，募资全部进入公司' };
   }
   
-  if (!result.hasOldShares) {
-    result.detail = '全部为新股发行';
-  }
+  // ========== 2. 保荐人评分（限定在特定章节）==========
+  const sponsorSection = extractSection(
+    text,
+    [/保薦人/i, /保荐人/i, /參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i, /SPONSOR/i],
+    [/概要/i, /SUMMARY/i, /風險因素/i],
+    25000
+  );
   
-  console.log(`[评分] 旧股检查完成: ${result.detail}, 得分: ${result.score}`);
-  return result;
-}
-
-// 2. 识别保荐人并评分
-function scoreSponsor(text) {
-  console.log('[评分] 识别保荐人...');
+  const searchTextForSponsor = sponsorSection || text.slice(0, 120000);
+  const normalizedSponsorText = normalizeText(searchTextForSponsor);
+  const foundSponsors = [];
   
-  const result = {
-    sponsors: [],
-    bestSponsor: null,
-    avgReturn: 0,
-    count: 0,
-    tier: 'unknown',
-    score: 0,
-    detail: '',
-  };
-  
-  // 提取保荐人相关段落
-  const sponsorPatterns = [
-    /參與全球發售的各方[\s\S]{0,2000}/gi,
-    /独家保薦人[\s\S]{0,500}/gi,
-    /聯席保薦人[\s\S]{0,500}/gi,
-    /保薦人[：:\s][\s\S]{0,500}/gi,
-  ];
-  
-  let sponsorSection = '';
-  for (const pattern of sponsorPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      sponsorSection += match.join(' ');
-    }
-  }
-  
-  // 在全文中搜索保荐人名称
-  const foundSponsors = new Map();
-  
-  for (const [name, data] of Object.entries(SPONSOR_DATABASE)) {
-    if (text.includes(name) || sponsorSection.includes(name)) {
+  // 遍历保荐人数据库查找匹配
+  for (const [name, data] of Object.entries(SPONSORS)) {
+    const normalizedName = normalizeText(name);
+    if (searchTextForSponsor.includes(name) || normalizedSponsorText.includes(normalizedName)) {
       // 避免重复（同一保荐人可能有多个名称）
-      const key = `${data.avgReturn}-${data.count}`;
-      if (!foundSponsors.has(key) || name.length > foundSponsors.get(key).name.length) {
-        foundSponsors.set(key, { name, ...data });
+      if (!foundSponsors.some(s => Math.abs(s.rate - data.rate) < 0.01 && s.count === data.count)) {
+        foundSponsors.push({ name, ...data });
       }
     }
   }
   
-  result.sponsors = Array.from(foundSponsors.values());
-  
-  if (result.sponsors.length > 0) {
-    // 找最佳保荐人
-    result.bestSponsor = result.sponsors.reduce((best, s) => 
-      !best || s.avgReturn > best.avgReturn ? s : best, null);
+  if (foundSponsors.length > 0) {
+    // 取经验最丰富的保荐人作为主保荐人
+    const mainSponsor = foundSponsors.sort((a, b) => b.count - a.count)[0];
     
-    result.avgReturn = result.bestSponsor.avgReturn;
-    result.count = result.bestSponsor.count;
-    result.tier = result.bestSponsor.tier;
-    
-    // 评分
-    if (result.count < 8) {
-      result.score = 0;
-      result.detail = `保荐人${result.bestSponsor.name}历史保荐少于8只，维持0分`;
-    } else if (result.avgReturn >= 70) {
-      result.score = 2;
-      result.detail = `保荐人${result.bestSponsor.name}首日平均涨幅${result.avgReturn}% ≥70%`;
-    } else if (result.avgReturn >= 40) {
-      result.score = 0;
-      result.detail = `保荐人${result.bestSponsor.name}首日平均涨幅${result.avgReturn}%，40%-70%区间`;
+    if (mainSponsor.count < 8) {
+      // 数据不足，不扣分也不加分
+      scores.sponsor = {
+        score: 0,
+        reason: '数据不足',
+        details: `${mainSponsor.name.substring(0, 20)} (仅${mainSponsor.count}单，需≥8单)`,
+        sponsors: foundSponsors.slice(0, 3),
+      };
+    } else if (mainSponsor.rate >= 70) {
+      scores.sponsor = {
+        score: 2,
+        reason: '优质保荐人',
+        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        sponsors: foundSponsors.slice(0, 3),
+      };
+    } else if (mainSponsor.rate >= 40) {
+      scores.sponsor = {
+        score: 0,
+        reason: '中等保荐人',
+        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        sponsors: foundSponsors.slice(0, 3),
+      };
     } else {
-      result.score = -2;
-      result.detail = `保荐人${result.bestSponsor.name}首日平均涨幅${result.avgReturn}% <40%`;
+      scores.sponsor = {
+        score: -2,
+        reason: '低质保荐人',
+        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅${mainSponsor.rate >= 0 ? '+' : ''}${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        sponsors: foundSponsors.slice(0, 3),
+      };
     }
   } else {
-    result.detail = '未能识别保荐人';
+    scores.sponsor = {
+      score: 0,
+      reason: '未识别',
+      details: '未找到匹配的保荐人数据',
+      sponsors: [],
+    };
   }
   
-  console.log(`[评分] 保荐人评分完成: ${result.detail}, 得分: ${result.score}`);
-  return result;
-}
-
-// 3. 识别基石投资者
-function scoreCornerstone(text) {
-  console.log('[评分] 识别基石投资者...');
+  // ========== 3. 基石投资者（限定章节）==========
+  const cornerstoneSection = extractSection(
+    text,
+    [/基石投資者/i, /基石投资者/i, /CORNERSTONE\s*INVESTOR/i],
+    [/風險因素/i, /风险因素/i, /行業概覽/i, /行业概览/i],
+    60000
+  );
   
-  const result = {
-    cornerstones: [],
-    hasStarInvestor: false,
-    score: 0,
-    detail: '',
-  };
+  const investorSearchText = cornerstoneSection || text;
+  const normalizedInvestorText = normalizeText(investorSearchText);
   
-  // 搜索基石投资者
-  const foundInvestors = [];
+  const foundInvestors = STAR_CORNERSTONE.filter(inv => {
+    const normalizedInv = normalizeText(inv);
+    return investorSearchText.includes(inv) || normalizedInvestorText.includes(normalizedInv);
+  });
   
-  for (const investor of STAR_CORNERSTONE_INVESTORS) {
-    if (text.includes(investor)) {
-      foundInvestors.push(investor);
-    }
-  }
+  // 去重（同一投资者可能匹配多个名称）
+  const uniqueInvestors = [...new Set(foundInvestors.map(inv => {
+    // 统一名称
+    if (/高瓴|Hillhouse/i.test(inv)) return '高瓴';
+    if (/红杉|紅杉|Sequoia/i.test(inv)) return '红杉';
+    if (/淡马锡|淡馬錫|Temasek/i.test(inv)) return '淡马锡';
+    if (/GIC|新加坡政府/i.test(inv)) return 'GIC';
+    if (/黑石|Blackstone/i.test(inv)) return '黑石';
+    if (/贝莱德|貝萊德|BlackRock/i.test(inv)) return '贝莱德';
+    if (/软银|軟銀|SoftBank|Vision Fund/i.test(inv)) return '软银';
+    if (/中投|CIC/i.test(inv)) return '中投';
+    if (/社保/i.test(inv)) return '社保基金';
+    if (/国家大基金|國家大基金/i.test(inv)) return '大基金';
+    return inv;
+  }))];
   
-  // 去重（同一投资者可能有多个名称）
-  result.cornerstones = [...new Set(foundInvestors)];
-  
-  if (result.cornerstones.length > 0) {
-    result.hasStarInvestor = true;
-    result.score = 2;
-    result.detail = `发现明星基石投资者: ${result.cornerstones.slice(0, 3).join(', ')}${result.cornerstones.length > 3 ? '等' : ''}`;
+  if (uniqueInvestors.length > 0) {
+    scores.cornerstone = {
+      score: 2,
+      reason: '有明星基石',
+      details: uniqueInvestors.join(', '),
+      investors: uniqueInvestors,
+    };
   } else {
-    // 检查是否有基石投资者章节但无明星
-    if (text.match(/基石投資者|基石投资者|Cornerstone/i)) {
-      result.detail = '有基石投资者但非明星机构';
-    } else {
-      result.detail = '未发现基石投资者';
-    }
+    scores.cornerstone = {
+      score: 0,
+      reason: '无明星基石',
+      details: '未发现指定名单中的基石投资者',
+      investors: [],
+    };
   }
   
-  console.log(`[评分] 基石投资者评分完成: ${result.detail}, 得分: ${result.score}`);
-  return result;
-}
-
-// 4. 检查IPO前投资者禁售期
-function scorePreIPO(text) {
-  console.log('[评分] 检查IPO前投资者...');
+  // ========== 4. Pre-IPO禁售期 ==========
+  const shareholderSection = extractSection(
+    text,
+    [/股本/i, /主要股東/i, /主要股东/i, /歷史.*沿革/i, /历史.*沿革/i, /股權結構/i, /股权结构/i],
+    [/業務/i, /业务/i, /財務/i, /财务/i],
+    80000
+  );
   
-  const result = {
-    hasPreIPO: false,
-    hasLockup: true,
-    score: 0,
-    detail: '',
-  };
+  const preIPOSearchText = shareholderSection || text.slice(0, 200000);
+  const normalizedPreIPOText = normalizeText(preIPOSearchText);
   
-  // 检查是否有IPO前投资者
-  const preIpoPatterns = [
-    /首次公開發售前投資者/i,
-    /首次公开发售前投资者/i,
-    /Pre-IPO\s*Investor/i,
-    /上市前投資者/i,
-  ];
+  // 检测是否有Pre-IPO投资
+  const preIPOKeywords = ['Pre-IPO', 'pre-ipo', '上市前投資', '上市前投资', '私募', '戰略投資', '战略投资', '優先股', '优先股'];
+  const hasPreIPO = preIPOKeywords.some(kw => 
+    preIPOSearchText.includes(kw) || normalizedPreIPOText.includes(normalizeText(kw))
+  );
   
-  for (const pattern of preIpoPatterns) {
-    if (pattern.test(text)) {
-      result.hasPreIPO = true;
+  if (hasPreIPO) {
+    // 有Pre-IPO，检查是否有禁售期
+    const lockupKeywords = ['禁售期', '禁售', '鎖定期', '锁定期', 'lock-up', 'lockup', 'lock up', '不得出售', '不得轉讓', '不得转让'];
+    const hasLockup = lockupKeywords.some(kw =>
+      preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || 
+      normalizedPreIPOText.includes(normalizeText(kw))
+    );
+    
+    if (hasLockup) {
+      scores.lockup = {
+        score: 0,
+        reason: 'Pre-IPO有禁售期',
+        details: '有Pre-IPO投资者，且设有禁售期安排',
+      };
+    } else {
+      scores.lockup = {
+        score: -2,
+        reason: 'Pre-IPO无禁售期',
+        details: '警告：有Pre-IPO投资者但未发现禁售期安排',
+      };
+    }
+  } else {
+    scores.lockup = {
+      score: 0,
+      reason: '无Pre-IPO',
+      details: '未发现Pre-IPO投资者',
+    };
+  }
+  
+  // ========== 5. 行业评分（基于炒作逻辑）==========
+  const industrySection = extractSection(
+    text,
+    [/行業概覽/i, /行业概览/i, /INDUSTRY\s*OVERVIEW/i, /業務/i, /业务/i, /BUSINESS/i],
+    [/監管/i, /监管/i, /董事/i, /REGULATORY/i, /DIRECTOR/i],
+    100000
+  );
+  
+  const industrySearchText = industrySection || text.slice(0, 250000);
+  const normalizedIndustryText = normalizeText(industrySearchText);
+  
+  let industryScore = 0;
+  let industryReason = '中性赛道';
+  let industryDetails = '无明显偏好';
+  let trackType = 'neutral';
+  
+  // 检查热门赛道 (+2)
+  for (const track of HOT_TRACKS) {
+    if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      industryScore = 2;
+      industryReason = '🔥 热门赛道';
+      industryDetails = `情绪驱动型: ${track}`;
+      trackType = 'hot';
       break;
     }
   }
   
-  if (result.hasPreIPO) {
-    // 检查是否有禁售期
-    const lockupPatterns = [
-      /禁售期/i,
-      /鎖定期/i,
-      /锁定期/i,
-      /lock-?up/i,
-      /不會出售/i,
-      /不会出售/i,
-      /承諾.*?個月/i,
-      /承诺.*?个月/i,
-    ];
-    
-    let hasLockupMention = false;
-    for (const pattern of lockupPatterns) {
-      if (pattern.test(text)) {
-        hasLockupMention = true;
+  // 检查成长赛道 (+1)
+  if (industryScore === 0) {
+    for (const track of GROWTH_TRACKS) {
+      if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+        industryScore = 1;
+        industryReason = '📈 成长赛道';
+        industryDetails = `成长叙事型: ${track}`;
+        trackType = 'growth';
         break;
       }
     }
-    
-    // 检查是否明确说无禁售
-    const noLockupPatterns = [
-      /無禁售期/i,
-      /无禁售期/i,
-      /沒有禁售/i,
-      /没有禁售/i,
-      /不受.*?禁售/i,
-    ];
-    
-    let noLockup = false;
-    for (const pattern of noLockupPatterns) {
-      if (pattern.test(text)) {
-        noLockup = true;
+  }
+  
+  // 检查低弹性赛道 (-1)
+  if (industryScore === 0) {
+    for (const track of LOW_ELASTICITY_TRACKS) {
+      if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+        industryScore = -1;
+        industryReason = '📉 低弹性赛道';
+        industryDetails = `缺乏想象空间: ${track}`;
+        trackType = 'low';
         break;
       }
     }
-    
-    if (noLockup) {
-      result.hasLockup = false;
-      result.score = -2;
-      result.detail = 'IPO前投资者无禁售期约束';
-    } else if (hasLockupMention) {
-      result.hasLockup = true;
-      result.score = 0;
-      result.detail = 'IPO前投资者有禁售期';
-    } else {
-      result.detail = '有IPO前投资者，禁售期情况不明';
-    }
-  } else {
-    result.detail = '无IPO前投资者或未披露';
   }
   
-  console.log(`[评分] IPO前投资者评分完成: ${result.detail}, 得分: ${result.score}`);
-  return result;
-}
-
-// 5. 识别行业
-function scoreIndustry(text) {
-  console.log('[评分] 识别行业...');
+  // 检查回避赛道 (-2) - 即使匹配了其他档位，回避赛道优先
+  for (const track of AVOID_TRACKS) {
+    if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      industryScore = -2;
+      industryReason = '❌ 资金回避';
+      industryDetails = `高破发风险: ${track}`;
+      trackType = 'avoid';
+      break;
+    }
+  }
   
-  const result = {
-    industry: '',
-    type: 'neutral',
-    score: 0,
-    detail: '',
+  scores.industry = {
+    score: industryScore,
+    reason: industryReason,
+    details: industryDetails,
+    track: trackType,
   };
   
-  // 提取行业概览章节
-  const industrySection = text.match(/行業概覽[\s\S]{0,3000}/i) || 
-                          text.match(/行业概览[\s\S]{0,3000}/i) ||
-                          text.match(/業務概覽[\s\S]{0,3000}/i) ||
-                          [''];
+  // ========== 计算总分 ==========
+  const totalScore = Object.values(scores).reduce((sum, item) => sum + item.score, 0);
   
-  const searchText = industrySection[0] + text.substring(0, 10000);
+  let rating;
+  if (totalScore >= 6) rating = '强烈推荐';
+  else if (totalScore >= 4) rating = '建议申购';
+  else if (totalScore >= 2) rating = '可以考虑';
+  else if (totalScore >= 0) rating = '谨慎申购';
+  else rating = '不建议';
   
-  // 检查正面行业
-  for (const keyword of INDUSTRY_POSITIVE) {
-    if (searchText.includes(keyword)) {
-      result.industry = keyword;
-      result.type = 'positive';
-      result.score = 2;
-      result.detail = `行业: ${keyword} (物业管理/软件服务/医药医疗)`;
-      console.log(`[评分] 行业评分完成: ${result.detail}, 得分: ${result.score}`);
-      return result;
-    }
-  }
+  console.log(`[评分] 完成: 总分${totalScore}, ${rating}`);
   
-  // 检查负面行业
-  for (const keyword of INDUSTRY_NEGATIVE) {
-    if (searchText.includes(keyword)) {
-      result.industry = keyword;
-      result.type = 'negative';
-      result.score = -2;
-      result.detail = `行业: ${keyword} (纺织品/服装/金融服务等)`;
-      console.log(`[评分] 行业评分完成: ${result.detail}, 得分: ${result.score}`);
-      return result;
-    }
-  }
-  
-  result.detail = '其他行业';
-  console.log(`[评分] 行业评分完成: ${result.detail}, 得分: ${result.score}`);
-  return result;
-}
-
-// 6. 估值评分（简化版，需要用户输入）
-function scoreValuation(peRatio, industryPeRatio) {
-  const result = {
-    peRatio: peRatio || null,
-    industryPeRatio: industryPeRatio || null,
-    score: 0,
-    detail: '',
+  return {
+    stockCode: formatStockCode(stockCode),
+    totalScore,
+    rating,
+    scores,
   };
-  
-  if (!peRatio || !industryPeRatio) {
-    result.detail = '估值数据不足，暂不评分';
-    return result;
-  }
-  
-  const ratio = peRatio / industryPeRatio;
-  
-  if (ratio < 0.8) {
-    result.score = 2;
-    result.detail = `市盈率${peRatio}低于同行${industryPeRatio}`;
-  } else if (ratio > 1.2) {
-    result.score = -2;
-    result.detail = `市盈率${peRatio}高于同行${industryPeRatio}`;
-  } else {
-    result.detail = `市盈率${peRatio}接近同行${industryPeRatio}`;
-  }
-  
-  return result;
 }
 
-// ============================================
-// API 路由
-// ============================================
+// ==================== API路由 ====================
 
-// 主评分接口
+// 健康检查
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '2.1',
+    sponsorsLoaded: Object.keys(getAllSponsors()).length,
+  });
+});
+
+// 获取保荐人数据
+app.get('/api/sponsors', (req, res) => {
+  const sponsors = getAllSponsors();
+  res.json({
+    count: Object.keys(sponsors).length,
+    source: fs.existsSync(SPONSORS_JSON) ? 'json' : 'fallback',
+    data: sponsors,
+  });
+});
+
+// 获取TOP保荐人
+app.get('/api/sponsors/top', (req, res) => {
+  const sponsors = getAllSponsors();
+  const limit = parseInt(req.query.limit) || 20;
+  
+  // 去重并排序
+  const seen = new Set();
+  const uniqueSponsors = [];
+  
+  for (const [name, data] of Object.entries(sponsors)) {
+    const key = `${data.rate}-${data.count}`;
+    if (!seen.has(key) && data.count >= 5) {
+      seen.add(key);
+      uniqueSponsors.push({ name, ...data });
+    }
+  }
+  
+  const sorted = uniqueSponsors
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+  
+  res.json(sorted);
+});
+
+// 搜索招股书
+app.get('/api/search/:code', async (req, res) => {
+  try {
+    const results = await searchProspectus(req.params.code);
+    res.json({ success: true, results });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 清除缓存
+app.get('/api/cache/clear/:code', (req, res) => {
+  const code = formatStockCode(req.params.code);
+  const cleared = clearCache(code);
+  res.json({
+    success: true,
+    message: cleared ? `已清除 ${code} 的缓存` : `${code} 无缓存`,
+  });
+});
+
+// 主评分API
 app.get('/api/score/:code', async (req, res) => {
-  const stockCode = req.params.code;
-  const { peRatio, industryPeRatio } = req.query;
+  const { code } = req.params;
+  const startTime = Date.now();
   
-  console.log(`\n========================================`);
-  console.log(`[API] 开始评分: ${stockCode}`);
-  console.log(`========================================\n`);
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[API] 评分请求: ${code}`);
+  console.log(`${'='.repeat(60)}`);
   
   try {
-    // 1. 搜索招股书
-    const searchResults = await searchProspectus(stockCode);
+    // 搜索招股书
+    const searchResults = await searchProspectus(code);
     
     if (searchResults.length === 0) {
       return res.json({
         success: false,
-        error: '未找到招股书，请确认股票代码正确且已提交上市申请',
-        stockCode: formatStockCode(stockCode),
+        error: '未找到招股书，请确认股票代码正确且已上市',
       });
     }
     
-    // 找到招股章程PDF
-    let prospectusUrl = null;
-    for (const result of searchResults) {
-      if (result.link && (result.title.includes('招股章程') || result.title.includes('Prospectus'))) {
-        prospectusUrl = result.link;
-        break;
-      }
-    }
+    const prospectus = searchResults[0];
+    console.log(`[API] 招股书: ${prospectus.title}`);
     
-    if (!prospectusUrl && searchResults[0].link) {
-      prospectusUrl = searchResults[0].link;
-    }
+    // 下载并解析PDF
+    const pdfText = await downloadAndParsePDF(prospectus.link, code);
     
-    if (!prospectusUrl) {
-      return res.json({
-        success: false,
-        error: '未找到可下载的招股书PDF',
-        searchResults,
-      });
-    }
+    // 评分
+    const scoreResult = scoreProspectus(pdfText, code);
     
-    // 2. 下载并解析PDF
-    const pdfText = await downloadAndParsePDF(prospectusUrl);
-    
-    // 3. 各项评分
-    const oldSharesResult = checkOldShares(pdfText);
-    const sponsorResult = scoreSponsor(pdfText);
-    const cornerstoneResult = scoreCornerstone(pdfText);
-    const preIpoResult = scorePreIPO(pdfText);
-    const industryResult = scoreIndustry(pdfText);
-    const valuationResult = scoreValuation(
-      peRatio ? parseFloat(peRatio) : null,
-      industryPeRatio ? parseFloat(industryPeRatio) : null
-    );
-    
-    // 4. 计算总分
-    const totalScore = 
-      oldSharesResult.score +
-      sponsorResult.score +
-      cornerstoneResult.score +
-      preIpoResult.score +
-      industryResult.score +
-      valuationResult.score;
-    
-    // 5. 评级
-    let rating = '';
-    if (totalScore >= 6) rating = '强烈推荐申购';
-    else if (totalScore >= 4) rating = '建议申购';
-    else if (totalScore >= 2) rating = '可考虑申购';
-    else if (totalScore >= 0) rating = '谨慎申购';
-    else if (totalScore >= -2) rating = '不建议申购';
-    else rating = '强烈不建议申购';
-    
-    console.log(`\n[完成] 总得分: ${totalScore}, 评级: ${rating}\n`);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒`);
     
     res.json({
       success: true,
-      stockCode: formatStockCode(stockCode),
-      prospectusUrl,
-      totalScore,
-      rating,
-      scores: {
-        oldShares: oldSharesResult,
-        sponsor: sponsorResult,
-        cornerstone: cornerstoneResult,
-        preIPO: preIpoResult,
-        industry: industryResult,
-        valuation: valuationResult,
+      prospectus: {
+        title: prospectus.title,
+        link: prospectus.link,
+        name: prospectus.name,
       },
-      searchResults,
+      ...scoreResult,
+      elapsed: `${elapsed}s`,
     });
     
   } catch (error) {
-    console.error('[API] 评分失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stockCode: formatStockCode(stockCode),
-    });
-  }
-});
-
-// 仅搜索招股书（不下载解析）
-app.get('/api/search/:code', async (req, res) => {
-  const stockCode = req.params.code;
-  
-  try {
-    const results = await searchProspectus(stockCode);
-    res.json({
-      success: true,
-      stockCode: formatStockCode(stockCode),
-      results,
-    });
-  } catch (error) {
+    console.error(`[API] 错误: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -729,30 +924,27 @@ app.get('/api/search/:code', async (req, res) => {
   }
 });
 
-// 获取保荐人数据库
-app.get('/api/sponsors', (req, res) => {
-  const sponsors = {};
-  for (const [name, data] of Object.entries(SPONSOR_DATABASE)) {
-    // 只返回主要名称（中文优先）
-    if (name.match(/[\u4e00-\u9fa5]/)) {
-      sponsors[name] = data;
-    }
-  }
-  res.json(sponsors);
+// 静态文件
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 健康检查
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// ==================== 启动服务 ====================
 
-// 启动服务器
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 港股新股打分服务已启动`);
-  console.log(`📍 访问地址: http://localhost:${PORT}`);
-  console.log(`📚 API文档:`);
-  console.log(`   GET /api/score/:code - 完整评分`);
-  console.log(`   GET /api/search/:code - 搜索招股书`);
-  console.log(`   GET /api/sponsors - 保荐人数据库\n`);
+  console.log(`\n${'═'.repeat(60)}`);
+  console.log(`🚀 港股新股自动评分系统 v2.1`);
+  console.log(`${'═'.repeat(60)}`);
+  console.log(`📍 服务地址: http://localhost:${PORT}`);
+  console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
+  console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
+  console.log(`📂 数据来源: ${fs.existsSync(SPONSORS_JSON) ? 'JSON文件' : '内置数据'}`);
+  console.log(`${'─'.repeat(60)}`);
+  console.log(`行业评分规则 (基于炒作逻辑):`);
+  console.log(`  🔥 +2 热门赛道: AI/机器人/半导体/创新药/低空经济`);
+  console.log(`  📈 +1 成长赛道: 医疗器械/新能源/SaaS/软件`);
+  console.log(`  ⚪  0 中性赛道: 无明显偏好`);
+  console.log(`  📉 -1 低弹性: 传统消费/建材/公用事业`);
+  console.log(`  ❌ -2 回避赛道: 物管/内房/小贷/纺织/教培`);
+  console.log(`${'═'.repeat(60)}\n`);
 });

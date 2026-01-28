@@ -1,21 +1,35 @@
 {
-  "name": "hk-ipo-auto",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "hk-ipo-scorer",
+  "version": "2.1.0",
+  "description": "港股新股自动评分系统 - 智能分析IPO招股书",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "crawl": "node scripts/crawl-sponsors.js",
+    "test": "echo \"No tests yet\""
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "axios": "^1.13.3",
-    "cheerio": "^1.2.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "pdf-parse": "^2.4.5"
-  }
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "港股",
+    "IPO",
+    "新股",
+    "评分",
+    "招股书",
+    "保荐人"
+  ],
+  "author": "智享AI",
+  "license": "MIT"
 }
