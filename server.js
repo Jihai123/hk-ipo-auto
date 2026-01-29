@@ -39,6 +39,7 @@ const PORT = process.env.PORT || 3010;
 const CACHE_DIR = path.join(__dirname, 'cache');
 const DATA_DIR = path.join(__dirname, 'data');
 const SPONSORS_JSON = path.join(DATA_DIR, 'sponsors.json');
+const IPO_SPONSORS_JSON = path.join(DATA_DIR, 'ipo-sponsors.json');
 
 // 确保目录存在
 [CACHE_DIR, DATA_DIR].forEach(dir => {
@@ -60,9 +61,9 @@ function loadSponsorsFromJSON() {
       const data = JSON.parse(fs.readFileSync(SPONSORS_JSON, 'utf-8'));
       const result = {};
       for (const s of data.sponsors || []) {
-        result[s.name] = { 
-          rate: s.avgFirstDay, 
-          count: s.count, 
+        result[s.name] = {
+          rate: s.avgFirstDay,
+          count: s.count,
           winRate: s.winRate,
           upCount: s.upCount,
           downCount: s.downCount
@@ -73,6 +74,45 @@ function loadSponsorsFromJSON() {
     } catch (e) {
       console.error('[数据] JSON加载失败:', e.message);
     }
+  }
+  return null;
+}
+
+/**
+ * 从IPO映射表加载股票代码→保荐人数据
+ * 用于PDF解析无法提取保荐人名称时的备用方案
+ */
+function loadIPOSponsorMapping() {
+  if (fs.existsSync(IPO_SPONSORS_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(IPO_SPONSORS_JSON, 'utf-8'));
+      console.log(`[数据] 从IPO映射表加载 ${data.count || 0} 个股票代码→保荐人映射`);
+      return data.mapping || {};
+    } catch (e) {
+      console.error('[数据] IPO映射表加载失败:', e.message);
+    }
+  }
+  return {};
+}
+
+// 缓存IPO映射表
+let IPO_SPONSOR_MAP = {};
+try {
+  IPO_SPONSOR_MAP = loadIPOSponsorMapping();
+} catch (e) {
+  console.error('[数据] IPO映射表初始化失败');
+}
+
+/**
+ * 通过股票代码查找保荐人
+ * @param {string} stockCode - 股票代码
+ * @returns {Array|null} - 保荐人名称数组或null
+ */
+function getSponsorsByStockCode(stockCode) {
+  const normalizedCode = stockCode.toString().padStart(5, '0');
+  const mapping = IPO_SPONSOR_MAP[normalizedCode];
+  if (mapping && mapping.sponsors && mapping.sponsors.length > 0) {
+    return mapping.sponsors;
   }
   return null;
 }
@@ -731,15 +771,108 @@ function scoreProspectus(rawText, stockCode) {
       };
     }
   } else {
-    scores.sponsor = {
-      score: 0,
-      reason: '未识别',
-      details: '未找到匹配的保荐人数据',
-      sponsors: [],
-      evidence: { ...sponsorEvidence, scoreRule: '未匹配到保荐人数据库，不评分' },
-    };
+    // 备用方案：通过股票代码从IPO映射表查找保荐人
+    const stockCodeMatch = text.match(/股份代號\s*[：:]\s*(\d+)|Stock\s*Code\s*[：:]\s*(\d+)/i);
+    let fallbackSponsors = null;
+    let stockCodeFromText = stockCodeMatch ? (stockCodeMatch[1] || stockCodeMatch[2]) : null;
+
+    // 如果从文本提取了股票代码，或者有传入的股票代码参数
+    if (stockCodeFromText) {
+      fallbackSponsors = getSponsorsByStockCode(stockCodeFromText);
+    }
+
+    if (fallbackSponsors && fallbackSponsors.length > 0) {
+      // 从映射表找到了保荐人，尝试在保荐人数据库中查找其业绩
+      const fallbackFoundSponsors = [];
+      for (const sponsorName of fallbackSponsors) {
+        // 尝试完整匹配
+        if (SPONSORS[sponsorName]) {
+          fallbackFoundSponsors.push({ name: sponsorName, ...SPONSORS[sponsorName] });
+        } else {
+          // 尝试部分匹配
+          for (const [dbName, data] of Object.entries(SPONSORS)) {
+            if (dbName.includes(sponsorName) || sponsorName.includes(dbName)) {
+              fallbackFoundSponsors.push({ name: sponsorName, ...data, matchedName: dbName });
+              break;
+            }
+          }
+        }
+      }
+
+      if (fallbackFoundSponsors.length > 0) {
+        const mainSponsor = fallbackFoundSponsors.sort((a, b) => (b.count || 0) - (a.count || 0))[0];
+        const rate = mainSponsor.rate || 0;
+        const count = mainSponsor.count || 0;
+
+        sponsorEvidence.source = 'IPO映射表（备用方案）';
+        sponsorEvidence.stockCode = stockCodeFromText;
+        sponsorEvidence.matchedCount = fallbackFoundSponsors.length;
+        sponsorEvidence.allMatched = fallbackFoundSponsors.map(s => ({
+          name: s.name,
+          rate: s.rate,
+          count: s.count,
+          winRate: s.winRate,
+        }));
+
+        if (count < 8) {
+          scores.sponsor = {
+            score: 0,
+            reason: '数据不足',
+            details: `${mainSponsor.name.substring(0, 20)} (仅${count}单，需≥8单) [备用]`,
+            sponsors: fallbackFoundSponsors.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
+          };
+        } else if (rate >= 70) {
+          scores.sponsor = {
+            score: 2,
+            reason: '优质保荐人',
+            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
+            sponsors: fallbackFoundSponsors.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
+          };
+        } else if (rate >= 40) {
+          scores.sponsor = {
+            score: 0,
+            reason: '中等保荐人',
+            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
+            sponsors: fallbackFoundSponsors.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
+          };
+        } else {
+          scores.sponsor = {
+            score: -2,
+            reason: '低质保荐人',
+            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%, ${count}单 [备用]`,
+            sponsors: fallbackFoundSponsors.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
+          };
+        }
+      } else {
+        // 从映射表找到了保荐人名称，但在数据库中没有业绩记录
+        scores.sponsor = {
+          score: 0,
+          reason: '无业绩记录',
+          details: `保荐人: ${fallbackSponsors.join('、').substring(0, 40)}... (无历史业绩)`,
+          sponsors: fallbackSponsors.map(name => ({ name })),
+          evidence: {
+            ...sponsorEvidence,
+            source: 'IPO映射表（备用方案）',
+            stockCode: stockCodeFromText,
+            scoreRule: '保荐人在映射表中找到，但数据库无业绩记录，不评分',
+          },
+        };
+      }
+    } else {
+      scores.sponsor = {
+        score: 0,
+        reason: '未识别',
+        details: '未找到匹配的保荐人数据',
+        sponsors: [],
+        evidence: { ...sponsorEvidence, scoreRule: '未匹配到保荐人数据库，不评分' },
+      };
+    }
   }
-  
+
   // ========== 3. 基石投资者（限定章节）==========
   const cornerstoneSection = extractSection(
     text,
