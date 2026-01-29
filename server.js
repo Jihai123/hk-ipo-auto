@@ -204,10 +204,22 @@ const FALLBACK_SPONSORS = {
 
 /**
  * 获取所有保荐人数据
- * 优先从JSON加载，否则使用fallback
+ * 合并JSON数据和FALLBACK数据，JSON数据优先
  */
 function getAllSponsors() {
-  return loadSponsorsFromJSON() || FALLBACK_SPONSORS;
+  const jsonData = loadSponsorsFromJSON();
+
+  // 合并：FALLBACK为基础，JSON数据覆盖
+  const merged = { ...FALLBACK_SPONSORS };
+
+  if (jsonData) {
+    // JSON数据覆盖FALLBACK中的同名保荐人
+    for (const [name, data] of Object.entries(jsonData)) {
+      merged[name] = data;
+    }
+  }
+
+  return merged;
 }
 
 // ==================== 行业评分体系 v2（基于炒作逻辑）====================
