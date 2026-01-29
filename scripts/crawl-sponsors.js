@@ -122,10 +122,12 @@ async function crawlSponsorPage(page = 1) {
 
             // 验证是数据行（日期格式检验）
             if (dateText.match(/\d{4}\/\d{2}\/\d{2}/) && sponsorText && firstDayPerf !== null) {
-              // 提取股票代码
-              const codeMatch = companyInfo.match(/\((\d+)\)/);
+              // 提取股票代码 - 支持多种格式：01768.HK、(01768)、01768
+              const codeMatch = companyInfo.match(/(\d{4,5})\.HK/i) ||
+                               companyInfo.match(/\((\d{4,5})\)/) ||
+                               companyInfo.match(/(\d{5})$/);
               const stockCode = codeMatch ? codeMatch[1] : '';
-              const companyName = companyInfo.replace(/\(\d+\)/, '').trim();
+              const companyName = companyInfo.replace(/\d{4,5}\.HK/i, '').replace(/\(\d+\)/, '').trim();
 
               // 处理多个保荐人（可能用逗号、/、换行、或"有限公司"后面直接接下一个）
               // 先按常见分隔符分割
@@ -224,10 +226,138 @@ function aggregateSponsorStats(ipoRecords) {
   return sponsors.sort((a, b) => b.count - a.count);
 }
 
+// crawlSponsorStats函数已被crawlSponsorStatsWithRecords替代
+
 /**
- * 主爬取函数
+ * 保存数据
+ * @param {Array} sponsors - 保荐人统计数据
+ * @param {Array} ipoRecords - IPO记录（包含股票代码→保荐人映射）
  */
-async function crawlSponsorStats() {
+function saveData(sponsors, ipoRecords = []) {
+  console.log('\n💾 正在保存数据...');
+
+  // 确保目录存在
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  // 1. 保存保荐人统计数据到JSON
+  const jsonData = {
+    updatedAt: new Date().toISOString(),
+    source: 'aastocks',
+    sponsors: sponsors,
+  };
+  fs.writeFileSync(JSON_PATH, JSON.stringify(jsonData, null, 2), 'utf-8');
+  console.log(`   ✓ 已保存到 ${JSON_PATH}`);
+
+  // 2. 保存股票代码→保荐人映射（用于PDF解析失败时的备用查找）
+  if (ipoRecords.length > 0) {
+    const ipoSponsorMap = {};
+    for (const record of ipoRecords) {
+      if (record.stockCode && record.sponsors && record.sponsors.length > 0) {
+        // 标准化股票代码（补齐5位）
+        const normalizedCode = record.stockCode.padStart(5, '0');
+        ipoSponsorMap[normalizedCode] = {
+          sponsors: record.sponsors,
+          companyName: record.companyName,
+          date: record.date,
+          industry: record.industry,
+          firstDayPerf: record.firstDayPerf,
+        };
+      }
+    }
+    const ipoMapPath = path.join(DATA_DIR, 'ipo-sponsors.json');
+    fs.writeFileSync(ipoMapPath, JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      source: 'aastocks',
+      count: Object.keys(ipoSponsorMap).length,
+      mapping: ipoSponsorMap,
+    }, null, 2), 'utf-8');
+    console.log(`   ✓ 已保存 ${Object.keys(ipoSponsorMap).length} 个股票代码→保荐人映射到 ${ipoMapPath}`);
+  }
+
+  // 2. 如果有数据库，也保存到数据库
+  if (Database && fs.existsSync(DB_PATH)) {
+    try {
+      const db = new Database(DB_PATH);
+
+      const insertStmt = db.prepare(`
+        INSERT INTO sponsor_stats (
+          sponsor_name, total_count, up_count, down_count, flat_count,
+          avg_first_day_return, avg_cumulative_return, win_rate,
+          data_source, last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'aastocks', datetime('now'))
+        ON CONFLICT(sponsor_name) DO UPDATE SET
+          total_count = excluded.total_count,
+          up_count = excluded.up_count,
+          down_count = excluded.down_count,
+          avg_first_day_return = excluded.avg_first_day_return,
+          avg_cumulative_return = excluded.avg_cumulative_return,
+          win_rate = excluded.win_rate,
+          last_updated = datetime('now')
+      `);
+
+      db.exec('BEGIN TRANSACTION');
+      for (const s of sponsors) {
+        insertStmt.run(s.name, s.count, s.upCount, s.downCount,
+                       s.count - s.upCount - s.downCount,
+                       s.avgFirstDay, s.avgCumulative || null, s.winRate);
+      }
+      db.exec('COMMIT');
+      db.close();
+
+      console.log(`   ✓ 已保存到数据库`);
+    } catch (e) {
+      console.error('   ⚠️  数据库保存失败:', e.message);
+    }
+  }
+}
+
+/**
+ * 显示TOP保荐人
+ */
+function showTop(sponsors) {
+  console.log('\n🏆 TOP 15 保荐人 (按参与数量):');
+
+  const sorted = [...sponsors].sort((a, b) => b.count - a.count);
+  sorted.slice(0, 15).forEach((s, i) => {
+    const sign = s.avgFirstDay >= 0 ? '+' : '';
+    console.log(`   ${(i+1).toString().padStart(2)}. ${s.name.substring(0, 25).padEnd(25)} ${s.count}单 ${sign}${s.avgFirstDay.toFixed(2)}% 胜率${s.winRate}%`);
+  });
+
+  console.log('\n🔥 TOP 10 保荐人 (按平均涨幅, ≥5单):');
+  const byReturn = [...sponsors].filter(s => s.count >= 5).sort((a, b) => b.avgFirstDay - a.avgFirstDay);
+  byReturn.slice(0, 10).forEach((s, i) => {
+    const sign = s.avgFirstDay >= 0 ? '+' : '';
+    console.log(`   ${(i+1).toString().padStart(2)}. ${s.name.substring(0, 25).padEnd(25)} ${s.count}单 ${sign}${s.avgFirstDay.toFixed(2)}% 胜率${s.winRate}%`);
+  });
+}
+
+async function main() {
+  console.log('═'.repeat(60));
+  console.log('🚀 港股IPO保荐人数据爬虫 v3.1');
+  console.log('═'.repeat(60));
+  console.log('数据来源: AAStocks (aastocks.com)');
+  console.log('策略: 爬取十大排名 + 最近两年IPO数据（多页）并汇总');
+  console.log('新增: 保存股票代码→保荐人映射表');
+  console.log('═'.repeat(60));
+
+  const { sponsors, ipoRecords } = await crawlSponsorStatsWithRecords();
+
+  if (sponsors.length > 0) {
+    saveData(sponsors, ipoRecords);
+    showTop(sponsors);
+  } else {
+    console.log('\n❌ 未获取到任何保荐人数据');
+  }
+
+  console.log('\n✨ 完成！');
+}
+
+/**
+ * 主爬取函数（返回sponsors和ipoRecords）
+ */
+async function crawlSponsorStatsWithRecords() {
   console.log('\n📊 开始爬取 sponsor.aspx 页面...');
   console.log(`   URL: ${SPONSOR_URL}\n`);
 
@@ -293,104 +423,7 @@ async function crawlSponsorStats() {
 
   console.log(`\n   ✅ 合并后共 ${finalSponsors.length} 个保荐人数据`);
 
-  return finalSponsors;
-}
-
-/**
- * 保存数据
- */
-function saveData(sponsors) {
-  console.log('\n💾 正在保存数据...');
-
-  // 确保目录存在
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-
-  // 1. 保存到JSON（无论如何都保存）
-  const jsonData = {
-    updatedAt: new Date().toISOString(),
-    source: 'aastocks',
-    sponsors: sponsors,
-  };
-  fs.writeFileSync(JSON_PATH, JSON.stringify(jsonData, null, 2), 'utf-8');
-  console.log(`   ✓ 已保存到 ${JSON_PATH}`);
-
-  // 2. 如果有数据库，也保存到数据库
-  if (Database && fs.existsSync(DB_PATH)) {
-    try {
-      const db = new Database(DB_PATH);
-
-      const insertStmt = db.prepare(`
-        INSERT INTO sponsor_stats (
-          sponsor_name, total_count, up_count, down_count, flat_count,
-          avg_first_day_return, avg_cumulative_return, win_rate,
-          data_source, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'aastocks', datetime('now'))
-        ON CONFLICT(sponsor_name) DO UPDATE SET
-          total_count = excluded.total_count,
-          up_count = excluded.up_count,
-          down_count = excluded.down_count,
-          avg_first_day_return = excluded.avg_first_day_return,
-          avg_cumulative_return = excluded.avg_cumulative_return,
-          win_rate = excluded.win_rate,
-          last_updated = datetime('now')
-      `);
-
-      db.exec('BEGIN TRANSACTION');
-      for (const s of sponsors) {
-        insertStmt.run(s.name, s.count, s.upCount, s.downCount,
-                       s.count - s.upCount - s.downCount,
-                       s.avgFirstDay, s.avgCumulative || null, s.winRate);
-      }
-      db.exec('COMMIT');
-      db.close();
-
-      console.log(`   ✓ 已保存到数据库`);
-    } catch (e) {
-      console.error('   ⚠️  数据库保存失败:', e.message);
-    }
-  }
-}
-
-/**
- * 显示TOP保荐人
- */
-function showTop(sponsors) {
-  console.log('\n🏆 TOP 15 保荐人 (按参与数量):');
-
-  const sorted = [...sponsors].sort((a, b) => b.count - a.count);
-  sorted.slice(0, 15).forEach((s, i) => {
-    const sign = s.avgFirstDay >= 0 ? '+' : '';
-    console.log(`   ${(i+1).toString().padStart(2)}. ${s.name.substring(0, 25).padEnd(25)} ${s.count}单 ${sign}${s.avgFirstDay.toFixed(2)}% 胜率${s.winRate}%`);
-  });
-
-  console.log('\n🔥 TOP 10 保荐人 (按平均涨幅, ≥5单):');
-  const byReturn = [...sponsors].filter(s => s.count >= 5).sort((a, b) => b.avgFirstDay - a.avgFirstDay);
-  byReturn.slice(0, 10).forEach((s, i) => {
-    const sign = s.avgFirstDay >= 0 ? '+' : '';
-    console.log(`   ${(i+1).toString().padStart(2)}. ${s.name.substring(0, 25).padEnd(25)} ${s.count}单 ${sign}${s.avgFirstDay.toFixed(2)}% 胜率${s.winRate}%`);
-  });
-}
-
-async function main() {
-  console.log('═'.repeat(60));
-  console.log('🚀 港股IPO保荐人数据爬虫 v3');
-  console.log('═'.repeat(60));
-  console.log('数据来源: AAStocks (aastocks.com)');
-  console.log('策略: 爬取十大排名 + 最近两年IPO数据（多页）并汇总');
-  console.log('═'.repeat(60));
-
-  const sponsors = await crawlSponsorStats();
-
-  if (sponsors.length > 0) {
-    saveData(sponsors);
-    showTop(sponsors);
-  } else {
-    console.log('\n❌ 未获取到任何保荐人数据');
-  }
-
-  console.log('\n✨ 完成！');
+  return { sponsors: finalSponsors, ipoRecords: allIPORecords };
 }
 
 main().catch(console.error);
