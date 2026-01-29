@@ -783,6 +783,24 @@
         updateLoadingStatus('正在搜索招股书...');
 
         const response = await fetch(`${API_BASE}/api/score/${code}`);
+
+        // 检查响应状态
+        if (!response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `服务器错误 (${response.status})`);
+          } else {
+            throw new Error(`服务器返回错误 (${response.status}): 请检查服务是否正常运行`);
+          }
+        }
+
+        // 确保响应是JSON格式
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('服务器返回了非JSON响应，请检查API路径是否正确');
+        }
+
         const data = await response.json();
 
         if (!data.success) {

@@ -1156,7 +1156,7 @@ function scoreProspectus(rawText, stockCode) {
 // ==================== API路由 ====================
 
 // 健康检查
-app.get('/api/health', (req, res) => {
+app.get('/hk/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -1166,7 +1166,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // 获取保荐人数据
-app.get('/api/sponsors', (req, res) => {
+app.get('/hk/api/sponsors', (req, res) => {
   const sponsors = getAllSponsors();
   res.json({
     count: Object.keys(sponsors).length,
@@ -1176,7 +1176,7 @@ app.get('/api/sponsors', (req, res) => {
 });
 
 // 获取TOP保荐人
-app.get('/api/sponsors/top', (req, res) => {
+app.get('/hk/api/sponsors/top', (req, res) => {
   const sponsors = getAllSponsors();
   const limit = parseInt(req.query.limit) || 20;
   
@@ -1200,7 +1200,7 @@ app.get('/api/sponsors/top', (req, res) => {
 });
 
 // 搜索招股书
-app.get('/api/search/:code', async (req, res) => {
+app.get('/hk/api/search/:code', async (req, res) => {
   try {
     const results = await searchProspectus(req.params.code);
     res.json({ success: true, results });
@@ -1210,7 +1210,7 @@ app.get('/api/search/:code', async (req, res) => {
 });
 
 // 清除缓存
-app.get('/api/cache/clear/:code', (req, res) => {
+app.get('/hk/api/cache/clear/:code', (req, res) => {
   const code = formatStockCode(req.params.code);
   const cleared = clearCache(code);
   res.json({
@@ -1220,7 +1220,7 @@ app.get('/api/cache/clear/:code', (req, res) => {
 });
 
 // 主评分API
-app.get('/api/score/:code', async (req, res) => {
+app.get('/hk/api/score/:code', async (req, res) => {
   const { code } = req.params;
   const startTime = Date.now();
   
@@ -1283,7 +1283,7 @@ app.listen(PORT, () => {
   console.log(`🚀 港股新股自动评分系统 v3.0`);
   console.log(`${'═'.repeat(60)}`);
   console.log(`📍 服务地址: http://localhost:${PORT}`);
-  console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
+  console.log(`📊 评分API: http://localhost:${PORT}/hk/api/score/{股票代码}`);
   console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
   console.log(`📂 数据来源: ${fs.existsSync(SPONSORS_JSON) ? 'JSON文件' : '内置数据'}`);
   console.log(`${'─'.repeat(60)}`);
