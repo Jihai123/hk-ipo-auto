@@ -9,22 +9,22 @@
   <meta name="author" content="智享AI">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://zhibeimao.com/hk/">
-  
+
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://zhibeimao.com/hk/">
   <meta property="og:title" content="港股新股自动打分器 - 智能IPO评分系统">
   <meta property="og:description" content="智能分析IPO招股书，自动评估保荐人、基石投资者、行业前景，为港股打新提供科学评分。">
   <meta property="og:image" content="https://zhibeimao.com/hk/og-image.png">
-  
+
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="港股新股自动打分器 - 智能IPO评分系统">
   <meta name="twitter:description" content="智能分析IPO招股书，自动评估保荐人、基石投资者、行业前景，为港股打新提供科学评分。">
-  
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-  
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -33,475 +33,599 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
       font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
       min-height: 100vh;
-      color: #fff;
+      color: #e4e4e7;
+      line-height: 1.6;
     }
-    
+
     .container {
-      max-width: 900px;
+      max-width: 960px;
       margin: 0 auto;
-      padding: 40px 20px;
+      padding: 30px 20px;
     }
-    
-    /* 标题 */
-    .header {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-    
-    .header h1 {
-      font-size: 42px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #e94560 0%, #ff6b6b 50%, #feca57 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 12px;
-      letter-spacing: 2px;
-    }
-    
-    .header .subtitle {
-      font-size: 18px;
-      color: #ccd6f6;
-      margin-bottom: 8px;
-    }
-    
-    .header .sub-desc {
-      font-size: 14px;
-      color: #8892b0;
-    }
-    
-    .header .badge {
-      display: inline-block;
-      background: linear-gradient(135deg, #2ed573, #7bed9f);
-      color: #000;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      margin-top: 12px;
-    }
-    
+
     /* 顶部导航 */
     .top-nav {
       display: flex;
       justify-content: center;
-      gap: 24px;
-      margin-bottom: 30px;
+      gap: 32px;
+      margin-bottom: 24px;
       flex-wrap: wrap;
     }
-    
+
     .top-nav a {
-      color: #8892b0;
+      color: #71717a;
       text-decoration: none;
-      font-size: 14px;
-      transition: color 0.3s;
+      font-size: 13px;
+      transition: color 0.2s;
     }
-    
+
     .top-nav a:hover {
-      color: #e94560;
+      color: #f472b6;
     }
-    
+
+    /* 标题 */
+    .header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .header h1 {
+      font-size: 36px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #f472b6 0%, #c084fc 50%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+
+    .header .subtitle {
+      font-size: 16px;
+      color: #a1a1aa;
+      margin-bottom: 8px;
+    }
+
+    .header .sub-desc {
+      font-size: 13px;
+      color: #71717a;
+    }
+
+    .header .badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #10b981, #34d399);
+      color: #000;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 14px;
+      letter-spacing: 0.5px;
+    }
+
     /* 搜索框 */
     .search-box {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 16px;
-      padding: 30px;
-      margin-bottom: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 28px;
+      margin-bottom: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
-    
+
     .search-form {
       display: flex;
-      gap: 12px;
+      gap: 14px;
     }
-    
+
     .search-input {
       flex: 1;
-      background: rgba(255, 255, 255, 0.1);
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 16px 20px;
-      font-size: 18px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 22px;
+      font-size: 17px;
       color: #fff;
       outline: none;
-      transition: all 0.3s;
+      transition: all 0.25s;
     }
-    
+
     .search-input::placeholder {
-      color: #8892b0;
+      color: #71717a;
     }
-    
+
     .search-input:focus {
-      border-color: #e94560;
-      background: rgba(255, 255, 255, 0.15);
+      border-color: #c084fc;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 4px rgba(192, 132, 252, 0.15);
     }
-    
+
     .search-btn {
-      background: linear-gradient(135deg, #e94560, #ff6b6b);
+      background: linear-gradient(135deg, #c084fc, #818cf8);
       border: none;
-      border-radius: 12px;
-      padding: 16px 32px;
-      font-size: 16px;
+      border-radius: 14px;
+      padding: 16px 36px;
+      font-size: 15px;
       font-weight: 600;
       color: #fff;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.25s;
       white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(192, 132, 252, 0.3);
     }
-    
+
     .search-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(233, 69, 96, 0.3);
+      box-shadow: 0 8px 30px rgba(192, 132, 252, 0.4);
     }
-    
+
     .search-btn:disabled {
-      opacity: 0.7;
+      opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
-    
+
     .search-tips {
-      margin-top: 16px;
+      margin-top: 18px;
       font-size: 13px;
-      color: #8892b0;
+      color: #71717a;
     }
-    
+
     .search-tips span {
       display: inline-block;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 4px 10px;
-      border-radius: 6px;
-      margin: 4px 4px 4px 0;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 5px 12px;
+      border-radius: 8px;
+      margin: 5px 5px 5px 0;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.2s;
+      border: 1px solid transparent;
     }
-    
+
     .search-tips span:hover {
-      background: rgba(233, 69, 96, 0.3);
-      color: #fff;
+      background: rgba(192, 132, 252, 0.2);
+      border-color: rgba(192, 132, 252, 0.3);
+      color: #e4e4e7;
     }
-    
+
     /* 加载动画 */
     .loading {
       text-align: center;
-      padding: 60px 20px;
+      padding: 50px 20px;
       display: none;
     }
-    
+
     .loading.active {
       display: block;
     }
-    
+
     .spinner {
-      width: 50px;
-      height: 50px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #e94560;
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(255, 255, 255, 0.08);
+      border-top-color: #c084fc;
       border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 18px;
     }
-    
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    
+
     .loading-text {
-      color: #ccd6f6;
-      font-size: 16px;
+      color: #a1a1aa;
+      font-size: 15px;
     }
-    
+
     .loading-sub {
-      color: #8892b0;
-      font-size: 14px;
+      color: #71717a;
+      font-size: 13px;
       margin-top: 8px;
     }
-    
+
     /* 结果卡片 */
     .result-card {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 16px;
-      padding: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       display: none;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
-    
+
     .result-card.active {
       display: block;
     }
-    
+
     /* 总分区域 */
     .total-score {
       text-align: center;
-      padding: 30px;
-      background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(255, 107, 107, 0.1));
-      border-radius: 16px;
-      margin-bottom: 30px;
+      padding: 36px 28px;
+      background: linear-gradient(180deg, rgba(192, 132, 252, 0.08) 0%, rgba(129, 140, 248, 0.04) 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
-    
+
     .stock-info {
       margin-bottom: 20px;
     }
-    
+
     .stock-name {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
       color: #fff;
-      margin-bottom: 8px;
-    }
-    
-    .stock-code {
-      font-size: 16px;
-      color: #8892b0;
-    }
-    
-    .score-display {
-      font-size: 72px;
-      font-weight: 800;
-      margin: 20px 0;
-    }
-    
-    .score-positive { color: #2ed573; }
-    .score-neutral { color: #feca57; }
-    .score-negative { color: #ff6b6b; }
-    
-    .rating-badge {
-      display: inline-block;
-      padding: 8px 24px;
-      border-radius: 30px;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    
-    .rating-strong { background: linear-gradient(135deg, #2ed573, #7bed9f); color: #000; }
-    .rating-buy { background: linear-gradient(135deg, #1dd1a1, #55efc4); color: #000; }
-    .rating-consider { background: linear-gradient(135deg, #feca57, #fed330); color: #000; }
-    .rating-caution { background: linear-gradient(135deg, #ff9f43, #ee5a24); color: #fff; }
-    .rating-avoid { background: linear-gradient(135deg, #ff6b6b, #e94560); color: #fff; }
-    
-    /* 评分详情 */
-    .score-details {
-      display: grid;
-      gap: 16px;
-    }
-    
-    .score-item {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 20px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-      gap: 16px;
-    }
-    
-    .score-item-info h3 {
-      font-size: 16px;
-      font-weight: 600;
-      color: #ccd6f6;
       margin-bottom: 6px;
     }
-    
-    .score-item-info p {
+
+    .stock-code {
       font-size: 14px;
-      color: #8892b0;
+      color: #71717a;
     }
-    
+
+    .score-display {
+      font-size: 64px;
+      font-weight: 800;
+      margin: 16px 0;
+      letter-spacing: -2px;
+    }
+
+    .score-positive { color: #10b981; }
+    .score-neutral { color: #fbbf24; }
+    .score-negative { color: #f43f5e; }
+
+    .rating-badge {
+      display: inline-block;
+      padding: 8px 28px;
+      border-radius: 30px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .rating-strong { background: linear-gradient(135deg, #10b981, #34d399); color: #000; }
+    .rating-buy { background: linear-gradient(135deg, #14b8a6, #2dd4bf); color: #000; }
+    .rating-consider { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: #000; }
+    .rating-caution { background: linear-gradient(135deg, #f97316, #fb923c); color: #000; }
+    .rating-avoid { background: linear-gradient(135deg, #ef4444, #f87171); color: #fff; }
+
+    /* 评分详情 */
+    .score-details {
+      padding: 24px;
+    }
+
+    .score-item {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 16px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+    }
+
+    .score-item:hover {
+      border-color: rgba(192, 132, 252, 0.2);
+    }
+
+    .score-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .score-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 20px;
+      cursor: pointer;
+    }
+
+    .score-item-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .score-item-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .score-item-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e4e4e7;
+      margin-bottom: 3px;
+    }
+
+    .score-item-desc {
+      font-size: 13px;
+      color: #71717a;
+    }
+
     .score-item-value {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
-      min-width: 60px;
+      min-width: 50px;
       text-align: center;
     }
-    
-    .score-item-value.positive { color: #2ed573; }
-    .score-item-value.neutral { color: #8892b0; }
-    .score-item-value.negative { color: #ff6b6b; }
-    .score-item-value.warning { color: #feca57; }
-    
+
+    .score-item-value.positive { color: #10b981; }
+    .score-item-value.neutral { color: #71717a; }
+    .score-item-value.negative { color: #f43f5e; }
+    .score-item-value.warning { color: #fbbf24; }
+
+    /* 评分详情展开区域 */
+    .score-item-detail {
+      display: none;
+      padding: 0 20px 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      margin-top: -1px;
+    }
+
+    .score-item.expanded .score-item-detail {
+      display: block;
+    }
+
+    .score-item-header .expand-icon {
+      color: #71717a;
+      transition: transform 0.2s;
+      margin-left: 12px;
+    }
+
+    .score-item.expanded .expand-icon {
+      transform: rotate(180deg);
+    }
+
+    .evidence-block {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-top: 14px;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .evidence-block .label {
+      color: #a1a1aa;
+      font-weight: 500;
+      display: inline-block;
+      min-width: 80px;
+    }
+
+    .evidence-block .value {
+      color: #71717a;
+    }
+
+    .evidence-block .highlight {
+      color: #c084fc;
+      font-weight: 500;
+    }
+
+    .evidence-block .context {
+      background: rgba(192, 132, 252, 0.1);
+      border-left: 3px solid #c084fc;
+      padding: 10px 14px;
+      margin-top: 10px;
+      border-radius: 0 8px 8px 0;
+      color: #a1a1aa;
+      font-style: italic;
+    }
+
     /* 行业标签 */
     .industry-tag {
       display: inline-block;
-      padding: 4px 12px;
+      padding: 3px 10px;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
-      margin-left: 8px;
+      margin-left: 10px;
+      vertical-align: middle;
     }
-    
-    .industry-hot { background: linear-gradient(135deg, #e94560, #ff6b6b); color: #fff; }
-    .industry-growth { background: linear-gradient(135deg, #1dd1a1, #55efc4); color: #000; }
-    .industry-neutral { background: rgba(255, 255, 255, 0.2); color: #ccd6f6; }
-    .industry-low { background: linear-gradient(135deg, #feca57, #fed330); color: #000; }
-    .industry-avoid { background: linear-gradient(135deg, #636e72, #b2bec3); color: #fff; }
-    
+
+    .industry-hot { background: linear-gradient(135deg, #f43f5e, #fb7185); color: #fff; }
+    .industry-growth { background: linear-gradient(135deg, #10b981, #34d399); color: #000; }
+    .industry-neutral { background: rgba(255, 255, 255, 0.15); color: #a1a1aa; }
+    .industry-low { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: #000; }
+    .industry-avoid { background: linear-gradient(135deg, #6b7280, #9ca3af); color: #fff; }
+
     /* 保荐人列表 */
     .sponsors-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
       margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
-    
+
     .sponsor-item {
-      display: inline-block;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 4px 10px;
-      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 6px 12px;
+      border-radius: 8px;
       font-size: 12px;
-      margin: 4px 4px 4px 0;
-      color: #ccd6f6;
-    }
-    
-    /* 基石投资者 */
-    .cornerstone-list {
-      margin-top: 12px;
-    }
-    
-    .cornerstone-item {
-      display: inline-block;
-      background: linear-gradient(135deg, rgba(46, 213, 115, 0.2), rgba(123, 237, 159, 0.2));
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      margin: 4px 4px 4px 0;
-      color: #2ed573;
-    }
-    
-    /* 招股书链接 */
-    .prospectus-link {
-      margin-top: 24px;
-      padding-top: 24px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      text-align: center;
-    }
-    
-    .prospectus-link a {
-      color: #e94560;
-      text-decoration: none;
-      font-size: 14px;
-      transition: color 0.3s;
-    }
-    
-    .prospectus-link a:hover {
-      color: #ff6b6b;
-      text-decoration: underline;
-    }
-    
-    /* 评分规则说明 */
-    .rules-section {
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 16px;
-      padding: 30px;
-      margin-top: 30px;
+      color: #a1a1aa;
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    
+
+    /* 基石投资者 */
+    .cornerstone-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .cornerstone-item {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(52, 211, 153, 0.1));
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    /* 招股书链接 */
+    .prospectus-links {
+      padding: 20px 24px;
+      background: rgba(0, 0, 0, 0.15);
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .prospectus-links a {
+      color: #a1a1aa;
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .prospectus-links a:hover {
+      color: #c084fc;
+    }
+
+    .prospectus-links .elapsed {
+      color: #52525b;
+      font-size: 12px;
+    }
+
+    /* 评分规则说明 */
+    .rules-section {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 20px;
+      padding: 28px;
+      margin-top: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
     .rules-section h2 {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
-      color: #ccd6f6;
+      color: #a1a1aa;
       margin-bottom: 20px;
       text-align: center;
     }
-    
+
     .rules-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
     }
-    
+
     .rule-card {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 14px;
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    
+
     .rule-card h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #e94560;
-      margin-bottom: 10px;
-    }
-    
-    .rule-card p {
       font-size: 13px;
-      color: #8892b0;
-      line-height: 1.6;
+      font-weight: 600;
+      color: #c084fc;
+      margin-bottom: 12px;
     }
-    
+
+    .rule-card p {
+      font-size: 12px;
+      color: #71717a;
+      line-height: 1.8;
+    }
+
     .rule-score {
       display: inline-block;
       padding: 2px 8px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       margin-right: 6px;
     }
-    
-    .rule-score.plus2 { background: #2ed573; color: #000; }
-    .rule-score.plus1 { background: #1dd1a1; color: #000; }
-    .rule-score.zero { background: #636e72; color: #fff; }
-    .rule-score.minus1 { background: #feca57; color: #000; }
-    .rule-score.minus2 { background: #ff6b6b; color: #fff; }
-    
+
+    .rule-score.plus2 { background: #10b981; color: #000; }
+    .rule-score.plus1 { background: #14b8a6; color: #000; }
+    .rule-score.zero { background: #52525b; color: #fff; }
+    .rule-score.minus1 { background: #f59e0b; color: #000; }
+    .rule-score.minus2 { background: #f43f5e; color: #fff; }
+
     /* 底部版权 */
     .footer {
       text-align: center;
-      padding: 40px 20px;
-      color: #8892b0;
-      font-size: 13px;
+      padding: 36px 20px;
+      color: #52525b;
+      font-size: 12px;
     }
-    
+
     .footer a {
-      color: #e94560;
+      color: #71717a;
       text-decoration: none;
+      transition: color 0.2s;
     }
-    
+
+    .footer a:hover {
+      color: #c084fc;
+    }
+
     /* 错误提示 */
     .error-message {
-      background: rgba(255, 107, 107, 0.1);
-      border: 1px solid rgba(255, 107, 107, 0.3);
-      border-radius: 12px;
-      padding: 20px;
+      background: rgba(244, 63, 94, 0.1);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      border-radius: 14px;
+      padding: 18px 22px;
       text-align: center;
-      color: #ff6b6b;
+      color: #fb7185;
       display: none;
+      font-size: 14px;
     }
-    
+
     .error-message.active {
       display: block;
     }
-    
+
     /* 响应式 */
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       .header h1 {
         font-size: 28px;
       }
-      
+
       .search-form {
         flex-direction: column;
       }
-      
+
       .search-btn {
         width: 100%;
       }
-      
+
       .score-display {
-        font-size: 56px;
+        font-size: 52px;
       }
-      
-      .score-item {
-        grid-template-columns: 1fr;
+
+      .score-item-header {
+        flex-direction: column;
+        gap: 12px;
         text-align: center;
       }
-      
-      .score-item-value {
-        margin-top: 10px;
+
+      .score-item-left {
+        flex-direction: column;
+      }
+
+      .prospectus-links {
+        flex-direction: column;
+        align-items: center;
       }
     }
   </style>
@@ -514,15 +638,15 @@
       <a href="https://news.chatgpt5x.com" target="_blank">AI资讯</a>
       <a href="https://jobtest.chatgpt5x.com" target="_blank">职业测评</a>
     </nav>
-    
+
     <!-- 标题 -->
     <header class="header">
       <h1>港股新股自动打分器</h1>
       <p class="subtitle">智能分析招股书，科学评估IPO投资价值</p>
       <p class="sub-desc">自动下载港交所招股书PDF → AI解析 → 多维度评分</p>
-      <span class="badge">✨ v2.1 基于炒作逻辑优化行业评分</span>
+      <span class="badge">v3.0 全新UI + 评分依据详情</span>
     </header>
-    
+
     <!-- 搜索框 -->
     <div class="search-box">
       <form class="search-form" onsubmit="handleSearch(event)">
@@ -537,17 +661,17 @@
         <span onclick="quickSearch('06160')">百济 06160</span>
       </div>
     </div>
-    
+
     <!-- 加载动画 -->
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <div class="loading-text">正在分析招股书...</div>
       <div class="loading-sub" id="loadingStatus">下载PDF中，请稍候（大文件可能需要1-2分钟）</div>
     </div>
-    
+
     <!-- 错误提示 -->
     <div class="error-message" id="errorMessage"></div>
-    
+
     <!-- 结果卡片 -->
     <div class="result-card" id="resultCard">
       <div class="total-score">
@@ -558,29 +682,29 @@
         <div class="score-display" id="totalScore">0</div>
         <div id="ratingBadge" class="rating-badge">-</div>
       </div>
-      
+
       <div class="score-details" id="scoreDetails">
         <!-- 动态生成 -->
       </div>
-      
-      <div class="prospectus-link" id="prospectusLink">
+
+      <div class="prospectus-links" id="prospectusLinks">
         <!-- 动态生成 -->
       </div>
     </div>
-    
+
     <!-- 评分规则说明 -->
     <section class="rules-section">
-      <h2>📋 评分规则说明</h2>
+      <h2>评分规则说明</h2>
       <div class="rules-grid">
         <div class="rule-card">
-          <h3>1️⃣ 旧股发售</h3>
+          <h3>1. 旧股发售</h3>
           <p>
             <span class="rule-score zero">0</span>全部新股<br>
             <span class="rule-score minus2">-2</span>有旧股（原始股东套现）
           </p>
         </div>
         <div class="rule-card">
-          <h3>2️⃣ 保荐人历史业绩</h3>
+          <h3>2. 保荐人历史业绩</h3>
           <p>
             <span class="rule-score plus2">+2</span>历史涨幅≥70%<br>
             <span class="rule-score zero">0</span>涨幅40-70%或数据不足<br>
@@ -588,31 +712,31 @@
           </p>
         </div>
         <div class="rule-card">
-          <h3>3️⃣ 基石投资者</h3>
+          <h3>3. 基石投资者</h3>
           <p>
             <span class="rule-score plus2">+2</span>有明星基石（高瓴/红杉/淡马锡/GIC等）<br>
             <span class="rule-score zero">0</span>无明星基石
           </p>
         </div>
         <div class="rule-card">
-          <h3>4️⃣ Pre-IPO禁售期</h3>
+          <h3>4. Pre-IPO禁售期</h3>
           <p>
             <span class="rule-score zero">0</span>有禁售期或无Pre-IPO<br>
             <span class="rule-score minus2">-2</span>有Pre-IPO但无禁售期
           </p>
         </div>
         <div class="rule-card">
-          <h3>5️⃣ 行业赛道（基于炒作逻辑）</h3>
+          <h3>5. 行业赛道（基于炒作逻辑）</h3>
           <p>
-            <span class="rule-score plus2">+2</span>🔥热门：AI/机器人/半导体/创新药<br>
-            <span class="rule-score plus1">+1</span>📈成长：医械/新能源/SaaS<br>
-            <span class="rule-score zero">0</span>⚪中性：无明显偏好<br>
-            <span class="rule-score minus1">-1</span>📉低弹：建材/公用事业<br>
-            <span class="rule-score minus2">-2</span>❌回避：物管/内房/小贷
+            <span class="rule-score plus2">+2</span>热门：AI/机器人/半导体/创新药<br>
+            <span class="rule-score plus1">+1</span>成长：医械/新能源/SaaS<br>
+            <span class="rule-score zero">0</span>中性：无明显偏好<br>
+            <span class="rule-score minus1">-1</span>低弹：建材/公用事业<br>
+            <span class="rule-score minus2">-2</span>回避：物管/内房/小贷
           </p>
         </div>
         <div class="rule-card">
-          <h3>📊 总分评级</h3>
+          <h3>总分评级</h3>
           <p>
             <span class="rule-score plus2">≥6</span>强烈推荐<br>
             <span class="rule-score plus1">4-5</span>建议申购<br>
@@ -623,7 +747,7 @@
         </div>
       </div>
     </section>
-    
+
     <!-- 底部 -->
     <footer class="footer">
       <p>数据来源：港交所披露易 | 仅供参考，不构成投资建议</p>
@@ -633,132 +757,137 @@
 
   <script>
     const API_BASE = '/hk';
-    
+
     // 快速搜索
     function quickSearch(code) {
       document.getElementById('stockCode').value = code;
       handleSearch(new Event('submit'));
     }
-    
+
     // 搜索处理
     async function handleSearch(e) {
       e.preventDefault();
-      
+
       const code = document.getElementById('stockCode').value.trim();
       if (!code) {
         showError('请输入股票代码');
         return;
       }
-      
+
       // 显示加载
       showLoading();
       hideError();
       hideResult();
-      
+
       try {
         updateLoadingStatus('正在搜索招股书...');
-        
-        const response = await fetch(`${API_BASE}/score/${code}`);
+
+        const response = await fetch(`${API_BASE}/api/score/${code}`);
         const data = await response.json();
-        
+
         if (!data.success) {
           throw new Error(data.error || '评分失败');
         }
-        
+
         // 显示结果
         displayResult(data);
-        
+
       } catch (error) {
         showError(error.message);
       } finally {
         hideLoading();
       }
     }
-    
+
     // 显示结果
     function displayResult(data) {
       // 股票信息
       document.getElementById('stockName').textContent = data.prospectus?.name || '-';
       document.getElementById('stockCodeDisplay').textContent = `股票代码: ${data.stockCode}`;
-      
+
       // 总分
       const totalScoreEl = document.getElementById('totalScore');
       totalScoreEl.textContent = data.totalScore > 0 ? `+${data.totalScore}` : data.totalScore;
       totalScoreEl.className = 'score-display ' + getScoreClass(data.totalScore);
-      
+
       // 评级
       const ratingBadge = document.getElementById('ratingBadge');
       ratingBadge.textContent = data.rating;
       ratingBadge.className = 'rating-badge ' + getRatingClass(data.rating);
-      
+
       // 详细评分
       const detailsHtml = generateScoreDetails(data.scores);
       document.getElementById('scoreDetails').innerHTML = detailsHtml;
-      
-      // 招股书链接
+
+      // 招股书链接 - 提供多种查看方式
+      const stockCode = data.stockCode;
+      const hkexSearchUrl = `https://www.hkexnews.hk/listedco/listconews/advancedsearch/search_active_main_c.aspx`;
+      let linksHtml = '';
+
       if (data.prospectus?.link) {
-        document.getElementById('prospectusLink').innerHTML = `
-          <a href="${data.prospectus.link}" target="_blank">📄 查看完整招股书 (PDF)</a>
-          <span style="margin-left: 16px; color: #8892b0; font-size: 12px;">耗时: ${data.elapsed || '-'}</span>
+        // 提取港交所的查看页面链接（如果有）
+        const pdfLink = data.prospectus.link;
+        linksHtml = `
+          <a href="${hkexSearchUrl}" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            在港交所披露易搜索
+          </a>
+          <a href="${pdfLink}" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            下载招股书PDF
+          </a>
+          <span class="elapsed">分析耗时: ${data.elapsed || '-'}</span>
         `;
       }
-      
+      document.getElementById('prospectusLinks').innerHTML = linksHtml;
+
       showResult();
     }
-    
+
     // 生成评分详情HTML
     function generateScoreDetails(scores) {
       const items = [
-        {
-          key: 'oldShares',
-          title: '旧股发售',
-          icon: '📦'
-        },
-        {
-          key: 'sponsor',
-          title: '保荐人业绩',
-          icon: '🏦'
-        },
-        {
-          key: 'cornerstone',
-          title: '基石投资者',
-          icon: '💎'
-        },
-        {
-          key: 'lockup',
-          title: 'Pre-IPO禁售',
-          icon: '🔒'
-        },
-        {
-          key: 'industry',
-          title: '行业赛道',
-          icon: '🎯'
-        }
+        { key: 'oldShares', title: '旧股发售', icon: '📦', desc: '检测是否有原始股东套现' },
+        { key: 'sponsor', title: '保荐人业绩', icon: '🏦', desc: '评估保荐人历史IPO表现' },
+        { key: 'cornerstone', title: '基石投资者', icon: '💎', desc: '识别明星机构投资者' },
+        { key: 'lockup', title: 'Pre-IPO禁售', icon: '🔒', desc: '检测早期投资者锁定期' },
+        { key: 'industry', title: '行业赛道', icon: '🎯', desc: '基于市场炒作逻辑评分' }
       ];
-      
+
       return items.map(item => {
         const score = scores[item.key];
         if (!score) return '';
-        
+
+        const valueClass = getItemScoreClass(score.score);
+        const valueText = score.score > 0 ? `+${score.score}` : score.score;
+
         let extraHtml = '';
-        
+
         // 保荐人列表
         if (item.key === 'sponsor' && score.sponsors?.length > 0) {
-          const sponsorTags = score.sponsors.map(s => 
-            `<span class="sponsor-item">${s.name.substring(0, 15)} (${s.count}单)</span>`
+          const sponsorTags = score.sponsors.map(s =>
+            `<span class="sponsor-item">${s.name.substring(0, 18)}${s.count ? ` (${s.count}单)` : ''}</span>`
           ).join('');
-          extraHtml = `<div class="sponsors-list">${sponsorTags}</div>`;
+          extraHtml += `<div class="sponsors-list">${sponsorTags}</div>`;
         }
-        
+
         // 基石投资者列表
         if (item.key === 'cornerstone' && score.investors?.length > 0) {
-          const investorTags = score.investors.map(inv => 
-            `<span class="cornerstone-item">⭐ ${inv}</span>`
+          const investorTags = score.investors.map(inv =>
+            `<span class="cornerstone-item">★ ${inv}</span>`
           ).join('');
-          extraHtml = `<div class="cornerstone-list">${investorTags}</div>`;
+          extraHtml += `<div class="cornerstone-list">${investorTags}</div>`;
         }
-        
+
         // 行业标签
+        let industryTag = '';
         if (item.key === 'industry' && score.track) {
           const trackClass = {
             'hot': 'industry-hot',
@@ -767,38 +896,150 @@
             'low': 'industry-low',
             'avoid': 'industry-avoid'
           }[score.track] || 'industry-neutral';
-          extraHtml = `<span class="industry-tag ${trackClass}">${score.reason}</span>`;
+          industryTag = `<span class="industry-tag ${trackClass}">${score.reason}</span>`;
         }
-        
-        const valueClass = getItemScoreClass(score.score);
-        const valueText = score.score > 0 ? `+${score.score}` : score.score;
-        
+
+        // 证据详情
+        let evidenceHtml = '';
+        if (score.evidence) {
+          evidenceHtml = generateEvidenceHtml(item.key, score);
+        }
+
         return `
-          <div class="score-item">
-            <div class="score-item-info">
-              <h3>${item.icon} ${item.title} ${item.key === 'industry' ? extraHtml : ''}</h3>
-              <p>${score.reason}: ${score.details}</p>
-              ${item.key !== 'industry' ? extraHtml : ''}
+          <div class="score-item" onclick="toggleDetail(this)">
+            <div class="score-item-header">
+              <div class="score-item-left">
+                <div class="score-item-icon">${item.icon}</div>
+                <div>
+                  <div class="score-item-title">${item.title}${industryTag}</div>
+                  <div class="score-item-desc">${score.reason}: ${score.details}</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center;">
+                <div class="score-item-value ${valueClass}">${valueText}</div>
+                <span class="expand-icon">▼</span>
+              </div>
             </div>
-            <div class="score-item-value ${valueClass}">${valueText}</div>
+            ${extraHtml}
+            <div class="score-item-detail">
+              ${evidenceHtml}
+            </div>
           </div>
         `;
       }).join('');
     }
-    
+
+    // 生成证据详情HTML
+    function generateEvidenceHtml(key, score) {
+      const ev = score.evidence;
+      if (!ev) return '<div class="evidence-block"><span class="value">暂无详细信息</span></div>';
+
+      let html = '<div class="evidence-block">';
+
+      // 搜索范围
+      if (ev.section) {
+        html += `<div><span class="label">搜索范围:</span> <span class="value">${ev.section}</span></div>`;
+      }
+
+      // 评分规则
+      if (ev.scoreRule) {
+        html += `<div><span class="label">评分规则:</span> <span class="highlight">${ev.scoreRule}</span></div>`;
+      }
+
+      // 旧股检测
+      if (key === 'oldShares') {
+        if (ev.keyword) {
+          html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.keyword}</span></div>`;
+          if (ev.context) {
+            html += `<div class="context">"...${ev.context}..."</div>`;
+          }
+        } else if (ev.searchedKeywords) {
+          html += `<div><span class="label">搜索关键词:</span> <span class="value">${ev.searchedKeywords}</span></div>`;
+          html += `<div><span class="label">结果:</span> <span class="value">未找到旧股相关内容</span></div>`;
+        }
+      }
+
+      // 保荐人
+      if (key === 'sponsor' && ev.allMatched?.length > 0) {
+        html += `<div><span class="label">识别数量:</span> <span class="value">${ev.matchedCount} 个保荐人</span></div>`;
+        const matchList = ev.allMatched.slice(0, 5).map(s =>
+          `${s.name.substring(0, 20)} (${s.count}单, ${s.rate >= 0 ? '+' : ''}${s.rate?.toFixed(1)}%)`
+        ).join('<br>');
+        html += `<div style="margin-top: 8px;"><span class="label">匹配列表:</span></div>`;
+        html += `<div style="margin-left: 80px; color: #a1a1aa;">${matchList}</div>`;
+      }
+
+      // 基石投资者
+      if (key === 'cornerstone') {
+        if (ev.matchedKeywords?.length > 0) {
+          html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.matchedKeywords.join(', ')}</span></div>`;
+          if (ev.matchedContexts?.length > 0) {
+            html += `<div class="context">"...${ev.matchedContexts[0]}..."</div>`;
+          }
+        }
+        html += `<div><span class="label">明星基石名单:</span> <span class="value">${ev.starList || '高瓴、红杉、淡马锡等'}</span></div>`;
+      }
+
+      // Pre-IPO禁售
+      if (key === 'lockup') {
+        if (ev.preIPOFound) {
+          html += `<div><span class="label">Pre-IPO:</span> <span class="highlight">发现 "${ev.preIPOFound.keyword}"</span></div>`;
+          if (ev.preIPOFound.context) {
+            html += `<div class="context">"...${ev.preIPOFound.context}..."</div>`;
+          }
+        } else {
+          html += `<div><span class="label">Pre-IPO:</span> <span class="value">未发现</span></div>`;
+        }
+
+        if (ev.lockupFound) {
+          html += `<div><span class="label">禁售期:</span> <span class="highlight">发现 "${ev.lockupFound.keyword}"</span></div>`;
+        } else if (ev.preIPOFound) {
+          html += `<div><span class="label">禁售期:</span> <span class="value" style="color: #f43f5e;">未发现禁售期安排</span></div>`;
+        }
+      }
+
+      // 行业
+      if (key === 'industry') {
+        if (ev.matchedKeyword) {
+          html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.matchedKeyword}</span></div>`;
+          if (ev.matchedContext) {
+            html += `<div class="context">"...${ev.matchedContext}..."</div>`;
+          }
+        }
+        if (ev.trackCategories) {
+          html += `<div style="margin-top: 10px;"><span class="label">赛道分类:</span></div>`;
+          html += `<div style="margin-left: 10px; color: #71717a; font-size: 11px; line-height: 1.8;">
+            🔥 热门: ${ev.trackCategories.hot}<br>
+            📈 成长: ${ev.trackCategories.growth}<br>
+            ⚪ 中性: ${ev.trackCategories.neutral}<br>
+            📉 低弹: ${ev.trackCategories.low}<br>
+            ❌ 回避: ${ev.trackCategories.avoid}
+          </div>`;
+        }
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // 切换详情展开
+    function toggleDetail(element) {
+      element.classList.toggle('expanded');
+    }
+
     // 分数样式类
     function getScoreClass(score) {
       if (score >= 4) return 'score-positive';
       if (score >= 0) return 'score-neutral';
       return 'score-negative';
     }
-    
+
     function getItemScoreClass(score) {
       if (score > 0) return 'positive';
       if (score < 0) return 'negative';
       return 'neutral';
     }
-    
+
     function getRatingClass(rating) {
       const map = {
         '强烈推荐': 'rating-strong',
@@ -809,40 +1050,40 @@
       };
       return map[rating] || 'rating-caution';
     }
-    
+
     // UI控制函数
     function showLoading() {
       document.getElementById('loading').classList.add('active');
       document.getElementById('searchBtn').disabled = true;
     }
-    
+
     function hideLoading() {
       document.getElementById('loading').classList.remove('active');
       document.getElementById('searchBtn').disabled = false;
     }
-    
+
     function updateLoadingStatus(text) {
       document.getElementById('loadingStatus').textContent = text;
     }
-    
+
     function showResult() {
       document.getElementById('resultCard').classList.add('active');
     }
-    
+
     function hideResult() {
       document.getElementById('resultCard').classList.remove('active');
     }
-    
+
     function showError(message) {
       const el = document.getElementById('errorMessage');
       el.textContent = '❌ ' + message;
       el.classList.add('active');
     }
-    
+
     function hideError() {
       document.getElementById('errorMessage').classList.remove('active');
     }
-    
+
     // 回车提交
     document.getElementById('stockCode').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {

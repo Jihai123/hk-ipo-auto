@@ -1,7 +1,13 @@
 /**
- * 港股新股自动评分系统 v2.1
- * 
- * 修复清单 (基于原始规则):
+ * 港股新股自动评分系统 v3.0
+ *
+ * v3.0 更新:
+ * - 新增评分详情展示：每个维度显示判断依据、匹配关键词、上下文引用
+ * - 优化前端UI：全新深色主题设计，可展开的评分详情卡片
+ * - PDF链接优化：提供"港交所披露易搜索"快速入口，避免慢速PDF下载
+ * - 保荐人爬虫升级v3：支持多页爬取，汇总更多保荐人数据
+ *
+ * v2.1 修复清单:
  * 1. PDF解析页数: 150 → 400
  * 2. 旧股-无旧股: +2 → 0分
  * 3. 旧股判断: 全文搜索 → 限定「全球發售」章节
@@ -542,17 +548,49 @@ function scoreProspectus(rawText, stockCode) {
     [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i],
     30000
   );
-  
+
   const oldSharesKeywords = ['銷售股份', '销售股份', '舊股', '旧股', '售股股東', '售股股东', '現有股份', '现有股份'];
   const searchTextForOldShares = globalOfferingSection || normalizedText.slice(0, 50000);
   const normalizedSearchText = normalizeText(searchTextForOldShares);
-  
-  const hasOldShares = oldSharesKeywords.some(kw => normalizedSearchText.includes(normalizeText(kw)));
-  
-  if (hasOldShares) {
-    scores.oldShares = { score: -2, reason: '有旧股发售', details: '存在销售股份/舊股，原始股东套现' };
+
+  // 查找匹配的关键词和上下文
+  let matchedOldShareKeyword = null;
+  let oldShareContext = '';
+  for (const kw of oldSharesKeywords) {
+    if (normalizedSearchText.includes(normalizeText(kw))) {
+      matchedOldShareKeyword = kw;
+      // 提取关键词周围的上下文
+      const kwIndex = text.indexOf(kw);
+      if (kwIndex !== -1) {
+        oldShareContext = text.slice(Math.max(0, kwIndex - 30), Math.min(text.length, kwIndex + 50)).replace(/\s+/g, ' ');
+      }
+      break;
+    }
+  }
+
+  if (matchedOldShareKeyword) {
+    scores.oldShares = {
+      score: -2,
+      reason: '有旧股发售',
+      details: '存在销售股份/舊股，原始股东套现',
+      evidence: {
+        keyword: matchedOldShareKeyword,
+        context: oldShareContext,
+        section: globalOfferingSection ? '全球發售章节' : '招股书前50000字',
+      }
+    };
   } else {
-    scores.oldShares = { score: 0, reason: '全部新股', details: '无旧股发售，募资全部进入公司' };
+    scores.oldShares = {
+      score: 0,
+      reason: '全部新股',
+      details: '无旧股发售，募资全部进入公司',
+      evidence: {
+        keyword: null,
+        context: '未找到旧股相关关键词',
+        section: globalOfferingSection ? '全球發售章节' : '招股书前50000字',
+        searchedKeywords: oldSharesKeywords.join('、'),
+      }
+    };
   }
   
   // ========== 2. 保荐人评分（限定在特定章节）==========
@@ -562,33 +600,49 @@ function scoreProspectus(rawText, stockCode) {
     [/概要/i, /SUMMARY/i, /風險因素/i],
     25000
   );
-  
+
   const searchTextForSponsor = sponsorSection || text.slice(0, 120000);
   const normalizedSponsorText = normalizeText(searchTextForSponsor);
   const foundSponsors = [];
-  
+
   // 遍历保荐人数据库查找匹配
   for (const [name, data] of Object.entries(SPONSORS)) {
     const normalizedName = normalizeText(name);
     if (searchTextForSponsor.includes(name) || normalizedSponsorText.includes(normalizedName)) {
       // 避免重复（同一保荐人可能有多个名称）
       if (!foundSponsors.some(s => Math.abs(s.rate - data.rate) < 0.01 && s.count === data.count)) {
-        foundSponsors.push({ name, ...data });
+        // 提取匹配上下文
+        const nameIndex = searchTextForSponsor.indexOf(name);
+        const context = nameIndex !== -1
+          ? searchTextForSponsor.slice(Math.max(0, nameIndex - 20), Math.min(searchTextForSponsor.length, nameIndex + name.length + 30)).replace(/\s+/g, ' ')
+          : '';
+        foundSponsors.push({ name, ...data, matchContext: context });
       }
     }
   }
-  
+
+  const sponsorEvidence = {
+    section: sponsorSection ? '保薦人/參與全球發售的各方章节' : '招股书前120000字',
+    matchedCount: foundSponsors.length,
+    allMatched: foundSponsors.map(s => ({
+      name: s.name,
+      rate: s.rate,
+      count: s.count,
+      winRate: s.winRate,
+    })),
+  };
+
   if (foundSponsors.length > 0) {
     // 取经验最丰富的保荐人作为主保荐人
     const mainSponsor = foundSponsors.sort((a, b) => b.count - a.count)[0];
-    
+
     if (mainSponsor.count < 8) {
-      // 数据不足，不扣分也不加分
       scores.sponsor = {
         score: 0,
         reason: '数据不足',
         details: `${mainSponsor.name.substring(0, 20)} (仅${mainSponsor.count}单，需≥8单)`,
         sponsors: foundSponsors.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
       };
     } else if (mainSponsor.rate >= 70) {
       scores.sponsor = {
@@ -596,6 +650,7 @@ function scoreProspectus(rawText, stockCode) {
         reason: '优质保荐人',
         details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
         sponsors: foundSponsors.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
       };
     } else if (mainSponsor.rate >= 40) {
       scores.sponsor = {
@@ -603,6 +658,7 @@ function scoreProspectus(rawText, stockCode) {
         reason: '中等保荐人',
         details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
         sponsors: foundSponsors.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
       };
     } else {
       scores.sponsor = {
@@ -610,6 +666,7 @@ function scoreProspectus(rawText, stockCode) {
         reason: '低质保荐人',
         details: `${mainSponsor.name.substring(0, 20)} 历史涨幅${mainSponsor.rate >= 0 ? '+' : ''}${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
         sponsors: foundSponsors.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
       };
     }
   } else {
@@ -618,6 +675,7 @@ function scoreProspectus(rawText, stockCode) {
       reason: '未识别',
       details: '未找到匹配的保荐人数据',
       sponsors: [],
+      evidence: { ...sponsorEvidence, scoreRule: '未匹配到保荐人数据库，不评分' },
     };
   }
   
@@ -628,18 +686,26 @@ function scoreProspectus(rawText, stockCode) {
     [/風險因素/i, /风险因素/i, /行業概覽/i, /行业概览/i],
     60000
   );
-  
+
   const investorSearchText = cornerstoneSection || text;
   const normalizedInvestorText = normalizeText(investorSearchText);
-  
-  const foundInvestors = STAR_CORNERSTONE.filter(inv => {
+
+  const foundInvestorDetails = [];
+  for (const inv of STAR_CORNERSTONE) {
     const normalizedInv = normalizeText(inv);
-    return investorSearchText.includes(inv) || normalizedInvestorText.includes(normalizedInv);
-  });
-  
+    if (investorSearchText.includes(inv) || normalizedInvestorText.includes(normalizedInv)) {
+      // 提取匹配上下文
+      const invIndex = investorSearchText.indexOf(inv);
+      const context = invIndex !== -1
+        ? investorSearchText.slice(Math.max(0, invIndex - 20), Math.min(investorSearchText.length, invIndex + inv.length + 40)).replace(/\s+/g, ' ')
+        : '';
+      foundInvestorDetails.push({ keyword: inv, context });
+    }
+  }
+
   // 去重（同一投资者可能匹配多个名称）
-  const uniqueInvestors = [...new Set(foundInvestors.map(inv => {
-    // 统一名称
+  const uniqueInvestors = [...new Set(foundInvestorDetails.map(item => {
+    const inv = item.keyword;
     if (/高瓴|Hillhouse/i.test(inv)) return '高瓴';
     if (/红杉|紅杉|Sequoia/i.test(inv)) return '红杉';
     if (/淡马锡|淡馬錫|Temasek/i.test(inv)) return '淡马锡';
@@ -652,13 +718,22 @@ function scoreProspectus(rawText, stockCode) {
     if (/国家大基金|國家大基金/i.test(inv)) return '大基金';
     return inv;
   }))];
-  
+
+  const cornerstoneEvidence = {
+    section: cornerstoneSection ? '基石投資者章节' : '全文搜索',
+    sectionLength: investorSearchText.length,
+    matchedKeywords: foundInvestorDetails.map(d => d.keyword),
+    matchedContexts: foundInvestorDetails.slice(0, 3).map(d => d.context),
+    starList: '高瓴、红杉、淡马锡、GIC、黑石、贝莱德、中投、社保基金等',
+  };
+
   if (uniqueInvestors.length > 0) {
     scores.cornerstone = {
       score: 2,
       reason: '有明星基石',
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
+      evidence: { ...cornerstoneEvidence, scoreRule: '发现明星基石投资者，+2分' },
     };
   } else {
     scores.cornerstone = {
@@ -666,6 +741,7 @@ function scoreProspectus(rawText, stockCode) {
       reason: '无明星基石',
       details: '未发现指定名单中的基石投资者',
       investors: [],
+      evidence: { ...cornerstoneEvidence, scoreRule: '未匹配到明星基石名单，0分' },
     };
   }
   
@@ -676,35 +752,70 @@ function scoreProspectus(rawText, stockCode) {
     [/業務/i, /业务/i, /財務/i, /财务/i],
     80000
   );
-  
+
   const preIPOSearchText = shareholderSection || text.slice(0, 200000);
   const normalizedPreIPOText = normalizeText(preIPOSearchText);
-  
+
   // 检测是否有Pre-IPO投资
   const preIPOKeywords = ['Pre-IPO', 'pre-ipo', '上市前投資', '上市前投资', '私募', '戰略投資', '战略投资', '優先股', '优先股'];
-  const hasPreIPO = preIPOKeywords.some(kw => 
-    preIPOSearchText.includes(kw) || normalizedPreIPOText.includes(normalizeText(kw))
-  );
-  
-  if (hasPreIPO) {
+  let matchedPreIPOKeyword = null;
+  let preIPOContext = '';
+  for (const kw of preIPOKeywords) {
+    if (preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || normalizedPreIPOText.includes(normalizeText(kw))) {
+      matchedPreIPOKeyword = kw;
+      const kwIndex = preIPOSearchText.toLowerCase().indexOf(kw.toLowerCase());
+      if (kwIndex !== -1) {
+        preIPOContext = preIPOSearchText.slice(Math.max(0, kwIndex - 30), Math.min(preIPOSearchText.length, kwIndex + 60)).replace(/\s+/g, ' ');
+      }
+      break;
+    }
+  }
+
+  const lockupEvidence = {
+    section: shareholderSection ? '股本/股權結構章节' : '招股书前200000字',
+    preIPOKeywords: preIPOKeywords.join('、'),
+  };
+
+  if (matchedPreIPOKeyword) {
     // 有Pre-IPO，检查是否有禁售期
     const lockupKeywords = ['禁售期', '禁售', '鎖定期', '锁定期', 'lock-up', 'lockup', 'lock up', '不得出售', '不得轉讓', '不得转让'];
-    const hasLockup = lockupKeywords.some(kw =>
-      preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || 
-      normalizedPreIPOText.includes(normalizeText(kw))
-    );
-    
-    if (hasLockup) {
+    let matchedLockupKeyword = null;
+    let lockupContext = '';
+    for (const kw of lockupKeywords) {
+      if (preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || normalizedPreIPOText.includes(normalizeText(kw))) {
+        matchedLockupKeyword = kw;
+        const kwIndex = preIPOSearchText.toLowerCase().indexOf(kw.toLowerCase());
+        if (kwIndex !== -1) {
+          lockupContext = preIPOSearchText.slice(Math.max(0, kwIndex - 30), Math.min(preIPOSearchText.length, kwIndex + 60)).replace(/\s+/g, ' ');
+        }
+        break;
+      }
+    }
+
+    if (matchedLockupKeyword) {
       scores.lockup = {
         score: 0,
         reason: 'Pre-IPO有禁售期',
         details: '有Pre-IPO投资者，且设有禁售期安排',
+        evidence: {
+          ...lockupEvidence,
+          preIPOFound: { keyword: matchedPreIPOKeyword, context: preIPOContext },
+          lockupFound: { keyword: matchedLockupKeyword, context: lockupContext },
+          scoreRule: '有Pre-IPO投资者且有禁售期，0分（安全）',
+        },
       };
     } else {
       scores.lockup = {
         score: -2,
         reason: 'Pre-IPO无禁售期',
         details: '警告：有Pre-IPO投资者但未发现禁售期安排',
+        evidence: {
+          ...lockupEvidence,
+          preIPOFound: { keyword: matchedPreIPOKeyword, context: preIPOContext },
+          lockupFound: null,
+          lockupKeywords: lockupKeywords.join('、'),
+          scoreRule: '有Pre-IPO但未发现禁售期，-2分（风险）',
+        },
       };
     }
   } else {
@@ -712,6 +823,11 @@ function scoreProspectus(rawText, stockCode) {
       score: 0,
       reason: '无Pre-IPO',
       details: '未发现Pre-IPO投资者',
+      evidence: {
+        ...lockupEvidence,
+        preIPOFound: null,
+        scoreRule: '无Pre-IPO投资者，0分',
+      },
     };
   }
   
@@ -722,15 +838,26 @@ function scoreProspectus(rawText, stockCode) {
     [/監管/i, /监管/i, /董事/i, /REGULATORY/i, /DIRECTOR/i],
     100000
   );
-  
+
   const industrySearchText = industrySection || text.slice(0, 250000);
   const normalizedIndustryText = normalizeText(industrySearchText);
-  
+
   let industryScore = 0;
   let industryReason = '中性赛道';
   let industryDetails = '无明显偏好';
   let trackType = 'neutral';
-  
+  let matchedKeyword = null;
+  let matchedContext = '';
+
+  // 提取关键词上下文的辅助函数
+  const getContext = (keyword) => {
+    const idx = industrySearchText.indexOf(keyword);
+    if (idx !== -1) {
+      return industrySearchText.slice(Math.max(0, idx - 30), Math.min(industrySearchText.length, idx + keyword.length + 50)).replace(/\s+/g, ' ');
+    }
+    return '';
+  };
+
   // 检查热门赛道 (+2)
   for (const track of HOT_TRACKS) {
     if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
@@ -738,10 +865,12 @@ function scoreProspectus(rawText, stockCode) {
       industryReason = '🔥 热门赛道';
       industryDetails = `情绪驱动型: ${track}`;
       trackType = 'hot';
+      matchedKeyword = track;
+      matchedContext = getContext(track);
       break;
     }
   }
-  
+
   // 检查成长赛道 (+1)
   if (industryScore === 0) {
     for (const track of GROWTH_TRACKS) {
@@ -750,11 +879,13 @@ function scoreProspectus(rawText, stockCode) {
         industryReason = '📈 成长赛道';
         industryDetails = `成长叙事型: ${track}`;
         trackType = 'growth';
+        matchedKeyword = track;
+        matchedContext = getContext(track);
         break;
       }
     }
   }
-  
+
   // 检查低弹性赛道 (-1)
   if (industryScore === 0) {
     for (const track of LOW_ELASTICITY_TRACKS) {
@@ -763,11 +894,13 @@ function scoreProspectus(rawText, stockCode) {
         industryReason = '📉 低弹性赛道';
         industryDetails = `缺乏想象空间: ${track}`;
         trackType = 'low';
+        matchedKeyword = track;
+        matchedContext = getContext(track);
         break;
       }
     }
   }
-  
+
   // 检查回避赛道 (-2) - 即使匹配了其他档位，回避赛道优先
   for (const track of AVOID_TRACKS) {
     if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
@@ -775,15 +908,35 @@ function scoreProspectus(rawText, stockCode) {
       industryReason = '❌ 资金回避';
       industryDetails = `高破发风险: ${track}`;
       trackType = 'avoid';
+      matchedKeyword = track;
+      matchedContext = getContext(track);
       break;
     }
   }
-  
+
+  const industryEvidence = {
+    section: industrySection ? '行業概覽/業務章节' : '招股书前250000字',
+    sectionLength: industrySearchText.length,
+    matchedKeyword,
+    matchedContext,
+    trackCategories: {
+      hot: 'AI/机器人/自动驾驶/半导体/创新药/低空经济（+2分）',
+      growth: '医疗器械/新能源/SaaS/软件（+1分）',
+      neutral: '无明显偏好（0分）',
+      low: '传统消费/制造/公用事业/建材（-1分）',
+      avoid: '物管/房地产/小贷/纺织/教培（-2分）',
+    },
+    scoreRule: trackType === 'neutral'
+      ? '未匹配到特定行业关键词'
+      : `匹配到"${matchedKeyword}"，属于${trackType}赛道`,
+  };
+
   scores.industry = {
     score: industryScore,
     reason: industryReason,
     details: industryDetails,
     track: trackType,
+    evidence: industryEvidence,
   };
   
   // ========== 计算总分 ==========
@@ -813,7 +966,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '2.1',
+    version: '3.0',
     sponsorsLoaded: Object.keys(getAllSponsors()).length,
   });
 });
@@ -933,12 +1086,17 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`\n${'═'.repeat(60)}`);
-  console.log(`🚀 港股新股自动评分系统 v2.1`);
+  console.log(`🚀 港股新股自动评分系统 v3.0`);
   console.log(`${'═'.repeat(60)}`);
   console.log(`📍 服务地址: http://localhost:${PORT}`);
   console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
   console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
   console.log(`📂 数据来源: ${fs.existsSync(SPONSORS_JSON) ? 'JSON文件' : '内置数据'}`);
+  console.log(`${'─'.repeat(60)}`);
+  console.log(`v3.0 新功能:`);
+  console.log(`  ✨ 评分详情展示: 显示判断依据和匹配上下文`);
+  console.log(`  🎨 全新UI设计: 深色主题 + 可展开详情卡片`);
+  console.log(`  🔗 PDF链接优化: 提供港交所披露易快速入口`);
   console.log(`${'─'.repeat(60)}`);
   console.log(`行业评分规则 (基于炒作逻辑):`);
   console.log(`  🔥 +2 热门赛道: AI/机器人/半导体/创新药/低空经济`);
