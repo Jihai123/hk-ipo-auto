@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-01-28T13:39:03.670Z",
+  "updatedAt": "2026-01-29T03:26:41.225Z",
   "source": "aastocks",
   "sponsors": [
     {
@@ -8,7 +8,7 @@
       "upCount": 44,
       "downCount": 20,
       "avgFirstDay": 27.96,
-      "avgCumulative": 64.68,
+      "avgCumulative": 64.81,
       "winRate": 68.75
     },
     {
@@ -17,17 +17,17 @@
       "upCount": 35,
       "downCount": 7,
       "avgFirstDay": 41.62,
-      "avgCumulative": 59.89,
+      "avgCumulative": 59.88,
       "winRate": 83.33
     },
     {
       "name": "華泰金融控股(香港)",
       "count": 33,
-      "upCount": 19,
-      "downCount": 14,
-      "avgFirstDay": 6.86,
-      "avgCumulative": 29.48,
-      "winRate": 57.58
+      "upCount": 20,
+      "downCount": 13,
+      "avgFirstDay": 9,
+      "avgCumulative": 29.94,
+      "winRate": 60.61
     },
     {
       "name": "摩根士丹利亞洲",
@@ -35,17 +35,17 @@
       "upCount": 12,
       "downCount": 3,
       "avgFirstDay": 21.91,
-      "avgCumulative": 61.82,
+      "avgCumulative": 62.67,
       "winRate": 80
     },
     {
       "name": "高盛(亞洲)有限責任公司",
       "count": 12,
-      "upCount": 8,
-      "downCount": 4,
-      "avgFirstDay": 5.58,
-      "avgCumulative": 43.04,
-      "winRate": 66.67
+      "upCount": 9,
+      "downCount": 3,
+      "avgFirstDay": 11.46,
+      "avgCumulative": 40.8,
+      "winRate": 75
     },
     {
       "name": "建銀國際金融",
@@ -53,7 +53,7 @@
       "upCount": 10,
       "downCount": 2,
       "avgFirstDay": 11.38,
-      "avgCumulative": -2.95,
+      "avgCumulative": -3.65,
       "winRate": 83.33
     },
     {
@@ -62,7 +62,7 @@
       "upCount": 10,
       "downCount": 1,
       "avgFirstDay": 31.22,
-      "avgCumulative": 12.96,
+      "avgCumulative": 14.2,
       "winRate": 90.91
     },
     {
@@ -71,7 +71,7 @@
       "upCount": 9,
       "downCount": 2,
       "avgFirstDay": 23.18,
-      "avgCumulative": 70.78,
+      "avgCumulative": 70.98,
       "winRate": 81.82
     },
     {
@@ -80,7 +80,7 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 16.22,
-      "avgCumulative": 32.21,
+      "avgCumulative": 33.85,
       "winRate": 70
     },
     {
@@ -89,8 +89,344 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 25.56,
-      "avgCumulative": 44.21,
+      "avgCumulative": 44.54,
       "winRate": 70
+    },
+    {
+      "name": "中國國際金融香港證券有限公司",
+      "count": 9,
+      "upCount": 9,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 79.08,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "諾比侃02635.HK",
+        "perf": 363.75,
+        "date": "2025/12/23"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "智譜02513.HK",
+        "perf": 13.17,
+        "date": "2026/01/08"
+      }
+    },
+    {
+      "name": "華泰金融控股(香港)有限公司",
+      "count": 6,
+      "upCount": 6,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 18.54,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "兆易創新03986.HK",
+        "perf": 37.53,
+        "date": "2026/01/13"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "臥安機器人06600.HK",
+        "perf": 0.07,
+        "date": "2025/12/30"
+      }
+    },
+    {
+      "name": "國泰君安融資有限公司",
+      "count": 3,
+      "upCount": 3,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 1.55,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "龍旗科技09611.HK",
+        "perf": 3.55,
+        "date": "2026/01/22"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "臥安機器人06600.HK",
+        "perf": 0.07,
+        "date": "2025/12/30"
+      }
+    },
+    {
+      "name": "廣發融資（香港）有限公司",
+      "count": 3,
+      "upCount": 3,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 23.93,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "精鋒醫療－Ｂ02675.HK",
+        "perf": 30.9,
+        "date": "2026/01/08"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "豪威集團00501.HK",
+        "perf": 16.22,
+        "date": "2026/01/12"
+      }
+    },
+    {
+      "name": "花旗環球金融亞洲有限公司",
+      "count": 2,
+      "upCount": 2,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 22.58,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "瑞博生物－Ｂ06938.HK",
+        "perf": 41.62,
+        "date": "2026/01/09"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "龍旗科技09611.HK",
+        "perf": 3.55,
+        "date": "2026/01/22"
+      }
+    },
+    {
+      "name": "中國平安資本（香港）有限公司",
+      "count": 2,
+      "upCount": 2,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 46.02,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "壁仞科技06082.HK",
+        "perf": 75.82,
+        "date": "2026/01/02"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "豪威集團00501.HK",
+        "perf": 16.22,
+        "date": "2026/01/12"
+      }
+    },
+    {
+      "name": "瑞銀證券香港有限公司",
+      "count": 2,
+      "upCount": 2,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 62.66,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "MINIMAX-WP00100.HK",
+        "perf": 109.09,
+        "date": "2026/01/09"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "豪威集團00501.HK",
+        "perf": 16.22,
+        "date": "2026/01/12"
+      }
+    },
+    {
+      "name": "摩根士丹利亞洲有限公司",
+      "count": 2,
+      "upCount": 2,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 27.78,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "精鋒醫療－Ｂ02675.HK",
+        "perf": 30.9,
+        "date": "2026/01/08"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "英矽智能03696.HK",
+        "perf": 24.66,
+        "date": "2025/12/30"
+      }
+    },
+    {
+      "name": "高盛(亞洲)有限責任公司華泰金融控股(香港)有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 69.06,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "鳴鳴很忙01768.HK",
+        "perf": 69.06,
+        "date": "2026/01/28"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "鳴鳴很忙01768.HK",
+        "perf": 69.06,
+        "date": "2026/01/28"
+      }
+    },
+    {
+      "name": "海通國際資本有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 3.55,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "龍旗科技09611.HK",
+        "perf": 3.55,
+        "date": "2026/01/22"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "龍旗科技09611.HK",
+        "perf": 3.55,
+        "date": "2026/01/22"
+      }
+    },
+    {
+      "name": "農銀國際融資有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 0.33,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "紅星冷鏈01641.HK",
+        "perf": 0.33,
+        "date": "2026/01/13"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "紅星冷鏈01641.HK",
+        "perf": 0.33,
+        "date": "2026/01/13"
+      }
+    },
+    {
+      "name": "建銀國際金融有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 0.33,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "紅星冷鏈01641.HK",
+        "perf": 0.33,
+        "date": "2026/01/13"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "紅星冷鏈01641.HK",
+        "perf": 0.33,
+        "date": "2026/01/13"
+      }
+    },
+    {
+      "name": "力高企業融資有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 11.67,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "BBSB INTL08610.HK",
+        "perf": 11.67,
+        "date": "2026/01/13"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "BBSB INTL08610.HK",
+        "perf": 11.67,
+        "date": "2026/01/13"
+      }
+    },
+    {
+      "name": "中銀國際亞洲有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 75.82,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "壁仞科技06082.HK",
+        "perf": 75.82,
+        "date": "2026/01/02"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "壁仞科技06082.HK",
+        "perf": 75.82,
+        "date": "2026/01/02"
+      }
+    },
+    {
+      "name": "中信證券(香港)有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 9.3,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "林清軒02657.HK",
+        "perf": 9.3,
+        "date": "2025/12/30"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "林清軒02657.HK",
+        "perf": 9.3,
+        "date": "2025/12/30"
+      }
+    },
+    {
+      "name": "申萬宏源融資（香港）有限公司",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 7.61,
+      "winRate": 100,
+      "bestCase": {
+        "code": "",
+        "name": "美聯股份02671.HK",
+        "perf": 7.61,
+        "date": "2025/12/30"
+      },
+      "worstCase": {
+        "code": "",
+        "name": "美聯股份02671.HK",
+        "perf": 7.61,
+        "date": "2025/12/30"
+      }
     }
   ]
 }
