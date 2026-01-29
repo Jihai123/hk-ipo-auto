@@ -122,10 +122,12 @@ async function crawlSponsorPage(page = 1) {
 
             // 验证是数据行（日期格式检验）
             if (dateText.match(/\d{4}\/\d{2}\/\d{2}/) && sponsorText && firstDayPerf !== null) {
-              // 提取股票代码
-              const codeMatch = companyInfo.match(/\((\d+)\)/);
+              // 提取股票代码 - 支持多种格式：01768.HK、(01768)、01768
+              const codeMatch = companyInfo.match(/(\d{4,5})\.HK/i) ||
+                               companyInfo.match(/\((\d{4,5})\)/) ||
+                               companyInfo.match(/(\d{5})$/);
               const stockCode = codeMatch ? codeMatch[1] : '';
-              const companyName = companyInfo.replace(/\(\d+\)/, '').trim();
+              const companyName = companyInfo.replace(/\d{4,5}\.HK/i, '').replace(/\(\d+\)/, '').trim();
 
               // 处理多个保荐人（可能用逗号、/、换行、或"有限公司"后面直接接下一个）
               // 先按常见分隔符分割

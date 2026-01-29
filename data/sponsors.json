@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-01-29T03:26:41.225Z",
+  "updatedAt": "2026-01-29T11:19:31.188Z",
   "source": "aastocks",
   "sponsors": [
     {
@@ -8,7 +8,7 @@
       "upCount": 44,
       "downCount": 20,
       "avgFirstDay": 27.96,
-      "avgCumulative": 64.81,
+      "avgCumulative": 63.48,
       "winRate": 68.75
     },
     {
@@ -17,7 +17,7 @@
       "upCount": 35,
       "downCount": 7,
       "avgFirstDay": 41.62,
-      "avgCumulative": 59.88,
+      "avgCumulative": 60,
       "winRate": 83.33
     },
     {
@@ -26,7 +26,7 @@
       "upCount": 20,
       "downCount": 13,
       "avgFirstDay": 9,
-      "avgCumulative": 29.94,
+      "avgCumulative": 28.75,
       "winRate": 60.61
     },
     {
@@ -35,7 +35,7 @@
       "upCount": 12,
       "downCount": 3,
       "avgFirstDay": 21.91,
-      "avgCumulative": 62.67,
+      "avgCumulative": 60.23,
       "winRate": 80
     },
     {
@@ -44,7 +44,7 @@
       "upCount": 9,
       "downCount": 3,
       "avgFirstDay": 11.46,
-      "avgCumulative": 40.8,
+      "avgCumulative": 42.31,
       "winRate": 75
     },
     {
@@ -53,7 +53,7 @@
       "upCount": 10,
       "downCount": 2,
       "avgFirstDay": 11.38,
-      "avgCumulative": -3.65,
+      "avgCumulative": -4.45,
       "winRate": 83.33
     },
     {
@@ -62,7 +62,7 @@
       "upCount": 10,
       "downCount": 1,
       "avgFirstDay": 31.22,
-      "avgCumulative": 14.2,
+      "avgCumulative": 13.97,
       "winRate": 90.91
     },
     {
@@ -71,7 +71,7 @@
       "upCount": 9,
       "downCount": 2,
       "avgFirstDay": 23.18,
-      "avgCumulative": 70.98,
+      "avgCumulative": 68.63,
       "winRate": 81.82
     },
     {
@@ -80,7 +80,7 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 16.22,
-      "avgCumulative": 33.85,
+      "avgCumulative": 32.85,
       "winRate": 70
     },
     {
@@ -89,7 +89,7 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 25.56,
-      "avgCumulative": 44.54,
+      "avgCumulative": 42.47,
       "winRate": 70
     },
     {
@@ -101,14 +101,14 @@
       "avgFirstDay": 79.08,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "諾比侃02635.HK",
+        "code": "02635",
+        "name": "諾比侃",
         "perf": 363.75,
         "date": "2025/12/23"
       },
       "worstCase": {
-        "code": "",
-        "name": "智譜02513.HK",
+        "code": "02513",
+        "name": "智譜",
         "perf": 13.17,
         "date": "2026/01/08"
       }
@@ -122,14 +122,14 @@
       "avgFirstDay": 18.54,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "兆易創新03986.HK",
+        "code": "03986",
+        "name": "兆易創新",
         "perf": 37.53,
         "date": "2026/01/13"
       },
       "worstCase": {
-        "code": "",
-        "name": "臥安機器人06600.HK",
+        "code": "06600",
+        "name": "臥安機器人",
         "perf": 0.07,
         "date": "2025/12/30"
       }
@@ -143,14 +143,14 @@
       "avgFirstDay": 1.55,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "龍旗科技09611.HK",
+        "code": "09611",
+        "name": "龍旗科技",
         "perf": 3.55,
         "date": "2026/01/22"
       },
       "worstCase": {
-        "code": "",
-        "name": "臥安機器人06600.HK",
+        "code": "06600",
+        "name": "臥安機器人",
         "perf": 0.07,
         "date": "2025/12/30"
       }
@@ -164,14 +164,14 @@
       "avgFirstDay": 23.93,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "精鋒醫療－Ｂ02675.HK",
+        "code": "02675",
+        "name": "精鋒醫療－Ｂ",
         "perf": 30.9,
         "date": "2026/01/08"
       },
       "worstCase": {
-        "code": "",
-        "name": "豪威集團00501.HK",
+        "code": "00501",
+        "name": "豪威集團",
         "perf": 16.22,
         "date": "2026/01/12"
       }
@@ -185,14 +185,14 @@
       "avgFirstDay": 22.58,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "瑞博生物－Ｂ06938.HK",
+        "code": "06938",
+        "name": "瑞博生物－Ｂ",
         "perf": 41.62,
         "date": "2026/01/09"
       },
       "worstCase": {
-        "code": "",
-        "name": "龍旗科技09611.HK",
+        "code": "09611",
+        "name": "龍旗科技",
         "perf": 3.55,
         "date": "2026/01/22"
       }
@@ -206,14 +206,14 @@
       "avgFirstDay": 46.02,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "壁仞科技06082.HK",
+        "code": "06082",
+        "name": "壁仞科技",
         "perf": 75.82,
         "date": "2026/01/02"
       },
       "worstCase": {
-        "code": "",
-        "name": "豪威集團00501.HK",
+        "code": "00501",
+        "name": "豪威集團",
         "perf": 16.22,
         "date": "2026/01/12"
       }
@@ -227,14 +227,14 @@
       "avgFirstDay": 62.66,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "MINIMAX-WP00100.HK",
+        "code": "00100",
+        "name": "MINIMAX-WP",
         "perf": 109.09,
         "date": "2026/01/09"
       },
       "worstCase": {
-        "code": "",
-        "name": "豪威集團00501.HK",
+        "code": "00501",
+        "name": "豪威集團",
         "perf": 16.22,
         "date": "2026/01/12"
       }
@@ -248,14 +248,14 @@
       "avgFirstDay": 27.78,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "精鋒醫療－Ｂ02675.HK",
+        "code": "02675",
+        "name": "精鋒醫療－Ｂ",
         "perf": 30.9,
         "date": "2026/01/08"
       },
       "worstCase": {
-        "code": "",
-        "name": "英矽智能03696.HK",
+        "code": "03696",
+        "name": "英矽智能",
         "perf": 24.66,
         "date": "2025/12/30"
       }
@@ -269,14 +269,14 @@
       "avgFirstDay": 69.06,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "鳴鳴很忙01768.HK",
+        "code": "01768",
+        "name": "鳴鳴很忙",
         "perf": 69.06,
         "date": "2026/01/28"
       },
       "worstCase": {
-        "code": "",
-        "name": "鳴鳴很忙01768.HK",
+        "code": "01768",
+        "name": "鳴鳴很忙",
         "perf": 69.06,
         "date": "2026/01/28"
       }
@@ -290,14 +290,14 @@
       "avgFirstDay": 3.55,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "龍旗科技09611.HK",
+        "code": "09611",
+        "name": "龍旗科技",
         "perf": 3.55,
         "date": "2026/01/22"
       },
       "worstCase": {
-        "code": "",
-        "name": "龍旗科技09611.HK",
+        "code": "09611",
+        "name": "龍旗科技",
         "perf": 3.55,
         "date": "2026/01/22"
       }
@@ -311,14 +311,14 @@
       "avgFirstDay": 0.33,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "紅星冷鏈01641.HK",
+        "code": "01641",
+        "name": "紅星冷鏈",
         "perf": 0.33,
         "date": "2026/01/13"
       },
       "worstCase": {
-        "code": "",
-        "name": "紅星冷鏈01641.HK",
+        "code": "01641",
+        "name": "紅星冷鏈",
         "perf": 0.33,
         "date": "2026/01/13"
       }
@@ -332,14 +332,14 @@
       "avgFirstDay": 0.33,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "紅星冷鏈01641.HK",
+        "code": "01641",
+        "name": "紅星冷鏈",
         "perf": 0.33,
         "date": "2026/01/13"
       },
       "worstCase": {
-        "code": "",
-        "name": "紅星冷鏈01641.HK",
+        "code": "01641",
+        "name": "紅星冷鏈",
         "perf": 0.33,
         "date": "2026/01/13"
       }
@@ -353,14 +353,14 @@
       "avgFirstDay": 11.67,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "BBSB INTL08610.HK",
+        "code": "08610",
+        "name": "BBSB INTL",
         "perf": 11.67,
         "date": "2026/01/13"
       },
       "worstCase": {
-        "code": "",
-        "name": "BBSB INTL08610.HK",
+        "code": "08610",
+        "name": "BBSB INTL",
         "perf": 11.67,
         "date": "2026/01/13"
       }
@@ -374,14 +374,14 @@
       "avgFirstDay": 75.82,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "壁仞科技06082.HK",
+        "code": "06082",
+        "name": "壁仞科技",
         "perf": 75.82,
         "date": "2026/01/02"
       },
       "worstCase": {
-        "code": "",
-        "name": "壁仞科技06082.HK",
+        "code": "06082",
+        "name": "壁仞科技",
         "perf": 75.82,
         "date": "2026/01/02"
       }
@@ -395,14 +395,14 @@
       "avgFirstDay": 9.3,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "林清軒02657.HK",
+        "code": "02657",
+        "name": "林清軒",
         "perf": 9.3,
         "date": "2025/12/30"
       },
       "worstCase": {
-        "code": "",
-        "name": "林清軒02657.HK",
+        "code": "02657",
+        "name": "林清軒",
         "perf": 9.3,
         "date": "2025/12/30"
       }
@@ -416,14 +416,14 @@
       "avgFirstDay": 7.61,
       "winRate": 100,
       "bestCase": {
-        "code": "",
-        "name": "美聯股份02671.HK",
+        "code": "02671",
+        "name": "美聯股份",
         "perf": 7.61,
         "date": "2025/12/30"
       },
       "worstCase": {
-        "code": "",
-        "name": "美聯股份02671.HK",
+        "code": "02671",
+        "name": "美聯股份",
         "perf": 7.61,
         "date": "2025/12/30"
       }

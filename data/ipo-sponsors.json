@@ -1,0 +1,204 @@
+{
+  "updatedAt": "2026-01-29T11:19:31.190Z",
+  "source": "aastocks",
+  "count": 20,
+  "mapping": {
+    "01768": {
+      "sponsors": [
+        "高盛(亞洲)有限責任公司華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "鳴鳴很忙",
+      "date": "2026/01/28",
+      "industry": "大賣場/超市/便利店",
+      "firstDayPerf": 69.06
+    },
+    "09611": {
+      "sponsors": [
+        "花旗環球金融亞洲有限公司",
+        "國泰君安融資有限公司",
+        "海通國際資本有限公司"
+      ],
+      "companyName": "龍旗科技",
+      "date": "2026/01/22",
+      "industry": "智能手機",
+      "firstDayPerf": 3.55
+    },
+    "01641": {
+      "sponsors": [
+        "農銀國際融資有限公司",
+        "建銀國際金融有限公司"
+      ],
+      "companyName": "紅星冷鏈",
+      "date": "2026/01/13",
+      "industry": "包裝食品",
+      "firstDayPerf": 0.33
+    },
+    "03986": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司",
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "兆易創新",
+      "date": "2026/01/13",
+      "industry": "半導體產品及設備",
+      "firstDayPerf": 37.53
+    },
+    "08610": {
+      "sponsors": [
+        "力高企業融資有限公司"
+      ],
+      "companyName": "BBSB INTL",
+      "date": "2026/01/13",
+      "industry": "建築與工程",
+      "firstDayPerf": 11.67
+    },
+    "00501": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司",
+        "廣發融資（香港）有限公司",
+        "中國平安資本（香港）有限公司",
+        "瑞銀證券香港有限公司"
+      ],
+      "companyName": "豪威集團",
+      "date": "2026/01/12",
+      "industry": "半導體產品及設備",
+      "firstDayPerf": 16.22
+    },
+    "00100": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司",
+        "瑞銀證券香港有限公司"
+      ],
+      "companyName": "MINIMAX-WP",
+      "date": "2026/01/09",
+      "industry": "新一代信息技術",
+      "firstDayPerf": 109.09
+    },
+    "03636": {
+      "sponsors": [
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "金潯資源",
+      "date": "2026/01/09",
+      "industry": "多種金屬與礦石",
+      "firstDayPerf": 26
+    },
+    "06938": {
+      "sponsors": [
+        "花旗環球金融亞洲有限公司",
+        "中國國際金融香港證券有限公司"
+      ],
+      "companyName": "瑞博生物－Ｂ",
+      "date": "2026/01/09",
+      "industry": "生物科技- 製藥",
+      "firstDayPerf": 41.62
+    },
+    "02513": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司"
+      ],
+      "companyName": "智譜",
+      "date": "2026/01/08",
+      "industry": "新一代信息技術",
+      "firstDayPerf": 13.17
+    },
+    "02675": {
+      "sponsors": [
+        "廣發融資（香港）有限公司",
+        "摩根士丹利亞洲有限公司"
+      ],
+      "companyName": "精鋒醫療－Ｂ",
+      "date": "2026/01/08",
+      "industry": "生物科技- 醫療器械",
+      "firstDayPerf": 30.9
+    },
+    "09903": {
+      "sponsors": [
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "天數智芯",
+      "date": "2026/01/08",
+      "industry": "半導體產品及設備",
+      "firstDayPerf": 8.44
+    },
+    "06082": {
+      "sponsors": [
+        "中銀國際亞洲有限公司",
+        "中國國際金融香港證券有限公司",
+        "中國平安資本（香港）有限公司"
+      ],
+      "companyName": "壁仞科技",
+      "date": "2026/01/02",
+      "industry": "先進硬件及軟件",
+      "firstDayPerf": 75.82
+    },
+    "02657": {
+      "sponsors": [
+        "中信證券(香港)有限公司",
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "林清軒",
+      "date": "2025/12/30",
+      "industry": "美容護膚產品及服務",
+      "firstDayPerf": 9.3
+    },
+    "02671": {
+      "sponsors": [
+        "申萬宏源融資（香港）有限公司"
+      ],
+      "companyName": "美聯股份",
+      "date": "2025/12/30",
+      "industry": "樓宇建造",
+      "firstDayPerf": 7.61
+    },
+    "03317": {
+      "sponsors": [
+        "國泰君安融資有限公司"
+      ],
+      "companyName": "迅策",
+      "date": "2025/12/30",
+      "industry": "應用軟件",
+      "firstDayPerf": 1.04
+    },
+    "03696": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司",
+        "廣發融資（香港）有限公司",
+        "摩根士丹利亞洲有限公司"
+      ],
+      "companyName": "英矽智能",
+      "date": "2025/12/30",
+      "industry": "生物科技- 製藥",
+      "firstDayPerf": 24.66
+    },
+    "06600": {
+      "sponsors": [
+        "國泰君安融資有限公司",
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "臥安機器人",
+      "date": "2025/12/30",
+      "industry": "消費電子產品",
+      "firstDayPerf": 0.07
+    },
+    "06651": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司",
+        "華泰金融控股(香港)有限公司"
+      ],
+      "companyName": "五一視界",
+      "date": "2025/12/30",
+      "industry": "先進硬件及軟件",
+      "firstDayPerf": 29.9
+    },
+    "02635": {
+      "sponsors": [
+        "中國國際金融香港證券有限公司"
+      ],
+      "companyName": "諾比侃",
+      "date": "2025/12/23",
+      "industry": "先進硬件及軟件",
+      "firstDayPerf": 363.75
+    }
+  }
+}
