@@ -346,6 +346,7 @@ const AVOID_TRACKS = [
 ];
 
 // ==================== 明星基石投资者名单 ====================
+// 注意：D1 Partners使用特殊标记，需要边界匹配避免误匹配"附錄D1A"等内容
 const STAR_CORNERSTONE = [
   // 顶级PE/VC
   '高瓴', 'Hillhouse', '紅杉', '红杉', 'Sequoia',
@@ -357,10 +358,10 @@ const STAR_CORNERSTONE = [
   '富達', '富达', 'Fidelity', 'Wellington', '普信', 'T. Rowe',
   '資本集團', '资本集团', 'Capital Group',
   // 中国主权/国家级
-  '中投', 'CIC', '社保基金', '全國社保', '全国社保',
+  '中投公司', 'CIC', '社保基金', '全國社保', '全国社保',
   '國家大基金', '国家大基金', '絲路基金', '丝路基金',
-  // 知名对冲基金
-  'Tiger Global', 'Coatue', 'DST', 'D1', 'Viking',
+  // 知名对冲基金 - D1 Partners需要完整名称
+  'Tiger Global', 'Coatue', 'DST Global', 'D1 Partners', 'D1 Capital', 'Viking Global',
   // 知名中国PE
   '春華資本', '春华资本', '博裕資本', '博裕资本', '厚朴投資', '厚朴投资',
   '鼎暉', '鼎晖', 'CDH', '中信產業基金', '中信产业基金',
@@ -385,7 +386,7 @@ function normalizeText(text) {
   return text
     // 去除所有空白字符
     .replace(/\s+/g, '')
-    // 全角转半角
+    // 全角转半角（包括全角括号）
     .replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
     // 繁简常用字转换
     .replace(/證/g, '证').replace(/國/g, '国').replace(/際/g, '际')
@@ -395,7 +396,40 @@ function normalizeText(text) {
     .replace(/個/g, '个').replace(/開/g, '开').replace(/關/g, '关')
     .replace(/機/g, '机').replace(/車/g, '车').replace(/電/g, '电')
     .replace(/導/g, '导').replace(/體/g, '体').replace(/產/g, '产')
-    .replace(/軟/g, '软').replace(/製/g, '制').replace(/廠/g, '厂');
+    .replace(/軟/g, '软').replace(/製/g, '制').replace(/廠/g, '厂')
+    // 去除常见后缀便于匹配
+    .replace(/有限公司$/g, '').replace(/有限责任公司$/g, '');
+}
+
+/**
+ * 检查保荐人名称是否匹配（支持部分匹配）
+ * @param {string} searchText - 搜索文本
+ * @param {string} sponsorName - 保荐人名称
+ * @returns {boolean}
+ */
+function matchSponsorName(searchText, sponsorName) {
+  // 直接匹配
+  if (searchText.includes(sponsorName)) return true;
+
+  // 标准化后匹配
+  const normalizedSearch = normalizeText(searchText);
+  const normalizedName = normalizeText(sponsorName);
+  if (normalizedSearch.includes(normalizedName)) return true;
+
+  // 去除"有限公司"后缀再匹配
+  const coreNamePatterns = [
+    sponsorName.replace(/有限公司$/, '').replace(/有限責任公司$/, ''),
+    sponsorName.replace(/\(香港\)有限公司$/, '(香港)'),
+    sponsorName.replace(/（香港）有限公司$/, '（香港）'),
+  ];
+
+  for (const pattern of coreNamePatterns) {
+    if (pattern && pattern.length >= 4 && searchText.includes(pattern)) return true;
+    const normalizedPattern = normalizeText(pattern);
+    if (normalizedPattern && normalizedPattern.length >= 4 && normalizedSearch.includes(normalizedPattern)) return true;
+  }
+
+  return false;
 }
 
 /**
@@ -708,14 +742,17 @@ function scoreProspectus(rawText, stockCode) {
 
   // 遍历保荐人数据库查找匹配
   for (const [name, data] of Object.entries(SPONSORS)) {
-    const normalizedName = normalizeText(name);
-    if (searchTextForSponsor.includes(name) || normalizedSponsorText.includes(normalizedName)) {
+    if (matchSponsorName(searchTextForSponsor, name)) {
       // 避免重复（同一保荐人可能有多个名称）
       if (!foundSponsors.some(s => Math.abs(s.rate - data.rate) < 0.01 && s.count === data.count)) {
         // 提取匹配上下文
         const nameIndex = searchTextForSponsor.indexOf(name);
-        const context = nameIndex !== -1
-          ? searchTextForSponsor.slice(Math.max(0, nameIndex - 20), Math.min(searchTextForSponsor.length, nameIndex + name.length + 30)).replace(/\s+/g, ' ')
+        // 尝试找核心名称
+        const coreName = name.replace(/有限公司$/, '').replace(/有限責任公司$/, '');
+        const coreIndex = nameIndex === -1 ? searchTextForSponsor.indexOf(coreName) : nameIndex;
+        const matchedName = nameIndex !== -1 ? name : coreName;
+        const context = coreIndex !== -1
+          ? searchTextForSponsor.slice(Math.max(0, coreIndex - 20), Math.min(searchTextForSponsor.length, coreIndex + matchedName.length + 30)).replace(/\s+/g, ' ')
           : '';
         foundSponsors.push({ name, ...data, matchContext: context });
       }
@@ -873,15 +910,28 @@ function scoreProspectus(rawText, stockCode) {
     }
   }
 
-  // ========== 3. 基石投资者（限定章节）==========
+  // ========== 3. 基石投资者（严格限定章节，避免全文误匹配）==========
+  // 基石投资者通常在招股书目录之后、概要之前有专门章节
   const cornerstoneSection = extractSection(
     text,
     [/基石投資者/i, /基石投资者/i, /CORNERSTONE\s*INVESTOR/i],
-    [/風險因素/i, /风险因素/i, /行業概覽/i, /行业概览/i],
-    60000
+    [/風險因素/i, /风险因素/i, /行業概覽/i, /行业概览/i, /概要/i, /SUMMARY/i],
+    50000  // 减少章节长度，避免误匹配
   );
 
-  const investorSearchText = cornerstoneSection || text;
+  // 如果没有基石投资者章节，只在摘要/概要部分搜索（前15万字）
+  // 避免在财务数据等无关内容中误匹配
+  let investorSearchText = cornerstoneSection;
+  if (!cornerstoneSection) {
+    // 备用：在招股书概要部分搜索
+    const summarySection = extractSection(
+      text,
+      [/概要/i, /摘要/i, /SUMMARY/i],
+      [/風險因素/i, /风险因素/i, /行業概覽/i],
+      100000
+    );
+    investorSearchText = summarySection || text.slice(0, 150000);
+  }
   const normalizedInvestorText = normalizeText(investorSearchText);
 
   const foundInvestorDetails = [];
@@ -907,18 +957,28 @@ function scoreProspectus(rawText, stockCode) {
     if (/黑石|Blackstone/i.test(inv)) return '黑石';
     if (/贝莱德|貝萊德|BlackRock/i.test(inv)) return '贝莱德';
     if (/软银|軟銀|SoftBank|Vision Fund/i.test(inv)) return '软银';
-    if (/中投|CIC/i.test(inv)) return '中投';
+    if (/中投公司|CIC/i.test(inv)) return '中投';
     if (/社保/i.test(inv)) return '社保基金';
     if (/国家大基金|國家大基金/i.test(inv)) return '大基金';
+    if (/D1 Partners|D1 Capital/i.test(inv)) return 'D1 Partners';
+    if (/DST Global/i.test(inv)) return 'DST';
+    if (/Tiger Global/i.test(inv)) return 'Tiger Global';
+    if (/Viking Global/i.test(inv)) return 'Viking';
+    if (/Coatue/i.test(inv)) return 'Coatue';
+    if (/富達|富达|Fidelity/i.test(inv)) return '富达';
+    if (/Wellington/i.test(inv)) return 'Wellington';
+    if (/普信|T\. Rowe/i.test(inv)) return '普信';
+    if (/春華資本|春华资本/i.test(inv)) return '春华资本';
+    if (/鼎暉|鼎晖|CDH/i.test(inv)) return '鼎晖';
     return inv;
   }))];
 
   const cornerstoneEvidence = {
-    section: cornerstoneSection ? '基石投資者章节' : '全文搜索',
+    section: cornerstoneSection ? '基石投資者章节' : '招股书概要/前15万字',
     sectionLength: investorSearchText.length,
     matchedKeywords: foundInvestorDetails.map(d => d.keyword),
     matchedContexts: foundInvestorDetails.slice(0, 3).map(d => d.context),
-    starList: '高瓴、红杉、淡马锡、GIC、黑石、贝莱德、中投、社保基金等',
+    starList: '高瓴、红杉、淡马锡、GIC、黑石、贝莱德、中投公司、社保基金等',
   };
 
   if (uniqueInvestors.length > 0) {
@@ -939,15 +999,25 @@ function scoreProspectus(rawText, stockCode) {
     };
   }
   
-  // ========== 4. Pre-IPO禁售期 ==========
+  // ========== 4. Pre-IPO禁售期（限定在股本/历史/股东章节）==========
+  // Pre-IPO投资通常在以下章节披露：
+  // - 歷史、重組及公司架構
+  // - 股本（包含股本变动历史）
+  // - 主要股東
   const shareholderSection = extractSection(
     text,
-    [/股本/i, /主要股東/i, /主要股东/i, /歷史.*沿革/i, /历史.*沿革/i, /股權結構/i, /股权结构/i],
-    [/業務/i, /业务/i, /財務/i, /财务/i],
+    [
+      /歷史.*重組/i, /历史.*重组/i, /HISTORY.*REORGANIZATION/i,
+      /股本/i, /SHARE\s*CAPITAL/i,
+      /主要股東/i, /主要股东/i, /SUBSTANTIAL\s*SHAREHOLDER/i,
+      /股權結構/i, /股权结构/i
+    ],
+    [/業務/i, /业务/i, /BUSINESS/i, /財務資料/i, /财务资料/i],
     80000
   );
 
-  const preIPOSearchText = shareholderSection || text.slice(0, 200000);
+  // 如果没找到专门章节，限制在招股书中间部分搜索（避免财务数据区）
+  const preIPOSearchText = shareholderSection || text.slice(50000, 250000);
   const normalizedPreIPOText = normalizeText(preIPOSearchText);
 
   // 检测是否有Pre-IPO投资
@@ -966,7 +1036,7 @@ function scoreProspectus(rawText, stockCode) {
   }
 
   const lockupEvidence = {
-    section: shareholderSection ? '股本/股權結構章节' : '招股书前200000字',
+    section: shareholderSection ? '股本/歷史/股東章节' : '招股书5万-25万字区间',
     preIPOKeywords: preIPOKeywords.join('、'),
   };
 
