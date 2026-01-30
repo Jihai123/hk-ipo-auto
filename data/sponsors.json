@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-01-29T11:19:31.188Z",
+  "updatedAt": "2026-01-30T08:46:00.873Z",
   "source": "aastocks",
   "sponsors": [
     {
@@ -8,7 +8,7 @@
       "upCount": 44,
       "downCount": 20,
       "avgFirstDay": 27.96,
-      "avgCumulative": 63.48,
+      "avgCumulative": 59.13,
       "winRate": 68.75
     },
     {
@@ -17,7 +17,7 @@
       "upCount": 35,
       "downCount": 7,
       "avgFirstDay": 41.62,
-      "avgCumulative": 60,
+      "avgCumulative": 55.27,
       "winRate": 83.33
     },
     {
@@ -26,7 +26,7 @@
       "upCount": 20,
       "downCount": 13,
       "avgFirstDay": 9,
-      "avgCumulative": 28.75,
+      "avgCumulative": 24.45,
       "winRate": 60.61
     },
     {
@@ -35,7 +35,7 @@
       "upCount": 12,
       "downCount": 3,
       "avgFirstDay": 21.91,
-      "avgCumulative": 60.23,
+      "avgCumulative": 56.16,
       "winRate": 80
     },
     {
@@ -44,7 +44,7 @@
       "upCount": 9,
       "downCount": 3,
       "avgFirstDay": 11.46,
-      "avgCumulative": 42.31,
+      "avgCumulative": 39.78,
       "winRate": 75
     },
     {
@@ -53,7 +53,7 @@
       "upCount": 10,
       "downCount": 2,
       "avgFirstDay": 11.38,
-      "avgCumulative": -4.45,
+      "avgCumulative": -6.82,
       "winRate": 83.33
     },
     {
@@ -62,7 +62,7 @@
       "upCount": 10,
       "downCount": 1,
       "avgFirstDay": 31.22,
-      "avgCumulative": 13.97,
+      "avgCumulative": 10.67,
       "winRate": 90.91
     },
     {
@@ -71,7 +71,7 @@
       "upCount": 9,
       "downCount": 2,
       "avgFirstDay": 23.18,
-      "avgCumulative": 68.63,
+      "avgCumulative": 61.08,
       "winRate": 81.82
     },
     {
@@ -80,7 +80,7 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 16.22,
-      "avgCumulative": 32.85,
+      "avgCumulative": 31.1,
       "winRate": 70
     },
     {
@@ -89,7 +89,7 @@
       "upCount": 7,
       "downCount": 3,
       "avgFirstDay": 25.56,
-      "avgCumulative": 42.47,
+      "avgCumulative": 39.69,
       "winRate": 70
     },
     {
