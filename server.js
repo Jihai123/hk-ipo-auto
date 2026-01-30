@@ -813,9 +813,13 @@ function scoreProspectus(rawText, stockCode) {
     let fallbackSponsors = null;
     let stockCodeFromText = stockCodeMatch ? (stockCodeMatch[1] || stockCodeMatch[2]) : null;
 
-    // 如果从文本提取了股票代码，或者有传入的股票代码参数
-    if (stockCodeFromText) {
-      fallbackSponsors = getSponsorsByStockCode(stockCodeFromText);
+    // 优先使用从文本提取的股票代码，其次使用传入的stockCode参数
+    const codeToUse = stockCodeFromText || stockCode;
+    if (codeToUse) {
+      fallbackSponsors = getSponsorsByStockCode(codeToUse);
+      if (!stockCodeFromText) {
+        stockCodeFromText = stockCode; // 更新用于后续显示
+      }
     }
 
     if (fallbackSponsors && fallbackSponsors.length > 0) {
