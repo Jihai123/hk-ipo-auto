@@ -1169,9 +1169,29 @@ function scoreProspectus(rawText, stockCode) {
     return '';
   };
 
+  // 检查是否是釋義缩写词列表格式（避免误匹配）
+  // 特征：上下文中有多个连续的短英文缩写（如"3D 5G AI AIGC AiP"）
+  const isDefinitionList = (keyword) => {
+    const ctx = getContext(keyword);
+    // 检查上下文是否包含多个连续的短词（2-6字符），用空格分隔
+    const words = ctx.split(/\s+/);
+    let shortWordCount = 0;
+    for (const w of words) {
+      if (/^[A-Z0-9a-z\-]{1,8}$/.test(w)) {
+        shortWordCount++;
+      }
+    }
+    // 如果超过60%都是短词/缩写，认为是釋義列表
+    return words.length > 5 && shortWordCount / words.length > 0.6;
+  };
+
   // 检查热门赛道 (+2)
   for (const track of HOT_TRACKS) {
     if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      // 检查是否是釋義缩写词列表，如果是则跳过
+      if (isDefinitionList(track)) {
+        continue;
+      }
       industryScore = 2;
       industryReason = '🔥 热门赛道';
       industryDetails = `情绪驱动型: ${track}`;
@@ -1186,6 +1206,7 @@ function scoreProspectus(rawText, stockCode) {
   if (industryScore === 0) {
     for (const track of GROWTH_TRACKS) {
       if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+        if (isDefinitionList(track)) continue;
         industryScore = 1;
         industryReason = '📈 成长赛道';
         industryDetails = `成长叙事型: ${track}`;
@@ -1201,6 +1222,7 @@ function scoreProspectus(rawText, stockCode) {
   if (industryScore === 0) {
     for (const track of LOW_ELASTICITY_TRACKS) {
       if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+        if (isDefinitionList(track)) continue;
         industryScore = -1;
         industryReason = '📉 低弹性赛道';
         industryDetails = `缺乏想象空间: ${track}`;
@@ -1215,6 +1237,7 @@ function scoreProspectus(rawText, stockCode) {
   // 检查回避赛道 (-2) - 即使匹配了其他档位，回避赛道优先
   for (const track of AVOID_TRACKS) {
     if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      if (isDefinitionList(track)) continue;
       industryScore = -2;
       industryReason = '❌ 资金回避';
       industryDetails = `高破发风险: ${track}`;
