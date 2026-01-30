@@ -728,21 +728,39 @@ function scoreProspectus(rawText, stockCode) {
     };
   }
   
-  // ========== 2. 保荐人评分（限定在特定章节）==========
-  // 保荐人名称可能出现在：
-  // 1. 「參與全球發售的各方」章节（封面后）
-  // 2. 「釋義」章节（定义各方角色）
-  // 3. 招股书概要部分
-  const sponsorSection = extractSection(
-    text,
-    [
-      /參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i,
-      /釋義/i, /释义/i, /DEFINITIONS/i,
-      /保薦人/i, /保荐人/i, /SPONSOR/i
-    ],
-    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i],
-    50000  // 增大搜索范围
-  );
+  // ========== 2. 保荐人评分 ==========
+  // 保荐人名称来源：
+  // 1. 釋義章节中的定义格式：「聯席保薦人」指 XXX公司
+  // 2. 參與全球發售的各方章节
+  // 3. 招股书前半部分
+
+  // 策略1: 查找「...保薦人」指 这种定义格式（最可靠）
+  let sponsorSection = '';
+  const sponsorDefMatch = text.match(/「[聯席獨家]*保薦人」[指是為]/i);
+  if (sponsorDefMatch) {
+    // 从定义位置向前后各取一定范围
+    const defStart = Math.max(0, sponsorDefMatch.index - 5000);
+    const defEnd = Math.min(text.length, sponsorDefMatch.index + 10000);
+    sponsorSection = text.slice(defStart, defEnd);
+  }
+
+  // 策略2: 如果没找到定义格式，尝试章节提取
+  if (!sponsorSection || sponsorSection.length < 1000) {
+    const altSection = extractSection(
+      text,
+      [/參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i],
+      [/董事/i, /概要/i, /SUMMARY/i],
+      30000
+    );
+    if (altSection) {
+      sponsorSection = altSection;
+    }
+  }
+
+  // 策略3: 兜底使用招股书前12万字
+  if (!sponsorSection || sponsorSection.length < 1000) {
+    sponsorSection = text.slice(0, 120000);
+  }
 
   const searchTextForSponsor = sponsorSection || text.slice(0, 120000);
   const normalizedSponsorText = normalizeText(searchTextForSponsor);
