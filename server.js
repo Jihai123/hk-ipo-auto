@@ -1169,25 +1169,49 @@ function scoreProspectus(rawText, stockCode) {
     return '';
   };
 
+  // 检查关键词是否是完整词匹配（防止L3匹配到L330TOPSPCB）
+  // 对于短的英文/数字关键词，检查前后是否是词边界
+  const isWordBoundaryMatch = (text, keyword) => {
+    // 纯中文关键词不需要词边界检查
+    if (/^[\u4e00-\u9fa5]+$/.test(keyword)) {
+      return text.includes(keyword);
+    }
+    // 短的英文/数字关键词（<=4字符）需要严格的词边界检查
+    if (/^[A-Za-z0-9]+$/.test(keyword) && keyword.length <= 4) {
+      // 使用词边界正则匹配
+      const regex = new RegExp(`(?:^|[^A-Za-z0-9])${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^A-Za-z0-9])`, 'i');
+      return regex.test(text);
+    }
+    // 其他关键词用普通的includes
+    return text.includes(keyword);
+  };
+
   // 检查是否是釋義缩写词列表格式（避免误匹配）
   // 特征：上下文中有多个连续的短英文缩写（如"3D 5G AI AIGC AiP"）
+  // 或者上下文中有大量纯大写字母数字组成的词（PDF解析可能把词连在一起）
   const isDefinitionList = (keyword) => {
     const ctx = getContext(keyword);
-    // 检查上下文是否包含多个连续的短词（2-6字符），用空格分隔
+    // 检查上下文是否包含多个连续的技术缩写词
     const words = ctx.split(/\s+/);
-    let shortWordCount = 0;
+    let techWordCount = 0;
+    let allUpperCount = 0;
     for (const w of words) {
-      if (/^[A-Z0-9a-z\-]{1,8}$/.test(w)) {
-        shortWordCount++;
+      // 技术缩写词：1-15个字符的字母数字组合
+      if (/^[A-Z0-9a-z\-]{1,15}$/.test(w)) {
+        techWordCount++;
+      }
+      // 全大写的词（可能是缩写连接在一起）
+      if (/^[A-Z0-9\-]{2,}$/.test(w)) {
+        allUpperCount++;
       }
     }
-    // 如果超过60%都是短词/缩写，认为是釋義列表
-    return words.length > 5 && shortWordCount / words.length > 0.6;
+    // 如果超过50%都是技术词/缩写，或者超过40%是全大写词，认为是釋義列表
+    return words.length > 5 && (techWordCount / words.length > 0.5 || allUpperCount / words.length > 0.4);
   };
 
   // 检查热门赛道 (+2)
   for (const track of HOT_TRACKS) {
-    if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+    if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
       // 检查是否是釋義缩写词列表，如果是则跳过
       if (isDefinitionList(track)) {
         continue;
@@ -1205,7 +1229,7 @@ function scoreProspectus(rawText, stockCode) {
   // 检查成长赛道 (+1)
   if (industryScore === 0) {
     for (const track of GROWTH_TRACKS) {
-      if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
         if (isDefinitionList(track)) continue;
         industryScore = 1;
         industryReason = '📈 成长赛道';
@@ -1221,7 +1245,7 @@ function scoreProspectus(rawText, stockCode) {
   // 检查低弹性赛道 (-1)
   if (industryScore === 0) {
     for (const track of LOW_ELASTICITY_TRACKS) {
-      if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
         if (isDefinitionList(track)) continue;
         industryScore = -1;
         industryReason = '📉 低弹性赛道';
@@ -1363,45 +1387,58 @@ app.get('/api/cache/clear/:code', (req, res) => {
 app.get('/api/score/:code', async (req, res) => {
   const { code } = req.params;
   const startTime = Date.now();
-  
+
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[API] 评分请求: ${code}`);
   console.log(`${'='.repeat(60)}`);
-  
+
   try {
-    // 搜索招股书
-    const searchResults = await searchProspectus(code);
-    
-    if (searchResults.length === 0) {
-      return res.json({
-        success: false,
-        error: '未找到招股书，请确认股票代码正确且已上市',
-      });
+    // 先检查缓存
+    let pdfText = readCache(code);
+    let prospectusInfo = null;
+
+    if (pdfText) {
+      console.log(`[API] 使用缓存文本`);
+    } else {
+      // 搜索招股书
+      const searchResults = await searchProspectus(code);
+
+      if (searchResults.length === 0) {
+        return res.json({
+          success: false,
+          error: '未找到招股书，请确认股票代码正确且已上市',
+        });
+      }
+
+      prospectusInfo = searchResults[0];
+      console.log(`[API] 招股书: ${prospectusInfo.title}`);
+
+      // 下载并解析PDF
+      pdfText = await downloadAndParsePDF(prospectusInfo.link, code);
     }
-    
-    const prospectus = searchResults[0];
-    console.log(`[API] 招股书: ${prospectus.title}`);
-    
-    // 下载并解析PDF
-    const pdfText = await downloadAndParsePDF(prospectus.link, code);
-    
+
     // 评分
     const scoreResult = scoreProspectus(pdfText, code);
-    
+
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒`);
-    
-    res.json({
+
+    const response = {
       success: true,
-      prospectus: {
-        title: prospectus.title,
-        link: prospectus.link,
-        name: prospectus.name,
-      },
       ...scoreResult,
       elapsed: `${elapsed}s`,
-    });
-    
+    };
+
+    if (prospectusInfo) {
+      response.prospectus = {
+        title: prospectusInfo.title,
+        link: prospectusInfo.link,
+        name: prospectusInfo.name,
+      };
+    }
+
+    res.json(response);
+
   } catch (error) {
     console.error(`[API] 错误: ${error.message}`);
     res.status(500).json({
