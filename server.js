@@ -433,17 +433,34 @@ function matchSponsorName(searchText, sponsorName) {
 }
 
 /**
- * 提取特定章节内容
+ * 提取特定章节内容（智能跳过目录）
+ * @param {string} text - 全文
+ * @param {Array} startPatterns - 开始标记正则数组
+ * @param {Array} endPatterns - 结束标记正则数组
+ * @param {number} maxLength - 最大章节长度
+ * @param {boolean} skipTOC - 是否跳过目录格式（标题后跟. . .）
  */
-function extractSection(text, startPatterns, endPatterns, maxLength = 50000) {
+function extractSection(text, startPatterns, endPatterns, maxLength = 50000, skipTOC = true) {
   for (const sp of startPatterns) {
-    const regex = typeof sp === 'string' ? new RegExp(sp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : sp;
-    const match = text.match(regex);
-    if (match) {
+    const regex = typeof sp === 'string' ? new RegExp(sp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi') : new RegExp(sp.source, 'gi');
+    let match;
+
+    // 使用exec循环找所有匹配，跳过目录格式
+    while ((match = regex.exec(text)) !== null) {
       const start = match.index;
+
+      // 检查是否是目录格式（标题后面跟着连续的点号）
+      if (skipTOC) {
+        const afterMatch = text.slice(start + match[0].length, start + match[0].length + 30);
+        if (/^\s*\.[\s.]*\.[\s.]*\./.test(afterMatch)) {
+          // 这是目录格式，跳过继续找下一个
+          continue;
+        }
+      }
+
+      // 找到正文章节，计算结束位置
       let end = Math.min(start + maxLength, text.length);
-      
-      // 查找结束标记
+
       for (const ep of endPatterns) {
         const endRegex = typeof ep === 'string' ? new RegExp(ep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : ep;
         const afterStart = text.slice(start + match[0].length);
@@ -452,7 +469,7 @@ function extractSection(text, startPatterns, endPatterns, maxLength = 50000) {
           end = Math.min(end, start + match[0].length + endMatch.index);
         }
       }
-      
+
       return text.slice(start, end);
     }
   }
