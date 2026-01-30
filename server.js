@@ -729,11 +729,19 @@ function scoreProspectus(rawText, stockCode) {
   }
   
   // ========== 2. 保荐人评分（限定在特定章节）==========
+  // 保荐人名称可能出现在：
+  // 1. 「參與全球發售的各方」章节（封面后）
+  // 2. 「釋義」章节（定义各方角色）
+  // 3. 招股书概要部分
   const sponsorSection = extractSection(
     text,
-    [/保薦人/i, /保荐人/i, /參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i, /SPONSOR/i],
-    [/概要/i, /SUMMARY/i, /風險因素/i],
-    25000
+    [
+      /參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i,
+      /釋義/i, /释义/i, /DEFINITIONS/i,
+      /保薦人/i, /保荐人/i, /SPONSOR/i
+    ],
+    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i],
+    50000  // 增大搜索范围
   );
 
   const searchTextForSponsor = sponsorSection || text.slice(0, 120000);
@@ -813,9 +821,13 @@ function scoreProspectus(rawText, stockCode) {
     let fallbackSponsors = null;
     let stockCodeFromText = stockCodeMatch ? (stockCodeMatch[1] || stockCodeMatch[2]) : null;
 
-    // 如果从文本提取了股票代码，或者有传入的股票代码参数
-    if (stockCodeFromText) {
-      fallbackSponsors = getSponsorsByStockCode(stockCodeFromText);
+    // 优先使用从文本提取的股票代码，其次使用传入的stockCode参数
+    const codeToUse = stockCodeFromText || stockCode;
+    if (codeToUse) {
+      fallbackSponsors = getSponsorsByStockCode(codeToUse);
+      if (!stockCodeFromText) {
+        stockCodeFromText = stockCode; // 更新用于后续显示
+      }
     }
 
     if (fallbackSponsors && fallbackSponsors.length > 0) {
