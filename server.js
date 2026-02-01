@@ -965,15 +965,15 @@ async function searchProspectus(stockCode) {
                   'Global Offering', 'Hong Kong Public Offering'
                 ];
 
-                // 第2层：快速指纹验证（只下载前500KB，在二进制中搜索文本）
+                // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
                 const quickFingerprintCheck = async (url, stockCode, stockName) => {
                   try {
                     const resp = await axios.get(url, {
                       responseType: 'arraybuffer',
-                      timeout: 30000,
+                      timeout: 15000, // 15秒超时
                       headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Range': 'bytes=0-512000', // 只下载前500KB
+                        'Range': 'bytes=0-102400', // 只下载前100KB
                       },
                     });
 
@@ -1090,7 +1090,7 @@ async function searchProspectus(stockCode) {
 
                 // ========== 快速指纹验证（并行验证前15个）==========
                 // 招股书不一定是最大的文件，需要验证更多候选
-                // 500KB×15=7.5MB并行下载，网络好的情况下几秒完成
+                // 100KB×15=1.5MB并行下载，非常快
                 const topCandidates = candidateUrls.slice(0, 15);
                 console.log(`[搜索] 并行指纹验证前${topCandidates.length}个PDF...`);
 
