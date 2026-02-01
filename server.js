@@ -1082,17 +1082,17 @@ async function searchProspectus(stockCode) {
                   }
                 }
 
-                // 按文件大小降序排序（招股书通常是当天最大的文件）
+                // 按文件大小降序排序，但不完全依赖大小
+                // 招股书通常较大但不一定是最大的
                 candidateUrls.sort((a, b) => b.fileSize - a.fileSize);
 
-                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF，按大小排序后前5个:`);
-                candidateUrls.slice(0, 5).forEach((c, i) => {
-                  console.log(`  ${i + 1}. ${c.url.slice(-40)} (${(c.fileSize / 1024 / 1024).toFixed(1)}MB)`);
-                });
+                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF`);
 
-                // ========== 快速指纹验证（并行，只取前5个最大的）==========
-                console.log(`[搜索] 并行指纹验证前5个最大的PDF...`);
-                const topCandidates = candidateUrls.slice(0, 5);
+                // ========== 快速指纹验证（并行验证前15个）==========
+                // 招股书不一定是最大的文件，需要验证更多候选
+                // 500KB×15=7.5MB并行下载，网络好的情况下几秒完成
+                const topCandidates = candidateUrls.slice(0, 15);
+                console.log(`[搜索] 并行指纹验证前${topCandidates.length}个PDF...`);
 
                 // 并行验证所有候选
                 const validationResults = await Promise.all(
