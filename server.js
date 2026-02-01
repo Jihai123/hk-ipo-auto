@@ -953,59 +953,60 @@ async function searchProspectus(stockCode) {
                   }
                 };
 
-                // 快速验证PDF内容是否属于目标股票（支持pdftotext和pdf-parse双重方案）
+                // 验证PDF内容是否属于目标股票（需下载完整PDF，部分下载的PDF结构不完整无法解析）
                 const validatePdfUrl = async (url, stockCode, stockName) => {
+                  const tempPath = path.join(CACHE_DIR, `validate_${Date.now()}.pdf`);
                   try {
-                    // 下载PDF前200KB内容进行验证
+                    console.log(`[验证URL] 下载: ${url.slice(-40)}`);
                     const resp = await axios.get(url, {
                       responseType: 'arraybuffer',
-                      timeout: 30000,
+                      timeout: 120000, // 2分钟超时（大文件需要更长时间）
                       headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Range': 'bytes=0-204800',
                       },
                     });
 
-                    const tempPath = path.join(CACHE_DIR, `validate_${Date.now()}.pdf`);
                     fs.writeFileSync(tempPath, resp.data);
+                    console.log(`[验证URL] 下载完成: ${(resp.data.byteLength / 1024 / 1024).toFixed(1)}MB`);
 
-                    try {
-                      let text = null;
+                    let text = null;
 
-                      // 方法1: 尝试pdftotext
-                      text = parsePdfWithPdftotext(tempPath);
+                    // 方法1: 尝试pdftotext
+                    text = parsePdfWithPdftotext(tempPath);
 
-                      // 方法2: 如果pdftotext失败，回退到pdf-parse
-                      if (!text || text.length < 100) {
-                        console.log('[验证URL] pdftotext不可用，尝试pdf-parse...');
-                        try {
-                          const pdfData = await pdfParse(resp.data, { max: 5 }); // 只解析前5页
-                          text = pdfData.text;
-                        } catch (parseErr) {
-                          console.log('[验证URL] pdf-parse也失败:', parseErr.message);
-                        }
+                    // 方法2: 如果pdftotext失败，回退到pdf-parse
+                    if (!text || text.length < 100) {
+                      console.log('[验证URL] pdftotext不可用，尝试pdf-parse...');
+                      try {
+                        const pdfData = await pdfParse(resp.data, { max: 10 }); // 解析前10页
+                        text = pdfData.text;
+                      } catch (parseErr) {
+                        console.log('[验证URL] pdf-parse也失败:', parseErr.message);
                       }
+                    }
 
-                      if (text && text.length > 50) {
-                        const codeNum = stockCode.replace(/^0+/, '');
-                        // 检查股票代码
-                        const hasCode = text.includes(codeNum);
-                        // 检查公司名称（支持中英文）
-                        const nameParts = stockName.split(/[-－\s]/);
-                        const hasName = nameParts.some(part => part.length >= 2 && text.includes(part));
-                        // 额外检查：小米的英文名
-                        const hasXiaomi = text.toLowerCase().includes('xiaomi');
+                    if (text && text.length > 50) {
+                      const codeNum = stockCode.replace(/^0+/, '');
+                      // 检查股票代码
+                      const hasCode = text.includes(codeNum);
+                      // 检查公司名称（支持中英文）
+                      const nameParts = stockName.split(/[-－\s]/);
+                      const hasName = nameParts.some(part => part.length >= 2 && text.includes(part));
+                      // 额外检查常见英文名
+                      const textLower = text.toLowerCase();
+                      const hasXiaomi = textLower.includes('xiaomi');
 
-                        console.log(`[验证URL] ${url.slice(-40)}: code=${hasCode}, name=${hasName}, xiaomi=${hasXiaomi}, textLen=${text.length}`);
-                        return hasCode || hasName || hasXiaomi;
-                      }
-                    } finally {
-                      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                      console.log(`[验证URL] 结果: code=${hasCode}, name=${hasName}, xiaomi=${hasXiaomi}, textLen=${text.length}`);
+                      return hasCode || hasName || hasXiaomi;
                     }
                   } catch (e) {
-                    console.log(`[验证URL] 跳过(${e.message}): ${url.slice(-40)}`);
+                    console.log(`[验证URL] 失败: ${e.message}`);
+                  } finally {
+                    if (fs.existsSync(tempPath)) {
+                      try { fs.unlinkSync(tempPath); } catch (e) {}
+                    }
                   }
-                  return false; // 无法验证时返回false，继续尝试下一个
+                  return false;
                 };
 
                 // 收集候选PDF（大于3MB的，增加到20个以覆盖更多日期）
