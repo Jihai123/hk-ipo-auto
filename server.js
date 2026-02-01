@@ -1009,25 +1009,35 @@ async function searchProspectus(stockCode) {
                   return false;
                 };
 
-                // 收集候选PDF（大于3MB的，增加到20个以覆盖更多日期）
+                // 收集候选PDF（大于3MB的）
                 const candidateUrls = [];
                 const batchSize = 20;
-                for (let i = 0; i < probeUrls.length && candidateUrls.length < 20; i += batchSize) {
+                for (let i = 0; i < probeUrls.length && candidateUrls.length < 30; i += batchSize) {
                   const batch = probeUrls.slice(i, i + batchSize);
 
                   for (const url of batch) {
                     const fileSize = checkUrl(url);
                     // 招股书通常较大（至少3MB）
                     if (fileSize > 3000000) {
-                      console.log(`[搜索] 发现候选招股书: ${url} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
                       candidateUrls.push({ url, fileSize });
                     }
                   }
                 }
 
-                // 对候选PDF进行内容验证
-                console.log(`[搜索] 共发现 ${candidateUrls.length} 个候选PDF，开始验证内容...`);
-                for (const candidate of candidateUrls) {
+                // 按文件大小降序排序（招股书通常是当天最大的文件）
+                candidateUrls.sort((a, b) => b.fileSize - a.fileSize);
+
+                // 只显示前10个最大的候选
+                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF，按大小排序后前5个:`);
+                candidateUrls.slice(0, 5).forEach((c, i) => {
+                  console.log(`  ${i + 1}. ${c.url.slice(-40)} (${(c.fileSize / 1024 / 1024).toFixed(1)}MB)`);
+                });
+
+                // 只验证前5个最大的（大大减少下载次数）
+                const topCandidates = candidateUrls.slice(0, 5);
+                console.log(`[搜索] 开始验证前 ${topCandidates.length} 个最大的PDF...`);
+
+                for (const candidate of topCandidates) {
                   const isValid = await validatePdfUrl(candidate.url, formattedCode, stockInfo.n);
                   if (isValid) {
                     console.log(`[搜索] 验证通过: ${candidate.url}`);
@@ -1042,7 +1052,7 @@ async function searchProspectus(stockCode) {
                 }
 
                 if (results.length === 0 && candidateUrls.length > 0) {
-                  console.log('[搜索] 所有候选PDF验证失败，未找到匹配的招股书');
+                  console.log('[搜索] 前5个最大PDF验证失败，可能需要手动查找');
                 }
               }
             } catch (listErr) {
