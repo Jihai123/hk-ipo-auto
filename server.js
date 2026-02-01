@@ -31,6 +31,7 @@ const cheerio = require('cheerio');
 const pdfParse = require('pdf-parse');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -524,6 +525,154 @@ function clearCache(code) {
   return false;
 }
 
+// ==================== PDF解析辅助函数 ====================
+
+/**
+ * 使用pdftotext解析PDF（对中文支持更好）
+ * @param {string} pdfPath - PDF文件路径
+ * @returns {string|null} - 解析的文本内容
+ */
+function parsePdfWithPdftotext(pdfPath) {
+  try {
+    // 使用pdftotext命令行工具，-layout保持布局，-enc UTF-8确保中文编码正确
+    const result = execSync(`pdftotext -layout -enc UTF-8 "${pdfPath}" -`, {
+      encoding: 'utf8',
+      timeout: 300000, // 5分钟超时
+      maxBuffer: 100 * 1024 * 1024, // 100MB输出缓冲
+    });
+    return result;
+  } catch (e) {
+    console.log('[PDF] pdftotext解析失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 验证PDF内容是否属于目标股票
+ * @param {string} text - PDF文本内容
+ * @param {string} stockCode - 目标股票代码（如 "01810"）
+ * @param {string} stockName - 目标股票名称（可选）
+ * @returns {object} - { valid: boolean, confidence: string, reason: string }
+ */
+function validatePdfContent(text, stockCode, stockName = '') {
+  const codeNum = stockCode.replace(/^0+/, ''); // "01810" -> "1810"
+  const formattedCode = stockCode.padStart(5, '0'); // 确保5位格式
+
+  // 检查文本长度
+  if (!text || text.length < 5000) {
+    return { valid: false, confidence: 'none', reason: 'PDF文本内容太少，可能是扫描版或解析失败' };
+  }
+
+  // 统计[]符号的数量，如果太多说明中文解析失败
+  const bracketCount = (text.match(/\[\]/g) || []).length;
+  const textLen = text.length;
+  const bracketRatio = bracketCount / textLen;
+
+  if (bracketRatio > 0.01) {
+    console.log(`[验证] 警告：检测到大量[]符号(${bracketCount}个)，中文可能解析失败`);
+  }
+
+  // 检查股票代码是否出现在文本中
+  // 招股书中通常会提到"股份代號 XXXX"或"Stock Code: XXXX"
+  const codePatterns = [
+    new RegExp(`股份代號[：:]?\\s*${codeNum}`, 'i'),
+    new RegExp(`股票代號[：:]?\\s*${codeNum}`, 'i'),
+    new RegExp(`Stock\\s*Code[：:]?\\s*${codeNum}`, 'i'),
+    new RegExp(`股份代碼[：:]?\\s*${codeNum}`, 'i'),
+    new RegExp(`\\b${codeNum}\\b`), // 单独出现的代码数字
+  ];
+
+  let codeFound = false;
+  for (const pattern of codePatterns) {
+    if (pattern.test(text)) {
+      codeFound = true;
+      console.log(`[验证] 找到股票代码匹配: ${pattern}`);
+      break;
+    }
+  }
+
+  // 检查公司名称是否出现
+  let nameFound = false;
+  if (stockName) {
+    // 对于中文名称，尝试多种形式
+    const nameParts = stockName.split(/[-－\s]/); // 分割名称
+    for (const part of nameParts) {
+      if (part.length >= 2 && text.includes(part)) {
+        nameFound = true;
+        console.log(`[验证] 找到公司名称匹配: ${part}`);
+        break;
+      }
+    }
+  }
+
+  // 综合判断
+  if (codeFound && nameFound) {
+    return { valid: true, confidence: 'high', reason: '股票代码和公司名称均匹配' };
+  } else if (codeFound) {
+    return { valid: true, confidence: 'medium', reason: '股票代码匹配' };
+  } else if (nameFound) {
+    return { valid: true, confidence: 'medium', reason: '公司名称匹配' };
+  } else {
+    // 对于旧股，代码可能未在正文中频繁出现，检查是否为招股书
+    const isProspectus = text.includes('招股章程') || text.includes('招股書') ||
+                         text.includes('Prospectus') || text.includes('全球發售');
+    if (isProspectus) {
+      return { valid: false, confidence: 'low', reason: '是招股书但无法匹配到目标股票，可能是其他公司的招股书' };
+    }
+    return { valid: false, confidence: 'none', reason: '未找到股票代码或公司名称' };
+  }
+}
+
+/**
+ * 快速验证PDF是否可能属于目标股票（通过下载部分内容）
+ * @param {string} pdfUrl - PDF URL
+ * @param {string} stockCode - 目标股票代码
+ * @param {string} stockName - 目标股票名称
+ * @returns {Promise<boolean>} - 是否可能属于目标股票
+ */
+async function quickValidatePdf(pdfUrl, stockCode, stockName) {
+  try {
+    // 下载PDF前50KB内容进行快速验证
+    const response = await axios.get(pdfUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Range': 'bytes=0-51200', // 只下载前50KB
+      },
+    });
+
+    // 将buffer保存为临时文件并用pdftotext解析
+    const tempPdfPath = path.join(CACHE_DIR, `temp_validate_${Date.now()}.pdf`);
+    fs.writeFileSync(tempPdfPath, response.data);
+
+    try {
+      const text = parsePdfWithPdftotext(tempPdfPath);
+      if (text) {
+        const codeNum = stockCode.replace(/^0+/, '');
+        // 检查是否包含股票代码或名称的一部分
+        const hasCode = text.includes(codeNum);
+        const hasName = stockName && stockName.split(/[-－\s]/).some(part =>
+          part.length >= 2 && text.includes(part)
+        );
+
+        console.log(`[快速验证] ${pdfUrl.slice(-30)}: code=${hasCode}, name=${hasName}`);
+        return hasCode || hasName;
+      }
+    } finally {
+      // 清理临时文件
+      if (fs.existsSync(tempPdfPath)) {
+        fs.unlinkSync(tempPdfPath);
+      }
+    }
+  } catch (e) {
+    // 部分下载可能失败（服务器不支持Range），这种情况不做快速验证
+    console.log('[快速验证] 跳过:', e.message);
+  }
+
+  return true; // 无法验证时默认返回true，让后续完整下载再验证
+}
+
 // ==================== 搜索招股书 ====================
 
 /**
@@ -783,9 +932,7 @@ async function searchProspectus(stockCode) {
                   }
                 }
 
-                // 使用curl探测（通过代理更可靠）
-                const { execSync } = require('child_process');
-
+                // 使用curl探测文件大小
                 const checkUrl = (url) => {
                   try {
                     const result = execSync(
@@ -806,25 +953,78 @@ async function searchProspectus(stockCode) {
                   }
                 };
 
-                // 并行探测（每批20个）
+                // 快速验证PDF内容是否属于目标股票
+                const validatePdfUrl = async (url, stockCode, stockName) => {
+                  try {
+                    // 下载PDF前100KB内容进行验证
+                    const resp = await axios.get(url, {
+                      responseType: 'arraybuffer',
+                      timeout: 30000,
+                      headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Range': 'bytes=0-102400',
+                      },
+                    });
+
+                    const tempPath = path.join(CACHE_DIR, `validate_${Date.now()}.pdf`);
+                    fs.writeFileSync(tempPath, resp.data);
+
+                    try {
+                      const text = parsePdfWithPdftotext(tempPath);
+                      if (text) {
+                        const codeNum = stockCode.replace(/^0+/, '');
+                        // 检查股票代码
+                        const hasCode = text.includes(codeNum);
+                        // 检查公司名称
+                        const nameParts = stockName.split(/[-－\s]/);
+                        const hasName = nameParts.some(part => part.length >= 2 && text.includes(part));
+
+                        console.log(`[验证URL] ${url.slice(-40)}: code=${hasCode}, name=${hasName}, textLen=${text.length}`);
+                        return hasCode || hasName;
+                      }
+                    } finally {
+                      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                    }
+                  } catch (e) {
+                    console.log(`[验证URL] 跳过(${e.message}): ${url.slice(-40)}`);
+                  }
+                  return false; // 无法验证时返回false，继续尝试下一个
+                };
+
+                // 收集候选PDF（大于3MB的）
+                const candidateUrls = [];
                 const batchSize = 20;
-                for (let i = 0; i < probeUrls.length && results.length === 0; i += batchSize) {
+                for (let i = 0; i < probeUrls.length && candidateUrls.length < 10; i += batchSize) {
                   const batch = probeUrls.slice(i, i + batchSize);
 
                   for (const url of batch) {
                     const fileSize = checkUrl(url);
                     // 招股书通常较大（至少3MB）
                     if (fileSize > 3000000) {
-                      console.log(`[搜索] 找到可能的招股书: ${url} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
-                      results.push({
-                        title: `${stockInfo.n} 招股章程`,
-                        link: url,
-                        code: formattedCode,
-                        name: stockInfo.n,
-                      });
-                      break;
+                      console.log(`[搜索] 发现候选招股书: ${url} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
+                      candidateUrls.push({ url, fileSize });
                     }
                   }
+                }
+
+                // 对候选PDF进行内容验证
+                console.log(`[搜索] 共发现 ${candidateUrls.length} 个候选PDF，开始验证内容...`);
+                for (const candidate of candidateUrls) {
+                  const isValid = await validatePdfUrl(candidate.url, formattedCode, stockInfo.n);
+                  if (isValid) {
+                    console.log(`[搜索] 验证通过: ${candidate.url}`);
+                    results.push({
+                      title: `${stockInfo.n} 招股章程`,
+                      link: candidate.url,
+                      code: formattedCode,
+                      name: stockInfo.n,
+                    });
+                    break;
+                  }
+                }
+
+                if (results.length === 0 && candidateUrls.length > 0) {
+                  console.log('[搜索] 所有候选PDF验证失败，未找到匹配的招股书');
                 }
               }
             } catch (listErr) {
@@ -849,17 +1049,34 @@ async function searchProspectus(stockCode) {
 // ==================== PDF下载与解析 ====================
 
 /**
- * 下载并解析PDF
+ * 下载并解析PDF（增强版：支持pdftotext + 内容验证）
+ * @param {string} pdfUrl - PDF URL
+ * @param {string} stockCode - 股票代码
+ * @param {string} stockName - 股票名称（用于验证）
+ * @param {boolean} skipValidation - 是否跳过内容验证（默认false）
  */
-async function downloadAndParsePDF(pdfUrl, stockCode) {
+async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValidation = false) {
   // 先检查缓存
   const cached = readCache(stockCode);
   if (cached) {
-    return cached;
+    // 如果有缓存，也要验证内容是否正确
+    if (!skipValidation && stockName) {
+      const validation = validatePdfContent(cached, stockCode, stockName);
+      if (!validation.valid && validation.confidence !== 'none') {
+        console.log(`[缓存] 内容验证失败: ${validation.reason}，将重新下载`);
+        clearCache(stockCode);
+      } else {
+        return cached;
+      }
+    } else {
+      return cached;
+    }
   }
-  
+
   console.log(`[PDF] 下载: ${pdfUrl.substring(0, 80)}...`);
-  
+
+  const tempPdfPath = path.join(CACHE_DIR, `temp_${stockCode}_${Date.now()}.pdf`);
+
   try {
     const response = await axios.get(pdfUrl, {
       responseType: 'arraybuffer',
@@ -870,30 +1087,75 @@ async function downloadAndParsePDF(pdfUrl, stockCode) {
       },
       maxContentLength: 150 * 1024 * 1024, // 最大150MB
     });
-    
+
     const pdfBuffer = response.data;
     console.log(`[PDF] 大小: ${(pdfBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
-    
-    // 解析PDF，最多400页
-    const data = await pdfParse(pdfBuffer, {
-      max: 400,
-    });
-    
-    console.log(`[PDF] 解析完成: ${data.numpages}页, ${data.text.length}字符`);
-    
-    // 检测扫描版PDF
-    if (data.text.length < 5000) {
+
+    // 保存PDF到临时文件
+    fs.writeFileSync(tempPdfPath, pdfBuffer);
+
+    let text = null;
+    let usedPdftotext = false;
+
+    // 方法1: 优先使用pdftotext（对中文支持更好）
+    console.log('[PDF] 尝试使用pdftotext解析...');
+    text = parsePdfWithPdftotext(tempPdfPath);
+
+    if (text && text.length > 10000) {
+      usedPdftotext = true;
+      console.log(`[PDF] pdftotext解析成功: ${text.length}字符`);
+
+      // 检查中文是否正确解析（统计[]符号）
+      const bracketCount = (text.match(/\[\]/g) || []).length;
+      if (bracketCount > 100) {
+        console.log(`[PDF] 警告：pdftotext结果包含${bracketCount}个[]符号，可能有中文丢失`);
+      }
+    } else {
+      // 方法2: 回退到pdf-parse
+      console.log('[PDF] pdftotext失败，回退到pdf-parse...');
+      try {
+        const data = await pdfParse(pdfBuffer, {
+          max: 400,
+        });
+        text = data.text;
+        console.log(`[PDF] pdf-parse解析完成: ${data.numpages}页, ${text.length}字符`);
+      } catch (parseErr) {
+        console.log('[PDF] pdf-parse也失败:', parseErr.message);
+      }
+    }
+
+    // 检测解析结果
+    if (!text || text.length < 5000) {
       throw new Error('PDF可能为扫描版，无法提取文字内容');
     }
-    
+
+    // 内容验证：确保PDF属于目标股票
+    if (!skipValidation) {
+      const validation = validatePdfContent(text, stockCode, stockName);
+      console.log(`[验证] 结果: valid=${validation.valid}, confidence=${validation.confidence}, reason=${validation.reason}`);
+
+      if (!validation.valid) {
+        throw new Error(`PDF内容验证失败: ${validation.reason}。下载的可能不是目标股票(${stockCode})的招股书`);
+      }
+    }
+
     // 写入缓存
-    writeCache(stockCode, data.text);
-    
-    return data.text;
-    
+    writeCache(stockCode, text);
+
+    return text;
+
   } catch (error) {
     console.error('[PDF] 解析失败:', error.message);
     throw new Error(`PDF解析失败: ${error.message}`);
+  } finally {
+    // 清理临时文件
+    if (fs.existsSync(tempPdfPath)) {
+      try {
+        fs.unlinkSync(tempPdfPath);
+      } catch (e) {
+        // 忽略清理失败
+      }
+    }
   }
 }
 
@@ -1757,8 +2019,8 @@ app.get('/api/score/:code', async (req, res) => {
       prospectusInfo = searchResults[0];
       console.log(`[API] 招股书: ${prospectusInfo.title}`);
 
-      // 下载并解析PDF
-      pdfText = await downloadAndParsePDF(prospectusInfo.link, code);
+      // 下载并解析PDF（传递stockName用于内容验证）
+      pdfText = await downloadAndParsePDF(prospectusInfo.link, code, prospectusInfo.name || '');
     }
 
     // 评分
