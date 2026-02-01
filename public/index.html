@@ -946,14 +946,63 @@
         html += `<div><span class="label">评分规则:</span> <span class="highlight">${ev.scoreRule}</span></div>`;
       }
 
-      // 旧股检测
+      // 旧股检测（多层验证）
       if (key === 'oldShares') {
-        if (ev.keyword) {
+        // 显示置信度
+        if (ev.confidence) {
+          const confLabel = ev.confidence === 'very_high' ? '非常高' : ev.confidence === 'high' ? '高' : '低';
+          const confColor = ev.confidence === 'very_high' ? '#22c55e' : ev.confidence === 'high' ? '#3b82f6' : '#71717a';
+          html += `<div><span class="label">置信度:</span> <span class="value" style="color: ${confColor}; font-weight: 600;">${confLabel}</span></div>`;
+        }
+
+        // 显示新股/旧股数量和比例
+        if (ev.newSharesCount && ev.saleSharesCount) {
+          const total = parseInt(ev.newSharesCount) + parseInt(ev.saleSharesCount);
+          const saleRatio = (parseInt(ev.saleSharesCount) / total * 100).toFixed(1);
+          html += `<div style="margin: 10px 0; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">`;
+          html += `<div><span class="label">新股数量:</span> <span class="value">${parseInt(ev.newSharesCount).toLocaleString()} 股</span></div>`;
+          html += `<div><span class="label">旧股数量:</span> <span class="highlight">${parseInt(ev.saleSharesCount).toLocaleString()} 股</span></div>`;
+          html += `<div><span class="label">旧股占比:</span> <span class="highlight" style="color: #ef4444;">${saleRatio}%</span></div>`;
+          html += `</div>`;
+        }
+
+        // 显示多层验证的证据来源
+        if (ev.sources && ev.sources.length > 0) {
+          html += `<div style="margin-top: 12px;"><span class="label">验证来源 (${ev.sources.length}个):</span></div>`;
+          html += `<div style="margin-top: 8px;">`;
+          ev.sources.forEach((src, idx) => {
+            const srcIcon = src.source.includes('全球發售') ? '📋' : src.source.includes('售股股東') ? '👤' : '💰';
+            html += `<div style="margin: 8px 0; padding: 8px; background: rgba(59, 130, 246, 0.08); border-radius: 4px; font-size: 12px;">`;
+            html += `<div style="color: #60a5fa; font-weight: 500;">${srcIcon} ${src.source}</div>`;
+            html += `<div style="margin-top: 4px;"><span style="color: #71717a;">关键词:</span> <span style="color: #fbbf24;">${src.keyword}</span></div>`;
+            if (src.context) {
+              html += `<div style="margin-top: 4px; color: #a1a1aa; font-size: 11px; line-height: 1.5;">"...${src.context.substring(0, 100)}${src.context.length > 100 ? '...' : ''}"</div>`;
+            }
+            html += `</div>`;
+          });
+          html += `</div>`;
+        }
+
+        // 无旧股时显示搜索详情
+        if (ev.searchedSections && ev.searchedSections.length > 0) {
+          html += `<div style="margin-top: 10px;"><span class="label">已检查章节:</span></div>`;
+          html += `<div style="margin: 6px 0 6px 10px; font-size: 12px;">`;
+          ev.searchedSections.forEach(section => {
+            html += `<div style="color: #22c55e;">✓ ${section}</div>`;
+          });
+          html += `</div>`;
+          if (ev.note) {
+            html += `<div style="margin-top: 8px; padding: 8px; background: rgba(34, 197, 94, 0.1); border-radius: 4px; color: #22c55e; font-size: 12px;">✅ ${ev.note}</div>`;
+          }
+        }
+
+        // 兼容旧格式
+        if (ev.keyword && !ev.sources) {
           html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.keyword}</span></div>`;
           if (ev.context) {
             html += `<div class="context">"...${ev.context}..."</div>`;
           }
-        } else if (ev.searchedKeywords) {
+        } else if (ev.searchedKeywords && !ev.searchedSections) {
           html += `<div><span class="label">搜索关键词:</span> <span class="value">${ev.searchedKeywords}</span></div>`;
           html += `<div><span class="label">结果:</span> <span class="value">未找到旧股相关内容</span></div>`;
         }

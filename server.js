@@ -693,42 +693,158 @@ function scoreProspectus(rawText, stockCode) {
     industry: { score: 0, reason: '', details: '', track: '' },
   };
   
-  // ========== 1. 旧股检测（限定在「全球發售」章节）==========
+  // ========== 1. 旧股检测（多层验证：全球發售架構 + 售股股東 + 募集資金用途）==========
+
+  // 检测结果容器
+  let hasOldShares = false;
+  let confidence = 'low';
+  let evidenceList = [];
+  let newSharesCount = null;
+  let saleSharesCount = null;
+
+  // -------- 第一层：《全球發售的架構》章节 --------
+  // 标题变体：全球發售的架構、全球發售的結構、發售結構、全球發售安排、全球發售
   const globalOfferingSection = extractSection(
     text,
-    [/全球發售/i, /全球发售/i, /GLOBAL\s*OFFERING/i],
-    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i],
-    30000
+    [
+      /全球發售的架構/i, /全球發售的結構/i, /全球发售的架构/i, /全球发售的结构/i,
+      /發售結構/i, /发售结构/i, /全球發售安排/i, /全球发售安排/i,
+      /全球發售(?!的架構|的結構|安排)/i, /全球发售(?!的架构|的结构|安排)/i,
+      /GLOBAL\s*OFFERING/i
+    ],
+    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i, /售股股東/i, /募集資金/i],
+    50000
   );
 
-  const oldSharesKeywords = ['銷售股份', '销售股份', '舊股', '旧股', '售股股東', '售股股东', '現有股份', '现有股份'];
-  const searchTextForOldShares = globalOfferingSection || normalizedText.slice(0, 50000);
+  const oldSharesKeywords = ['銷售股份', '销售股份', '售股股東', '售股股东'];
+  const searchTextForOldShares = globalOfferingSection || text.slice(0, 80000);
   const normalizedSearchText = normalizeText(searchTextForOldShares);
 
-  // 查找匹配的关键词和上下文
+  // 在《全球發售》章节查找旧股关键词
   let matchedOldShareKeyword = null;
   let oldShareContext = '';
   for (const kw of oldSharesKeywords) {
     if (normalizedSearchText.includes(normalizeText(kw))) {
       matchedOldShareKeyword = kw;
-      // 提取关键词周围的上下文
-      const kwIndex = text.indexOf(kw);
+      const kwIndex = searchTextForOldShares.indexOf(kw);
       if (kwIndex !== -1) {
-        oldShareContext = text.slice(Math.max(0, kwIndex - 30), Math.min(text.length, kwIndex + 50)).replace(/\s+/g, ' ');
+        oldShareContext = searchTextForOldShares.slice(Math.max(0, kwIndex - 50), Math.min(searchTextForOldShares.length, kwIndex + 80)).replace(/\s+/g, ' ');
       }
       break;
     }
   }
 
   if (matchedOldShareKeyword) {
+    hasOldShares = true;
+    confidence = 'high';
+    evidenceList.push({
+      source: '《全球發售的架構》',
+      keyword: matchedOldShareKeyword,
+      context: oldShareContext,
+    });
+  }
+
+  // 提取新股/旧股数量
+  const newSharesMatch = searchTextForOldShares.match(/([\d,，]+)\s*股新股份/);
+  const saleSharesMatch = searchTextForOldShares.match(/([\d,，]+)\s*股銷售股份/) ||
+                          searchTextForOldShares.match(/([\d,，]+)\s*股销售股份/);
+  if (newSharesMatch) {
+    newSharesCount = newSharesMatch[1].replace(/[,，]/g, '');
+  }
+  if (saleSharesMatch) {
+    saleSharesCount = saleSharesMatch[1].replace(/[,，]/g, '');
+    hasOldShares = true;
+    confidence = 'high';
+    evidenceList.push({
+      source: '《全球發售的架構》数量提取',
+      keyword: '銷售股份数量',
+      context: saleSharesMatch[0],
+    });
+  }
+
+  // -------- 第二层：《售股股東》章节 --------
+  // 这个章节存在即可确认有旧股
+  const sellingShareholderSection = extractSection(
+    text,
+    [
+      /售股股東(?!出售|将|會)/i, /售股股东(?!出售|将|会)/i,
+      /有關售股股東的資料/i, /有关售股股东的资料/i,
+      /售股股東資料/i, /售股股东资料/i,
+      /SELLING\s*SHAREHOLDER/i
+    ],
+    [/風險因素/i, /风险因素/i, /財務資料/i, /财务资料/i, /附錄/i, /附录/i],
+    30000
+  );
+
+  if (sellingShareholderSection && sellingShareholderSection.length > 500) {
+    hasOldShares = true;
+    confidence = 'very_high';
+    // 尝试提取售股股東名称
+    const shareholderContext = sellingShareholderSection.slice(0, 300).replace(/\s+/g, ' ');
+    evidenceList.push({
+      source: '《售股股東》章节存在',
+      keyword: '售股股東专属章节',
+      context: shareholderContext,
+    });
+  }
+
+  // -------- 第三层：《募集資金用途》法律声明 --------
+  // 查找法律确认句："本公司將不會從售股股東出售銷售股份中收取任何所得款項"
+  const useOfProceedsSection = extractSection(
+    text,
+    [
+      /募集資金用途/i, /募集资金用途/i,
+      /全球發售所得款項用途/i, /全球发售所得款项用途/i,
+      /發售所得款項用途/i, /发售所得款项用途/i,
+      /USE\s*OF\s*PROCEEDS/i
+    ],
+    [/風險因素/i, /风险因素/i, /未來計劃/i, /未来计划/i, /股息/i],
+    30000
+  );
+
+  const legalStatementKeywords = [
+    '不會從售股股東出售',
+    '不会从售股股东出售',
+    '將不會從售股股東',
+    '将不会从售股股东',
+    '不會收取.*銷售股份.*所得款項',
+    '售股股東.*所得款項.*歸.*售股股東'
+  ];
+
+  const proceedsSearchText = useOfProceedsSection || text.slice(0, 150000);
+  for (const legalKw of legalStatementKeywords) {
+    const legalRegex = new RegExp(legalKw, 'i');
+    if (legalRegex.test(proceedsSearchText) || legalRegex.test(normalizeText(proceedsSearchText))) {
+      hasOldShares = true;
+      confidence = 'very_high';
+      // 提取匹配上下文
+      const match = proceedsSearchText.match(new RegExp('.{0,30}' + legalKw + '.{0,50}', 'i'));
+      evidenceList.push({
+        source: '《募集資金用途》法律声明',
+        keyword: legalKw,
+        context: match ? match[0].replace(/\s+/g, ' ') : '',
+      });
+      break;
+    }
+  }
+
+  // -------- 汇总旧股检测结果 --------
+  if (hasOldShares) {
+    let details = '存在销售股份，原始股东套现';
+    if (newSharesCount && saleSharesCount) {
+      const total = parseInt(newSharesCount) + parseInt(saleSharesCount);
+      const saleRatio = (parseInt(saleSharesCount) / total * 100).toFixed(1);
+      details = `新股${newSharesCount}股 + 旧股${saleSharesCount}股（旧股占比${saleRatio}%）`;
+    }
     scores.oldShares = {
       score: -2,
       reason: '有旧股发售',
-      details: '存在销售股份/舊股，原始股东套现',
+      details,
       evidence: {
-        keyword: matchedOldShareKeyword,
-        context: oldShareContext,
-        section: globalOfferingSection ? '全球發售章节' : '招股书前50000字',
+        confidence,
+        sources: evidenceList,
+        newSharesCount,
+        saleSharesCount,
       }
     };
   } else {
@@ -737,10 +853,14 @@ function scoreProspectus(rawText, stockCode) {
       reason: '全部新股',
       details: '无旧股发售，募资全部进入公司',
       evidence: {
-        keyword: null,
-        context: '未找到旧股相关关键词',
-        section: globalOfferingSection ? '全球發售章节' : '招股书前50000字',
-        searchedKeywords: oldSharesKeywords.join('、'),
+        confidence: 'high',
+        searchedSections: [
+          globalOfferingSection ? '《全球發售的架構》' : null,
+          sellingShareholderSection ? '《售股股東》' : null,
+          useOfProceedsSection ? '《募集資金用途》' : null,
+        ].filter(Boolean),
+        searchedKeywords: [...oldSharesKeywords, ...legalStatementKeywords.slice(0, 2)].join('、'),
+        note: '三个关键章节均未发现旧股证据',
       }
     };
   }
