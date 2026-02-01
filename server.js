@@ -914,9 +914,9 @@ async function searchProspectus(stockCode) {
                 // 方法3: 直接探测可能的招股书URL（并行探测，加速搜索）
                 console.log('[搜索] 尝试直接探测招股书URL...');
 
-                // 生成上市前5-20天的日期列表
+                // 生成上市前5-35天的日期列表（覆盖更大范围）
                 const probeUrls = [];
-                for (let d = 5; d <= 25; d++) {
+                for (let d = 5; d <= 35; d++) {
                   const probeDate = new Date(ipoDate);
                   probeDate.setDate(probeDate.getDate() - d);
                   const year = probeDate.getFullYear();
@@ -953,16 +953,16 @@ async function searchProspectus(stockCode) {
                   }
                 };
 
-                // 快速验证PDF内容是否属于目标股票
+                // 快速验证PDF内容是否属于目标股票（支持pdftotext和pdf-parse双重方案）
                 const validatePdfUrl = async (url, stockCode, stockName) => {
                   try {
-                    // 下载PDF前100KB内容进行验证
+                    // 下载PDF前200KB内容进行验证
                     const resp = await axios.get(url, {
                       responseType: 'arraybuffer',
                       timeout: 30000,
                       headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Range': 'bytes=0-102400',
+                        'Range': 'bytes=0-204800',
                       },
                     });
 
@@ -970,17 +970,34 @@ async function searchProspectus(stockCode) {
                     fs.writeFileSync(tempPath, resp.data);
 
                     try {
-                      const text = parsePdfWithPdftotext(tempPath);
-                      if (text) {
+                      let text = null;
+
+                      // 方法1: 尝试pdftotext
+                      text = parsePdfWithPdftotext(tempPath);
+
+                      // 方法2: 如果pdftotext失败，回退到pdf-parse
+                      if (!text || text.length < 100) {
+                        console.log('[验证URL] pdftotext不可用，尝试pdf-parse...');
+                        try {
+                          const pdfData = await pdfParse(resp.data, { max: 5 }); // 只解析前5页
+                          text = pdfData.text;
+                        } catch (parseErr) {
+                          console.log('[验证URL] pdf-parse也失败:', parseErr.message);
+                        }
+                      }
+
+                      if (text && text.length > 50) {
                         const codeNum = stockCode.replace(/^0+/, '');
                         // 检查股票代码
                         const hasCode = text.includes(codeNum);
-                        // 检查公司名称
+                        // 检查公司名称（支持中英文）
                         const nameParts = stockName.split(/[-－\s]/);
                         const hasName = nameParts.some(part => part.length >= 2 && text.includes(part));
+                        // 额外检查：小米的英文名
+                        const hasXiaomi = text.toLowerCase().includes('xiaomi');
 
-                        console.log(`[验证URL] ${url.slice(-40)}: code=${hasCode}, name=${hasName}, textLen=${text.length}`);
-                        return hasCode || hasName;
+                        console.log(`[验证URL] ${url.slice(-40)}: code=${hasCode}, name=${hasName}, xiaomi=${hasXiaomi}, textLen=${text.length}`);
+                        return hasCode || hasName || hasXiaomi;
                       }
                     } finally {
                       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -991,10 +1008,10 @@ async function searchProspectus(stockCode) {
                   return false; // 无法验证时返回false，继续尝试下一个
                 };
 
-                // 收集候选PDF（大于3MB的）
+                // 收集候选PDF（大于3MB的，增加到20个以覆盖更多日期）
                 const candidateUrls = [];
                 const batchSize = 20;
-                for (let i = 0; i < probeUrls.length && candidateUrls.length < 10; i += batchSize) {
+                for (let i = 0; i < probeUrls.length && candidateUrls.length < 20; i += batchSize) {
                   const batch = probeUrls.slice(i, i + batchSize);
 
                   for (const url of batch) {
