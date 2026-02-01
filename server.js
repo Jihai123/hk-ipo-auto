@@ -577,27 +577,27 @@ async function searchProspectus(stockCode) {
     // 如果主板没找到，搜索创业板
     if (results.length === 0) {
       console.log('[搜索] 主板未找到，搜索创业板...');
-      
+
       const gemUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/GEM?sc_lang=zh-HK';
       response = await axios.get(gemUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         timeout: 30000,
       });
-      
+
       $ = cheerio.load(response.data);
-      
+
       $('table tr').each((i, row) => {
         const cells = $(row).find('td');
         if (cells.length >= 4) {
           const code = $(cells[0]).text().trim();
           const name = $(cells[1]).text().trim();
           const links = $(cells[3]).find('a');
-          
+
           if (code === codeNum || code === formattedCode) {
             links.each((j, link) => {
               const href = $(link).attr('href');
               const linkText = $(link).text().trim();
-              
+
               if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
                 const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
                 results.push({
@@ -612,7 +612,231 @@ async function searchProspectus(stockCode) {
         }
       });
     }
-    
+
+    // 如果新上市列表都没找到，尝试获取股票上市日期并搜索历史招股书
+    if (results.length === 0) {
+      console.log('[搜索] 新上市列表未找到，尝试获取上市日期...');
+
+      try {
+        // 方法1: 从Yahoo Finance获取首个交易日期
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${codeNum}.HK?interval=1mo&range=max`;
+        const yahooResponse = await axios.get(yahooUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          timeout: 15000,
+        });
+
+        const chartData = yahooResponse.data?.chart?.result?.[0];
+        if (chartData?.timestamp?.length > 0) {
+          const firstTimestamp = chartData.timestamp[0];
+          const ipoDate = new Date(firstTimestamp * 1000);
+          const stockName = chartData.meta?.shortName || chartData.meta?.longName || `股票${formattedCode}`;
+
+          console.log(`[搜索] 上市日期: ${ipoDate.toISOString().slice(0, 10)}, 名称: ${stockName}`);
+
+          // 招股书通常在上市前1-3周发布，搜索上市月份及前一个月
+          const searchDates = [];
+          const ipoMonth = new Date(ipoDate);
+          ipoMonth.setDate(1);
+          searchDates.push(new Date(ipoMonth)); // 上市当月
+
+          const prevMonth = new Date(ipoMonth);
+          prevMonth.setMonth(prevMonth.getMonth() - 1);
+          searchDates.push(prevMonth); // 上市前一个月
+
+          // 使用HKEX日期索引搜索
+          for (const searchDate of searchDates) {
+            const year = searchDate.getFullYear();
+            const month = String(searchDate.getMonth() + 1).padStart(2, '0');
+
+            // 尝试使用披露易的日期搜索接口
+            const dateFrom = `${year}${month}01`;
+            const dateTo = `${year}${month}${new Date(year, searchDate.getMonth() + 1, 0).getDate()}`;
+
+            const searchUrl = 'https://www1.hkexnews.hk/search/titlesearch.xhtml';
+            const searchParams = new URLSearchParams({
+              lang: 'ZH',
+              category: '0',
+              market: 'SEHK',
+              searchType: '1',  // 按股票代码搜索
+              documentType: '-1',
+              t1code: '40000',  // 招股章程类别
+              t2Gcode: '-2',
+              t2code: '-2',
+              stockId: codeNum,
+              from: dateFrom,
+              to: dateTo,
+              sortDir: '0',
+              sortByRecordCountOrDate: '2',
+              rowRange: '100',
+              pageNo: '1',
+            });
+
+            try {
+              response = await axios.post(searchUrl, searchParams.toString(), {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                timeout: 30000,
+              });
+
+              $ = cheerio.load(response.data);
+
+              // 解析搜索结果表格
+              $('table tbody tr').each((i, row) => {
+                const cells = $(row).find('td');
+                if (cells.length >= 4) {
+                  const dateCell = $(cells[0]).text().trim();
+                  const codeCell = $(cells[1]).text().trim();
+                  const nameCell = $(cells[2]).text().trim();
+                  const docCell = $(cells[3]);
+
+                  // 检查是否匹配股票代码
+                  if (codeCell.includes(codeNum) || codeCell.includes(formattedCode)) {
+                    const titleLink = docCell.find('a').first();
+                    const title = titleLink.text().trim();
+                    const href = titleLink.attr('href');
+
+                    if (href && (
+                      title.includes('招股章程') ||
+                      title.includes('招股書') ||
+                      title.includes('Prospectus')
+                    )) {
+                      if (!title.includes('申請版本') && !title.includes('PHIP') && !title.includes('補充')) {
+                        const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                        results.push({
+                          title: title || `${stockName} 招股章程`,
+                          link: pdfUrl,
+                          code: formattedCode,
+                          name: nameCell || stockName,
+                        });
+                      }
+                    }
+                  }
+                }
+              });
+
+              // 同时检查其他可能的选择器
+              $('.row, .result-row').each((i, row) => {
+                const titleEl = $(row).find('.news-title a, .headline a, a[href*=".pdf"]');
+                const title = titleEl.text().trim();
+                const href = titleEl.attr('href');
+
+                if (title && href && (
+                  title.includes('招股章程') ||
+                  title.includes('Prospectus')
+                )) {
+                  if (!title.includes('申請版本') && !title.includes('PHIP')) {
+                    const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                    if (!results.find(r => r.link === pdfUrl)) {
+                      results.push({
+                        title: title,
+                        link: pdfUrl,
+                        code: formattedCode,
+                        name: stockName,
+                      });
+                    }
+                  }
+                }
+              });
+
+              if (results.length > 0) break;
+            } catch (err) {
+              console.log(`[搜索] ${year}/${month} 搜索失败:`, err.message);
+            }
+          }
+
+          // 方法2: 如果仍未找到，尝试直接获取上市公司公告JSON列表
+          if (results.length === 0) {
+            console.log('[搜索] 尝试获取活跃股票列表...');
+            try {
+              const stockListUrl = 'https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json';
+              const stockListResp = await axios.get(stockListUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                timeout: 30000,
+              });
+
+              const stockList = stockListResp.data;
+              const stockInfo = stockList.find(s => s.c === formattedCode || s.c === codeNum);
+
+              if (stockInfo) {
+                console.log(`[搜索] 找到股票信息: ${stockInfo.n} (${stockInfo.c})`);
+
+                // 方法3: 直接探测可能的招股书URL（并行探测，加速搜索）
+                console.log('[搜索] 尝试直接探测招股书URL...');
+
+                // 生成上市前5-20天的日期列表
+                const probeUrls = [];
+                for (let d = 5; d <= 25; d++) {
+                  const probeDate = new Date(ipoDate);
+                  probeDate.setDate(probeDate.getDate() - d);
+                  const year = probeDate.getFullYear();
+                  const month = String(probeDate.getMonth() + 1).padStart(2, '0');
+                  const day = String(probeDate.getDate()).padStart(2, '0');
+                  const mmdd = `${month}${day}`;
+
+                  // 每天尝试序号 001-050（招股书序号可能较大）
+                  for (let seq = 1; seq <= 50; seq++) {
+                    const seqStr = String(seq).padStart(3, '0');
+                    // 使用www域名（更稳定）
+                    probeUrls.push(`https://www.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/ltn${year}${mmdd}${seqStr}_c.pdf`);
+                  }
+                }
+
+                // 使用curl探测（通过代理更可靠）
+                const { execSync } = require('child_process');
+
+                const checkUrl = (url) => {
+                  try {
+                    const result = execSync(
+                      `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 5 --max-time 10`,
+                      { encoding: 'utf8', timeout: 15000 }
+                    );
+                    const rangeMatch = result.match(/content-range:\s*bytes\s*\d+-\d+\/(\d+)/i);
+                    if (rangeMatch) {
+                      return parseInt(rangeMatch[1]);
+                    }
+                    const lengthMatch = result.match(/content-length:\s*(\d+)/i);
+                    if (lengthMatch && result.toLowerCase().includes('200')) {
+                      return parseInt(lengthMatch[1]);
+                    }
+                    return 0;
+                  } catch (e) {
+                    return 0;
+                  }
+                };
+
+                // 并行探测（每批20个）
+                const batchSize = 20;
+                for (let i = 0; i < probeUrls.length && results.length === 0; i += batchSize) {
+                  const batch = probeUrls.slice(i, i + batchSize);
+
+                  for (const url of batch) {
+                    const fileSize = checkUrl(url);
+                    // 招股书通常较大（至少3MB）
+                    if (fileSize > 3000000) {
+                      console.log(`[搜索] 找到可能的招股书: ${url} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
+                      results.push({
+                        title: `${stockInfo.n} 招股章程`,
+                        link: url,
+                        code: formattedCode,
+                        name: stockInfo.n,
+                      });
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch (listErr) {
+              console.log('[搜索] 获取股票列表失败:', listErr.message);
+            }
+          }
+        }
+      } catch (yahooErr) {
+        console.log('[搜索] Yahoo Finance查询失败:', yahooErr.message);
+      }
+    }
+
     console.log(`[搜索] 找到 ${results.length} 个结果`);
     return results;
     
