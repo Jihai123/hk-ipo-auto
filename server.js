@@ -1082,30 +1082,47 @@ async function searchProspectus(stockCode) {
                   }
                 }
 
-                // 按文件大小降序排序，但不完全依赖大小
-                // 招股书通常较大但不一定是最大的
-                candidateUrls.sort((a, b) => b.fileSize - a.fileSize);
+                // 从URL中提取日期并计算与上市日期的天数差
+                const extractDateFromUrl = (url) => {
+                  const match = url.match(/\/(\d{4})\/(\d{2})(\d{2})\//);
+                  if (match) {
+                    return new Date(match[1], parseInt(match[2]) - 1, parseInt(match[3]));
+                  }
+                  return null;
+                };
 
-                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF`);
+                // 计算候选日期与上市日期的差距，并标记
+                candidateUrls.forEach(c => {
+                  const pdfDate = extractDateFromUrl(c.url);
+                  if (pdfDate) {
+                    c.daysBefore = Math.round((ipoDate - pdfDate) / (1000 * 60 * 60 * 24));
+                  } else {
+                    c.daysBefore = 999;
+                  }
+                });
 
-                // ========== 快速指纹验证（并行验证前15个）==========
-                // 招股书不一定是最大的文件，需要验证更多候选
-                // 100KB×15=1.5MB并行下载，非常快
-                const topCandidates = candidateUrls.slice(0, 15);
-                console.log(`[搜索] 并行指纹验证前${topCandidates.length}个PDF...`);
+                // 按照"接近理想发布日期"排序：招股书通常在上市前7-14天发布
+                // 优先验证 daysBefore 在 10-15 天范围内的（越接近12天越优先）
+                candidateUrls.sort((a, b) => {
+                  const idealDays = 12; // 理想是上市前12天
+                  const aDiff = Math.abs(a.daysBefore - idealDays);
+                  const bDiff = Math.abs(b.daysBefore - idealDays);
+                  return aDiff - bDiff;
+                });
 
-                // 并行验证所有候选
-                const validationResults = await Promise.all(
-                  topCandidates.map(async (candidate) => {
-                    const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
-                    return { candidate, result };
-                  })
-                );
+                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF，按发布日期排序后前5个:`);
+                candidateUrls.slice(0, 5).forEach((c, i) => {
+                  console.log(`  ${i + 1}. ${c.url.slice(-40)} (${(c.fileSize / 1024 / 1024).toFixed(1)}MB, 上市前${c.daysBefore}天)`);
+                });
 
-                // 找到第一个通过指纹验证的（按大小顺序）
-                for (const { candidate, result } of validationResults) {
-                  if (result === true) {
-                    console.log(`[搜索] ✓ 指纹验证通过: ${candidate.url}`);
+                // ========== 逐个完整验证（按日期优先顺序）==========
+                // 最多验证5个，找到就停止
+                console.log(`[搜索] 开始逐个验证...`);
+                for (const candidate of candidateUrls.slice(0, 5)) {
+                  console.log(`[验证] ${candidate.url.slice(-40)} (上市前${candidate.daysBefore}天)`);
+                  const isValid = await fullValidation(candidate.url, formattedCode, stockInfo.n);
+                  if (isValid) {
+                    console.log(`[搜索] ✓ 验证通过: ${candidate.url}`);
                     results.push({
                       title: `${stockInfo.n} 招股章程`,
                       link: candidate.url,
@@ -1117,7 +1134,7 @@ async function searchProspectus(stockCode) {
                 }
 
                 if (results.length === 0 && candidateUrls.length > 0) {
-                  console.log('[搜索] 所有候选指纹验证失败，可能需要手动查找');
+                  console.log('[搜索] 前5个候选验证失败，可能需要手动查找');
                 }
               }
             } catch (listErr) {
