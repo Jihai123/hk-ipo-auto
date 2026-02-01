@@ -1090,44 +1090,34 @@ async function searchProspectus(stockCode) {
                   console.log(`  ${i + 1}. ${c.url.slice(-40)} (${(c.fileSize / 1024 / 1024).toFixed(1)}MB)`);
                 });
 
-                // ========== 应用三层过滤 ==========
-                // 第2层：快速指纹验证（只下载500KB）
-                console.log(`[搜索] 第2层：快速指纹验证...`);
-                const fingerprintPassed = [];
+                // ========== 快速指纹验证（并行，只取前5个最大的）==========
+                console.log(`[搜索] 并行指纹验证前5个最大的PDF...`);
+                const topCandidates = candidateUrls.slice(0, 5);
 
-                for (const candidate of candidateUrls.slice(0, 10)) {
-                  const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
+                // 并行验证所有候选
+                const validationResults = await Promise.all(
+                  topCandidates.map(async (candidate) => {
+                    const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
+                    return { candidate, result };
+                  })
+                );
+
+                // 找到第一个通过指纹验证的（按大小顺序）
+                for (const { candidate, result } of validationResults) {
                   if (result === true) {
-                    fingerprintPassed.push(candidate);
-                    console.log(`[搜索] 指纹命中: ${candidate.url.slice(-40)}`);
-                  } else if (result === null) {
-                    // Range不支持，加入待完整验证列表
-                    fingerprintPassed.push({ ...candidate, needFullValidation: true });
-                  }
-                  // result === false 表示不是目标招股书，跳过
-                }
-
-                // 第3层：对指纹通过的进行完整验证
-                if (fingerprintPassed.length > 0) {
-                  console.log(`[搜索] 第3层：${fingerprintPassed.length} 个候选通过指纹验证，开始完整验证...`);
-
-                  for (const candidate of fingerprintPassed) {
-                    const isValid = await fullValidation(candidate.url, formattedCode, stockInfo.n);
-                    if (isValid) {
-                      console.log(`[搜索] ✓ 验证通过: ${candidate.url}`);
-                      results.push({
-                        title: `${stockInfo.n} 招股章程`,
-                        link: candidate.url,
-                        code: formattedCode,
-                        name: stockInfo.n,
-                      });
-                      break;
-                    }
+                    console.log(`[搜索] ✓ 指纹验证通过: ${candidate.url}`);
+                    results.push({
+                      title: `${stockInfo.n} 招股章程`,
+                      link: candidate.url,
+                      code: formattedCode,
+                      name: stockInfo.n,
+                    });
+                    break;
                   }
                 }
 
                 if (results.length === 0 && candidateUrls.length > 0) {
-                  console.log('[搜索] 所有候选验证失败，可能需要手动查找');
+                  console.log('[搜索] 所有候选指纹验证失败，可能需要手动查找');
                 }
               }
             } catch (listErr) {
