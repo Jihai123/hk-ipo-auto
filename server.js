@@ -280,8 +280,14 @@ const HOT_TRACKS = [
   '機器學習','机器学习','深度學習','深度学习','AI應用','AI应用','AI芯片','AI晶片',
   '機器人','机器人','人形機器人','人形机器人','具身智能','機器人關節','機器人減速器',
   '自動駕駛','自动驾驶','智能駕駛','智能驾驶','車聯網','车联网','Robotaxi',
+  // 半导体/芯片相关
   '半導體','半导体','芯片','晶片','GPU','ASIC','EDA','先進封裝','先进封装','國產替代','国产替代',
+  '高速互連','高速互联','互連芯片','互联芯片','DDR5','PCIe','CXL','SerDes',
+  '存儲芯片','存储芯片','內存芯片','内存芯片','NAND','DRAM','HDD','SSD',
+  '模擬芯片','模拟芯片','射頻芯片','射频芯片','FPGA','MCU','SoC',
+  // 创新药相关
   '創新藥','创新药','ADC','CAR-T','mRNA','雙抗','双抗','PROTAC','RNAi',
+  // 低空经济/航天
   '低空經濟','低空经济','eVTOL','飛行汽車','无人机','UAV',
   '衛星互聯網','商业航天'
 ];
@@ -299,11 +305,17 @@ const GROWTH_TRACKS = [
 
 // -1 低弹性赛道
 const LOW_ELASTICITY_TRACKS = [
-  '食品加工','飲料','调味品','乳制品','酒类',
-  '機械製造','工业设备','包装','印刷',
-  '水务','燃气','电力','环保',
-  '建材','水泥','玻璃','钢铁','铝业',
-  '物流','航运','港口','机场'
+  // 食品饮料
+  '食品','食品加工','飲料','饮料','调味品','乳制品','酒类','零食','糖果','烘焙',
+  '餐飲','餐饮','快餐','團餐','团餐','預製菜','预制菜',
+  // 传统制造
+  '機械製造','工业设备','包装','印刷','造紙','造纸',
+  // 公用事业
+  '水务','燃气','电力','环保','污水處理','污水处理','垃圾處理',
+  // 建材
+  '建材','水泥','玻璃','钢铁','铝业','陶瓷',
+  // 物流运输
+  '物流','航运','港口','机场','货运','快遞','快递'
 ];
 
 
@@ -1234,139 +1246,123 @@ function scoreProspectus(rawText, stockCode) {
     industry: { score: 0, reason: '', details: '', track: '' },
   };
   
-  // ========== 1. 旧股检测（多层验证：全球發售架構 + 售股股東 + 募集資金用途）==========
+  // ========== 1. 旧股检测（优化版：基于PDF前几页的全球發售章节精准定位）==========
+  // 核心判断逻辑：
+  // - 在PDF前几页（约前20000字符）的"全球發售"区域查找"全球發售的發售股份數目"
+  // - 如果该句包含"銷售股份"则有旧股，否则无旧股
+  // - 示例：小米"包括 1,434,440,000 股新 B 類股份及 745,145,000 股銷售股份" → 有旧股
+  // - 示例：卓正"全球發售的發售股份數目：4,750,000 股股份" → 无旧股
 
-  // 检测结果容器
   let hasOldShares = false;
   let confidence = 'low';
   let evidenceList = [];
   let newSharesCount = null;
   let saleSharesCount = null;
+  let globalOfferingStatement = ''; // 存储"全球發售的發售股份數目"原文
 
-  // -------- 第一层：《全球發售的架構》章节 --------
-  // 标题变体：全球發售的架構、全球發售的結構、發售結構、全球發售安排、全球發售
-  const globalOfferingSection = extractSection(
-    text,
-    [
-      /全球發售的架構/i, /全球發售的結構/i, /全球发售的架构/i, /全球发售的结构/i,
-      /發售結構/i, /发售结构/i, /全球發售安排/i, /全球发售安排/i,
-      /全球發售(?!的架構|的結構|安排)/i, /全球发售(?!的架构|的结构|安排)/i,
-      /GLOBAL\s*OFFERING/i
-    ],
-    [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i, /售股股東/i, /募集資金/i],
-    50000
-  );
+  // -------- 第一层：PDF前几页的"全球發售的發售股份數目"精准定位 --------
+  // 招股书前几页（通常第2页）会有类似格式：
+  // "全球發售的發售股份數目：XXX股股份（包括XXX股新股份及XXX股銷售股份）"
+  const frontPages = text.slice(0, 25000); // 前25000字符约前几页
 
-  const oldSharesKeywords = ['銷售股份', '销售股份', '售股股東', '售股股东'];
-  const searchTextForOldShares = globalOfferingSection || text.slice(0, 80000);
-  const normalizedSearchText = normalizeText(searchTextForOldShares);
+  // 查找"全球發售的發售股份數目"这一行
+  const offeringStatementPatterns = [
+    /全球發售的發售股份數目[：:]\s*([^\n]+)/i,
+    /全球发售的发售股份数目[：:]\s*([^\n]+)/i,
+    /全球發售\s*發售股份數目[：:]\s*([^\n]+)/i,
+    /發售股份數目[：:]\s*([\d,，]+\s*股[^\n]+)/i,
+  ];
 
-  // 在《全球發售》章节查找旧股关键词
-  let matchedOldShareKeyword = null;
-  let oldShareContext = '';
-  for (const kw of oldSharesKeywords) {
-    if (normalizedSearchText.includes(normalizeText(kw))) {
-      matchedOldShareKeyword = kw;
-      const kwIndex = searchTextForOldShares.indexOf(kw);
-      if (kwIndex !== -1) {
-        oldShareContext = searchTextForOldShares.slice(Math.max(0, kwIndex - 50), Math.min(searchTextForOldShares.length, kwIndex + 80)).replace(/\s+/g, ' ');
+  for (const pattern of offeringStatementPatterns) {
+    const match = frontPages.match(pattern);
+    if (match) {
+      globalOfferingStatement = match[0].replace(/\s+/g, ' ').trim();
+      // 检查是否包含"銷售股份"
+      if (/銷售股份|销售股份/.test(globalOfferingStatement)) {
+        hasOldShares = true;
+        confidence = 'very_high';
+        evidenceList.push({
+          source: '全球發售（PDF前几页）',
+          keyword: '銷售股份',
+          context: globalOfferingStatement,
+        });
+
+        // 提取数量
+        const saleMatch = globalOfferingStatement.match(/([\d,，]+)\s*股銷售股份|([\d,，]+)\s*股销售股份/);
+        const newMatch = globalOfferingStatement.match(/([\d,，]+)\s*股新[^股]*股份|([\d,，]+)\s*股新股/);
+        if (saleMatch) {
+          saleSharesCount = (saleMatch[1] || saleMatch[2]).replace(/[,，]/g, '');
+        }
+        if (newMatch) {
+          newSharesCount = (newMatch[1] || newMatch[2]).replace(/[,，]/g, '');
+        }
+      } else {
+        // 找到了发售股份数目声明，但没有銷售股份 → 确认无旧股
+        confidence = 'very_high';
+        evidenceList.push({
+          source: '全球發售（PDF前几页）',
+          keyword: '无銷售股份',
+          context: globalOfferingStatement,
+        });
       }
       break;
     }
   }
 
-  if (matchedOldShareKeyword) {
-    hasOldShares = true;
-    confidence = 'high';
-    evidenceList.push({
-      source: '《全球發售的架構》',
-      keyword: matchedOldShareKeyword,
-      context: oldShareContext,
-    });
+  // -------- 第二层：如果第一层未找到，在全球發售章节扩大搜索 --------
+  if (!globalOfferingStatement) {
+    const globalOfferingSection = extractSection(
+      text,
+      [
+        /全球發售的架構/i, /全球發售的結構/i, /全球发售的架构/i,
+        /全球發售(?!的架構)/i, /全球发售(?!的架构)/i,
+        /GLOBAL\s*OFFERING/i
+      ],
+      [/風險因素/i, /风险因素/i, /RISK\s*FACTORS/i, /售股股東/i],
+      50000
+    );
+
+    const searchTextForOldShares = globalOfferingSection || text.slice(0, 80000);
+    const oldSharesKeywords = ['銷售股份', '销售股份'];
+
+    for (const kw of oldSharesKeywords) {
+      if (searchTextForOldShares.includes(kw)) {
+        hasOldShares = true;
+        confidence = 'high';
+        const kwIndex = searchTextForOldShares.indexOf(kw);
+        const oldShareContext = searchTextForOldShares.slice(
+          Math.max(0, kwIndex - 50),
+          Math.min(searchTextForOldShares.length, kwIndex + 80)
+        ).replace(/\s+/g, ' ');
+        evidenceList.push({
+          source: '《全球發售的架構》章节',
+          keyword: kw,
+          context: oldShareContext,
+        });
+        break;
+      }
+    }
   }
 
-  // 提取新股/旧股数量
-  const newSharesMatch = searchTextForOldShares.match(/([\d,，]+)\s*股新股份/);
-  const saleSharesMatch = searchTextForOldShares.match(/([\d,，]+)\s*股銷售股份/) ||
-                          searchTextForOldShares.match(/([\d,，]+)\s*股销售股份/);
-  if (newSharesMatch) {
-    newSharesCount = newSharesMatch[1].replace(/[,，]/g, '');
-  }
-  if (saleSharesMatch) {
-    saleSharesCount = saleSharesMatch[1].replace(/[,，]/g, '');
-    hasOldShares = true;
-    confidence = 'high';
-    evidenceList.push({
-      source: '《全球發售的架構》数量提取',
-      keyword: '銷售股份数量',
-      context: saleSharesMatch[0],
-    });
-  }
-
-  // -------- 第二层：《售股股東》章节 --------
-  // 这个章节存在即可确认有旧股
+  // -------- 第三层：检查《售股股東》章节是否存在 --------
   const sellingShareholderSection = extractSection(
     text,
-    [
-      /售股股東(?!出售|将|會)/i, /售股股东(?!出售|将|会)/i,
-      /有關售股股東的資料/i, /有关售股股东的资料/i,
-      /售股股東資料/i, /售股股东资料/i,
-      /SELLING\s*SHAREHOLDER/i
-    ],
-    [/風險因素/i, /风险因素/i, /財務資料/i, /财务资料/i, /附錄/i, /附录/i],
+    [/售股股東(?!出售)/i, /售股股东(?!出售)/i, /SELLING\s*SHAREHOLDER/i],
+    [/風險因素/i, /财务资料/i, /附錄/i],
     30000
   );
 
   if (sellingShareholderSection && sellingShareholderSection.length > 500) {
-    hasOldShares = true;
-    confidence = 'very_high';
-    // 尝试提取售股股東名称
+    if (!hasOldShares) {
+      hasOldShares = true;
+      confidence = 'very_high';
+    }
     const shareholderContext = sellingShareholderSection.slice(0, 300).replace(/\s+/g, ' ');
     evidenceList.push({
       source: '《售股股東》章节存在',
       keyword: '售股股東专属章节',
       context: shareholderContext,
     });
-  }
-
-  // -------- 第三层：《募集資金用途》法律声明 --------
-  // 查找法律确认句："本公司將不會從售股股東出售銷售股份中收取任何所得款項"
-  const useOfProceedsSection = extractSection(
-    text,
-    [
-      /募集資金用途/i, /募集资金用途/i,
-      /全球發售所得款項用途/i, /全球发售所得款项用途/i,
-      /發售所得款項用途/i, /发售所得款项用途/i,
-      /USE\s*OF\s*PROCEEDS/i
-    ],
-    [/風險因素/i, /风险因素/i, /未來計劃/i, /未来计划/i, /股息/i],
-    30000
-  );
-
-  const legalStatementKeywords = [
-    '不會從售股股東出售',
-    '不会从售股股东出售',
-    '將不會從售股股東',
-    '将不会从售股股东',
-    '不會收取.*銷售股份.*所得款項',
-    '售股股東.*所得款項.*歸.*售股股東'
-  ];
-
-  const proceedsSearchText = useOfProceedsSection || text.slice(0, 150000);
-  for (const legalKw of legalStatementKeywords) {
-    const legalRegex = new RegExp(legalKw, 'i');
-    if (legalRegex.test(proceedsSearchText) || legalRegex.test(normalizeText(proceedsSearchText))) {
-      hasOldShares = true;
-      confidence = 'very_high';
-      // 提取匹配上下文
-      const match = proceedsSearchText.match(new RegExp('.{0,30}' + legalKw + '.{0,50}', 'i'));
-      evidenceList.push({
-        source: '《募集資金用途》法律声明',
-        keyword: legalKw,
-        context: match ? match[0].replace(/\s+/g, ' ') : '',
-      });
-      break;
-    }
   }
 
   // -------- 汇总旧股检测结果 --------
@@ -1384,6 +1380,7 @@ function scoreProspectus(rawText, stockCode) {
       evidence: {
         confidence,
         sources: evidenceList,
+        originalStatement: globalOfferingStatement,
         newSharesCount,
         saleSharesCount,
       }
@@ -1394,81 +1391,177 @@ function scoreProspectus(rawText, stockCode) {
       reason: '全部新股',
       details: '无旧股发售，募资全部进入公司',
       evidence: {
-        confidence: 'high',
-        searchedSections: [
-          globalOfferingSection ? '《全球發售的架構》' : null,
-          sellingShareholderSection ? '《售股股東》' : null,
-          useOfProceedsSection ? '《募集資金用途》' : null,
-        ].filter(Boolean),
-        searchedKeywords: [...oldSharesKeywords, ...legalStatementKeywords.slice(0, 2)].join('、'),
-        note: '三个关键章节均未发现旧股证据',
+        confidence: confidence || 'high',
+        originalStatement: globalOfferingStatement || '未找到明确的发售股份数目声明',
+        sources: evidenceList,
+        note: '未在全球發售章节发现銷售股份关键词',
       }
     };
   }
   
-  // ========== 2. 保荐人评分 ==========
-  // 保荐人名称来源：
-  // 1. 釋義章节中的定义格式：「聯席保薦人」指 XXX公司
-  // 2. 參與全球發售的各方章节
-  // 3. 招股书前半部分
+  // ========== 2. 保荐人评分（优化版：基于章节精准定位）==========
+  // 核心判断逻辑：
+  // - 限定在"董事及參與全球發售的各方"或"參與全球發售的各方"章节中识别
+  // - 查找"聯席保薦人"或"獨家保薦人"后面跟的公司名称
+  // - 输出：保荐人名称、保荐数量、首日涨幅、证据原文
 
-  // 策略1: 查找「...保薦人」指 这种定义格式（最可靠）
   let sponsorSection = '';
-  const sponsorDefMatch = text.match(/「[聯席獨家]*保薦人」[指是為]/i);
-  if (sponsorDefMatch) {
-    // 从定义位置向前后各取一定范围
-    const defStart = Math.max(0, sponsorDefMatch.index - 5000);
-    const defEnd = Math.min(text.length, sponsorDefMatch.index + 10000);
-    sponsorSection = text.slice(defStart, defEnd);
-  }
+  let sponsorSectionTitle = '';
+  let extractedSponsors = []; // 从文本中直接提取的保荐人名称
 
-  // 策略2: 如果没找到定义格式，尝试章节提取
-  if (!sponsorSection || sponsorSection.length < 1000) {
-    const altSection = extractSection(
-      text,
-      [/參與全球發售的各方/i, /参与全球发售的各方/i, /PARTIES\s*INVOLVED/i],
-      [/董事/i, /概要/i, /SUMMARY/i],
-      30000
-    );
-    if (altSection) {
-      sponsorSection = altSection;
+  // -------- 策略1: 在"參與全球發售的各方"章节中精准提取 --------
+  const partiesSection = extractSection(
+    text,
+    [
+      /董事及參與全球發售的各方/i,
+      /參與全球發售的各方/i,
+      /参与全球发售的各方/i,
+      /PARTIES\s*INVOLVED/i
+    ],
+    [
+      /公司資料/i, /公司资料/i,
+      /行業概覽/i, /行业概览/i,
+      /監管概覽/i, /监管概览/i,
+      /CORPORATE\s*INFORMATION/i,
+      /INDUSTRY\s*OVERVIEW/i
+    ],
+    40000,
+    true // 跳过目录
+  );
+
+  if (partiesSection && partiesSection.length > 200) {
+    sponsorSection = partiesSection;
+    sponsorSectionTitle = '參與全球發售的各方';
+
+    // 从章节中提取保荐人名称
+    // 格式1: "聯席保薦人 XXX公司\n地址"
+    // 格式2: "獨家保薦人 XXX公司"
+    const sponsorPatterns = [
+      /(?:聯席保薦人|獨家保薦人|联席保荐人|独家保荐人)\s*[（(]?[^）)]*[）)]?\s*([^\n]+有限公司)/gi,
+      /(?:聯席保薦人|獨家保薦人)\s*\n\s*([^\n]+有限公司)/gi,
+      /(?:聯席保薦人|獨家保薦人)[：:]\s*([^\n]+)/gi,
+    ];
+
+    for (const pattern of sponsorPatterns) {
+      let match;
+      while ((match = pattern.exec(sponsorSection)) !== null) {
+        const sponsorName = match[1].trim()
+          .replace(/\s+/g, '')
+          .replace(/香港$/, '')
+          .replace(/^[（(][^）)]+[）)]\s*/, ''); // 去除括号内的英文排序说明
+
+        // 验证是否是有效的公司名称（含有"公司"或常见保荐人关键词）
+        if (sponsorName.length >= 4 &&
+            (sponsorName.includes('公司') ||
+             sponsorName.includes('Limited') ||
+             /證券|证券|資本|资本|融資|融资|金融|投資|投资/.test(sponsorName))) {
+          if (!extractedSponsors.includes(sponsorName)) {
+            extractedSponsors.push(sponsorName);
+          }
+        }
+      }
     }
   }
 
-  // 策略3: 兜底使用招股书前12万字
-  if (!sponsorSection || sponsorSection.length < 1000) {
+  // -------- 策略2: 在釋義章节查找定义格式 --------
+  if (extractedSponsors.length === 0) {
+    // 查找「聯席保薦人」指 XXX 的定义格式
+    const defPatterns = [
+      /「聯席保薦人」\s*指\s*([^「」]+?)(?=「|$)/gi,
+      /「獨家保薦人」\s*指\s*([^「」]+?)(?=「|$)/gi,
+      /「联席保荐人」\s*指\s*([^「」]+?)(?=「|$)/gi,
+    ];
+
+    for (const pattern of defPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const defText = match[1];
+        sponsorSectionTitle = '釋義章节';
+        // 解析保荐人名称（可能用"、"或"及"分隔）
+        const names = defText.split(/[、及和,，]/);
+        for (const name of names) {
+          const cleanName = name.trim()
+            .replace(/\s+/g, '')
+            .replace(/[（(][^）)]*[）)]$/, ''); // 去除尾部括号
+          if (cleanName.length >= 4 &&
+              (cleanName.includes('公司') || cleanName.includes('Limited'))) {
+            if (!extractedSponsors.includes(cleanName)) {
+              extractedSponsors.push(cleanName);
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // -------- 策略3: 兜底 - 在全文搜索保荐人关键词 --------
+  if (extractedSponsors.length === 0) {
     sponsorSection = text.slice(0, 120000);
+    sponsorSectionTitle = '招股书前120000字（兜底）';
   }
 
   const searchTextForSponsor = sponsorSection || text.slice(0, 120000);
-  const normalizedSponsorText = normalizeText(searchTextForSponsor);
   const foundSponsors = [];
 
-  // 遍历保荐人数据库查找匹配
-  for (const [name, data] of Object.entries(SPONSORS)) {
-    if (matchSponsorName(searchTextForSponsor, name)) {
-      // 避免重复（同一保荐人可能有多个名称）
-      if (!foundSponsors.some(s => Math.abs(s.rate - data.rate) < 0.01 && s.count === data.count)) {
-        // 提取匹配上下文
-        const nameIndex = searchTextForSponsor.indexOf(name);
-        // 尝试找核心名称
-        const coreName = name.replace(/有限公司$/, '').replace(/有限責任公司$/, '');
-        const coreIndex = nameIndex === -1 ? searchTextForSponsor.indexOf(coreName) : nameIndex;
-        const matchedName = nameIndex !== -1 ? name : coreName;
-        const context = coreIndex !== -1
-          ? searchTextForSponsor.slice(Math.max(0, coreIndex - 20), Math.min(searchTextForSponsor.length, coreIndex + matchedName.length + 30)).replace(/\s+/g, ' ')
-          : '';
-        foundSponsors.push({ name, ...data, matchContext: context });
+  // 如果已从文本中提取到保荐人名称，优先使用这些名称在数据库中查找业绩
+  if (extractedSponsors.length > 0) {
+    for (const extractedName of extractedSponsors) {
+      // 在保荐人数据库中查找匹配
+      let matched = false;
+      for (const [dbName, data] of Object.entries(SPONSORS)) {
+        if (matchSponsorName(extractedName, dbName) || matchSponsorName(dbName, extractedName)) {
+          // 找到匹配的保荐人数据
+          if (!foundSponsors.some(s => s.extractedName === extractedName)) {
+            foundSponsors.push({
+              extractedName, // 从招股书中提取的原始名称
+              name: dbName,  // 数据库中的名称
+              ...data,
+              matchContext: extractedName,
+            });
+            matched = true;
+            break;
+          }
+        }
+      }
+      // 即使数据库中没有匹配，也记录提取到的名称
+      if (!matched && !foundSponsors.some(s => s.extractedName === extractedName)) {
+        foundSponsors.push({
+          extractedName,
+          name: extractedName,
+          rate: null,
+          count: null,
+          winRate: null,
+          matchContext: extractedName,
+        });
+      }
+    }
+  } else {
+    // 使用原来的数据库遍历匹配方式
+    for (const [name, data] of Object.entries(SPONSORS)) {
+      if (matchSponsorName(searchTextForSponsor, name)) {
+        if (!foundSponsors.some(s => Math.abs((s.rate || 0) - (data.rate || 0)) < 0.01 && s.count === data.count)) {
+          const nameIndex = searchTextForSponsor.indexOf(name);
+          const coreName = name.replace(/有限公司$/, '').replace(/有限責任公司$/, '');
+          const coreIndex = nameIndex === -1 ? searchTextForSponsor.indexOf(coreName) : nameIndex;
+          const matchedName = nameIndex !== -1 ? name : coreName;
+          const context = coreIndex !== -1
+            ? searchTextForSponsor.slice(Math.max(0, coreIndex - 20), Math.min(searchTextForSponsor.length, coreIndex + matchedName.length + 30)).replace(/\s+/g, ' ')
+            : '';
+          foundSponsors.push({ name, ...data, matchContext: context });
+        }
       }
     }
   }
 
   const sponsorEvidence = {
-    section: sponsorSection ? '保薦人/參與全球發售的各方章节' : '招股书前120000字',
+    section: sponsorSectionTitle || '參與全球發售的各方章节',
+    extractedFromText: extractedSponsors, // 直接从文本提取的保荐人名称
     matchedCount: foundSponsors.length,
     allMatched: foundSponsors.map(s => ({
-      name: s.name,
-      rate: s.rate,
+      extractedName: s.extractedName,
+      dbName: s.name,
+      avgFirstDay: s.rate,
       count: s.count,
       winRate: s.winRate,
     })),
@@ -1618,7 +1711,7 @@ function scoreProspectus(rawText, stockCode) {
     }
   }
 
-  // ========== 3. 基石投资者（严格限定章节，避免全文误匹配）==========
+  // ========== 3. 基石投资者（严格限定章节+词边界检查，避免误匹配）==========
   // 基石投资者通常在招股书目录之后、概要之前有专门章节
   const cornerstoneSection = extractSection(
     text,
@@ -1629,6 +1722,7 @@ function scoreProspectus(rawText, stockCode) {
 
   // 如果没有基石投资者章节，只在摘要/概要部分搜索（前15万字）
   // 避免在财务数据等无关内容中误匹配
+  const hasCornerstoneSection = cornerstoneSection && cornerstoneSection.length > 500;
   let investorSearchText = cornerstoneSection;
   if (!cornerstoneSection) {
     // 备用：在招股书概要部分搜索
@@ -1642,12 +1736,64 @@ function scoreProspectus(rawText, stockCode) {
   }
   const normalizedInvestorText = normalizeText(investorSearchText);
 
+  // 词边界检查函数（用于短英文缩写，避免GIC匹配AGIC，CIC匹配CICC等）
+  const isInvestorWordBoundaryMatch = (text, keyword) => {
+    // 纯中文关键词不需要词边界检查
+    if (/^[\u4e00-\u9fa5]+$/.test(keyword)) {
+      return text.includes(keyword);
+    }
+    // 短的英文/数字关键词（<=5字符）需要严格的词边界检查
+    if (/^[A-Za-z0-9]+$/.test(keyword) && keyword.length <= 5) {
+      // 使用词边界正则匹配
+      const regex = new RegExp(`(?:^|[^A-Za-z0-9])${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^A-Za-z0-9])`, 'i');
+      return regex.test(text);
+    }
+    // 其他关键词用普通的includes
+    return text.includes(keyword);
+  };
+
+  // 验证匹配是否在基石投资者相关上下文中（避免在公司名称、缩写词表等处误匹配）
+  const isValidCornerstoneContext = (searchText, keyword, index) => {
+    if (index === -1) return false;
+    // 如果在基石章节内找到，直接信任
+    if (hasCornerstoneSection) return true;
+
+    const contextStart = Math.max(0, index - 50);
+    const context = searchText.slice(contextStart, Math.min(searchText.length, index + keyword.length + 50));
+    const keywordPosInContext = index - contextStart;  // 关键词在context中的相对位置
+
+    // 只在fallback搜索时过滤：检查关键词前后是否紧邻字母（如AGIC中的GIC）
+    if (/^[A-Za-z0-9]+$/.test(keyword) && keyword.length <= 4) {
+      const charBefore = keywordPosInContext > 0 ? context.charAt(keywordPosInContext - 1) : '';
+      const charAfter = context.charAt(keywordPosInContext + keyword.length) || '';
+      if (/[A-Za-z]/.test(charBefore) || /[A-Za-z]/.test(charAfter)) {
+        // 关键词前后有英文字母，可能是更长单词的一部分
+        return false;
+      }
+    }
+
+    // 排除缩写词表上下文（多个连续的大写缩写）
+    const words = context.split(/\s+/);
+    let upperCount = 0;
+    for (const w of words) {
+      if (/^[A-Z0-9\-]{2,}$/.test(w)) upperCount++;
+    }
+    if (words.length > 5 && upperCount / words.length > 0.6) return false;
+    return true;
+  };
+
   const foundInvestorDetails = [];
   for (const inv of STAR_CORNERSTONE) {
     const normalizedInv = normalizeText(inv);
-    if (investorSearchText.includes(inv) || normalizedInvestorText.includes(normalizedInv)) {
-      // 提取匹配上下文
+    // 使用词边界检查
+    if (isInvestorWordBoundaryMatch(investorSearchText, inv) ||
+        isInvestorWordBoundaryMatch(normalizedInvestorText, normalizedInv)) {
+      // 提取匹配位置和上下文
       const invIndex = investorSearchText.indexOf(inv);
+      // 验证上下文是否有效
+      if (!isValidCornerstoneContext(investorSearchText, inv, invIndex)) {
+        continue; // 跳过无效匹配
+      }
       const context = invIndex !== -1
         ? investorSearchText.slice(Math.max(0, invIndex - 20), Math.min(investorSearchText.length, invIndex + inv.length + 40)).replace(/\s+/g, ' ')
         : '';
@@ -1707,72 +1853,151 @@ function scoreProspectus(rawText, stockCode) {
     };
   }
   
-  // ========== 4. Pre-IPO禁售期（限定在股本/历史/股东章节）==========
-  // Pre-IPO投资通常在以下章节披露：
-  // - 歷史、重組及公司架構
-  // - 股本（包含股本变动历史）
-  // - 主要股東
-  const shareholderSection = extractSection(
-    text,
-    [
-      /歷史.*重組/i, /历史.*重组/i, /HISTORY.*REORGANIZATION/i,
-      /股本/i, /SHARE\s*CAPITAL/i,
-      /主要股東/i, /主要股东/i, /SUBSTANTIAL\s*SHAREHOLDER/i,
-      /股權結構/i, /股权结构/i
-    ],
-    [/業務/i, /业务/i, /BUSINESS/i, /財務資料/i, /财务资料/i],
-    80000
-  );
+  // ========== 4. Pre-IPO禁售期（优化版：精准定位"首次公開發售前投資的主要條款"）==========
+  // 核心判断逻辑：
+  // - 在"歷史、重組及公司架構"章节中查找"首次公開發售前投資的主要條款"
+  // - 在该子章节中查找"禁售期"关键词
+  // - 输出：是否有禁售期、禁售期时长、原文证据
 
-  // 如果没找到专门章节，限制在招股书中间部分搜索（避免财务数据区）
-  const preIPOSearchText = shareholderSection || text.slice(50000, 250000);
-  const normalizedPreIPOText = normalizeText(preIPOSearchText);
-
-  // 检测是否有Pre-IPO投资
-  const preIPOKeywords = ['Pre-IPO', 'pre-ipo', '上市前投資', '上市前投资', '私募', '戰略投資', '战略投资', '優先股', '优先股'];
-  let matchedPreIPOKeyword = null;
+  let preIPOSection = '';
+  let preIPOSectionTitle = '';
+  let hasPreIPOInvestment = false;
+  let hasLockup = false;
+  let lockupPeriod = '';
+  let lockupContext = '';
   let preIPOContext = '';
-  for (const kw of preIPOKeywords) {
-    if (preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || normalizedPreIPOText.includes(normalizeText(kw))) {
-      matchedPreIPOKeyword = kw;
-      const kwIndex = preIPOSearchText.toLowerCase().indexOf(kw.toLowerCase());
-      if (kwIndex !== -1) {
-        preIPOContext = preIPOSearchText.slice(Math.max(0, kwIndex - 30), Math.min(preIPOSearchText.length, kwIndex + 60)).replace(/\s+/g, ' ');
+
+  // -------- 策略1: 查找"首次公開發售前投資的主要條款"子章节 --------
+  const preIPOTermsPatterns = [
+    /首次公開發售前投資的主要條款[\s\S]{0,5000}?(?=\n\s*[一二三四五六七八九十\d]+[\.、]|(?:控股|主要)股東|附錄|$)/i,
+    /首次公开发售前投资的主要条款[\s\S]{0,5000}?(?=\n\s*[一二三四五六七八九十\d]+[\.、]|(?:控股|主要)股东|附录|$)/i,
+    /Pre-IPO\s*(?:Investment|投資)[\s\S]{0,5000}?(?=Principal|主要|Controlling)/i,
+  ];
+
+  for (const pattern of preIPOTermsPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      preIPOSection = match[0];
+      preIPOSectionTitle = '首次公開發售前投資的主要條款';
+      hasPreIPOInvestment = true;
+
+      // 在这个子章节中查找禁售期
+      const lockupMatch = preIPOSection.match(/禁售期[^。\n]*[。\n]|禁售期[\s\S]{0,300}?(?:六個月|六个月|12個月|十二個月|一年|兩年|6\s*個月)/i);
+      if (lockupMatch) {
+        hasLockup = true;
+        lockupContext = lockupMatch[0].replace(/\s+/g, ' ').trim();
+        // 提取禁售期时长
+        const periodMatch = lockupContext.match(/六個月|六个月|12個月|十二個月|一年|兩年|6\s*個月|12個月/);
+        if (periodMatch) {
+          lockupPeriod = periodMatch[0];
+        }
       }
       break;
     }
   }
 
-  const lockupEvidence = {
-    section: shareholderSection ? '股本/歷史/股東章节' : '招股书5万-25万字区间',
-    preIPOKeywords: preIPOKeywords.join('、'),
-  };
+  // -------- 策略2: 在"歷史、重組及公司架構"章节扩大搜索 --------
+  if (!preIPOSection) {
+    const historySection = extractSection(
+      text,
+      [
+        /歷史[、,]?\s*重組[及和]?\s*公司架構/i,
+        /歷史[、,]?\s*發展[及和]?\s*公司架構/i,
+        /历史[、,]?\s*重组[及和]?\s*公司架构/i,
+        /HISTORY.*REORGANIZATION/i,
+        /HISTORY.*CORPORATE\s*STRUCTURE/i
+      ],
+      [/業務/i, /业务/i, /BUSINESS/i],
+      150000,
+      true
+    );
 
-  if (matchedPreIPOKeyword) {
-    // 有Pre-IPO，检查是否有禁售期
-    const lockupKeywords = ['禁售期', '禁售', '鎖定期', '锁定期', 'lock-up', 'lockup', 'lock up', '不得出售', '不得轉讓', '不得转让'];
-    let matchedLockupKeyword = null;
-    let lockupContext = '';
-    for (const kw of lockupKeywords) {
-      if (preIPOSearchText.toLowerCase().includes(kw.toLowerCase()) || normalizedPreIPOText.includes(normalizeText(kw))) {
-        matchedLockupKeyword = kw;
-        const kwIndex = preIPOSearchText.toLowerCase().indexOf(kw.toLowerCase());
-        if (kwIndex !== -1) {
-          lockupContext = preIPOSearchText.slice(Math.max(0, kwIndex - 30), Math.min(preIPOSearchText.length, kwIndex + 60)).replace(/\s+/g, ' ');
+    if (historySection && historySection.length > 1000) {
+      preIPOSectionTitle = '歷史、重組及公司架構';
+
+      // 在历史章节中搜索Pre-IPO相关关键词
+      const preIPOKeywords = [
+        '首次公開發售前投資', '首次公开发售前投资',
+        'Pre-IPO', 'pre-ipo',
+        '上市前投資', '上市前投资',
+        '首次公開發售前投資者', '戰略投資'
+      ];
+
+      for (const kw of preIPOKeywords) {
+        const kwLower = kw.toLowerCase();
+        const idx = historySection.toLowerCase().indexOf(kwLower);
+        if (idx !== -1) {
+          hasPreIPOInvestment = true;
+          preIPOContext = historySection.slice(Math.max(0, idx - 30), Math.min(historySection.length, idx + 200)).replace(/\s+/g, ' ');
+
+          // 在Pre-IPO关键词附近搜索禁售期
+          const nearbyText = historySection.slice(Math.max(0, idx - 100), Math.min(historySection.length, idx + 1000));
+          const lockupKeywords = ['禁售期', '鎖定期', '锁定期', 'lock-up', 'lockup', '不得出售', '不得轉讓'];
+
+          for (const lkw of lockupKeywords) {
+            const lkwLower = lkw.toLowerCase();
+            const lidx = nearbyText.toLowerCase().indexOf(lkwLower);
+            if (lidx !== -1) {
+              hasLockup = true;
+              lockupContext = nearbyText.slice(Math.max(0, lidx - 30), Math.min(nearbyText.length, lidx + 150)).replace(/\s+/g, ' ');
+
+              // 提取禁售期时长
+              const periodMatch = lockupContext.match(/六個月|六个月|12個月|十二個月|一年|兩年|6\s*個月|自上市日期起計[^\n]+/);
+              if (periodMatch) {
+                lockupPeriod = periodMatch[0];
+              }
+              break;
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // -------- 策略3: 兜底搜索（在招股书中间部分） --------
+  if (!hasPreIPOInvestment) {
+    const midSection = text.slice(50000, 300000);
+    const preIPOKeywords = ['首次公開發售前投資', 'Pre-IPO', '上市前投資'];
+
+    for (const kw of preIPOKeywords) {
+      if (midSection.includes(kw)) {
+        hasPreIPOInvestment = true;
+        const idx = midSection.indexOf(kw);
+        preIPOContext = midSection.slice(Math.max(0, idx - 30), Math.min(midSection.length, idx + 200)).replace(/\s+/g, ' ');
+        preIPOSectionTitle = '招股书中间部分（兜底）';
+
+        // 搜索禁售期
+        const nearbyText = midSection.slice(Math.max(0, idx - 100), Math.min(midSection.length, idx + 1000));
+        if (/禁售期|鎖定期|锁定期|lock-up/i.test(nearbyText)) {
+          hasLockup = true;
+          const lockupMatch = nearbyText.match(/禁售期[^。\n]*|鎖定期[^。\n]*/i);
+          if (lockupMatch) {
+            lockupContext = lockupMatch[0].replace(/\s+/g, ' ');
+          }
         }
         break;
       }
     }
+  }
 
-    if (matchedLockupKeyword) {
+  const lockupEvidence = {
+    section: preIPOSectionTitle || '未找到Pre-IPO相关章节',
+    preIPOFound: hasPreIPOInvestment,
+    lockupFound: hasLockup,
+    lockupPeriod: lockupPeriod,
+    preIPOContext: preIPOContext,
+    lockupContext: lockupContext,
+  };
+
+  if (hasPreIPOInvestment) {
+    if (hasLockup) {
       scores.lockup = {
         score: 0,
         reason: 'Pre-IPO有禁售期',
-        details: '有Pre-IPO投资者，且设有禁售期安排',
+        details: `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : ''}`,
         evidence: {
           ...lockupEvidence,
-          preIPOFound: { keyword: matchedPreIPOKeyword, context: preIPOContext },
-          lockupFound: { keyword: matchedLockupKeyword, context: lockupContext },
           scoreRule: '有Pre-IPO投资者且有禁售期，0分（安全）',
         },
       };
@@ -1780,12 +2005,9 @@ function scoreProspectus(rawText, stockCode) {
       scores.lockup = {
         score: -2,
         reason: 'Pre-IPO无禁售期',
-        details: '警告：有Pre-IPO投资者但未发现禁售期安排',
+        details: '警告：有Pre-IPO投资者但未发现明确禁售期安排',
         evidence: {
           ...lockupEvidence,
-          preIPOFound: { keyword: matchedPreIPOKeyword, context: preIPOContext },
-          lockupFound: null,
-          lockupKeywords: lockupKeywords.join('、'),
           scoreRule: '有Pre-IPO但未发现禁售期，-2分（风险）',
         },
       };
@@ -1797,7 +2019,6 @@ function scoreProspectus(rawText, stockCode) {
       details: '未发现Pre-IPO投资者',
       evidence: {
         ...lockupEvidence,
-        preIPOFound: null,
         scoreRule: '无Pre-IPO投资者，0分',
       },
     };
