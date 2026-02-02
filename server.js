@@ -650,14 +650,47 @@ async function quickValidatePdf(pdfUrl, stockCode, stockName) {
 // ==================== 搜索招股书 ====================
 
 /**
+ * 判断链接文本是否为最终版招股书（排除PHIP/申請版本/摘要等）
+ * @param {string} text - 链接文本
+ * @returns {boolean}
+ */
+function isFinalProspectus(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+
+  // 排除项：PHIP、申請版本、摘要、補充等
+  const excludePatterns = [
+    'phip', '聆訊後', '聆讯后', 'post hearing',
+    '申請版本', '申请版本', 'application proof',
+    '摘要', 'summary',
+    '補充', '补充', 'supplemental',
+    '修訂', '修订', 'amendment',
+    '勘誤', '勘误', 'errata',
+    '澄清', 'clarification',
+  ];
+
+  for (const p of excludePatterns) {
+    if (t.includes(p)) return false;
+  }
+
+  // 包含项：招股章程、Prospectus
+  const includePatterns = ['招股章程', '招股書', '招股书', 'prospectus'];
+  for (const p of includePatterns) {
+    if (t.includes(p)) return true;
+  }
+
+  return false;
+}
+
+/**
  * 从港交所搜索招股书PDF链接
  */
 async function searchProspectus(stockCode) {
   const formattedCode = formatStockCode(stockCode);
   const codeNum = parseInt(stockCode, 10).toString();
-  
+
   console.log(`[搜索] 股票代码: ${formattedCode}`);
-  
+
   try {
     // 先搜索主板
     const mainBoardUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/Main-Board?sc_lang=zh-HK';
@@ -665,43 +698,56 @@ async function searchProspectus(stockCode) {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       timeout: 30000,
     });
-    
+
     let $ = cheerio.load(response.data);
     let results = [];
-    
-    // 解析表格
+
+    // 解析表格 - 语义识别，不依赖列结构
     $('table tr').each((i, row) => {
       const cells = $(row).find('td');
-      if (cells.length >= 4) {
+      if (cells.length >= 2) {
         const code = $(cells[0]).text().trim();
         const name = $(cells[1]).text().trim();
 
         if (code === codeNum || code === formattedCode) {
-          // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
-          const linksInCell2 = $(cells[2]).find('a');
-          const linksInCell3 = $(cells[3]).find('a');
-          const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
-
-          allLinks.forEach((link) => {
+          // 扫描该行所有链接，语义识别最终版招股书
+          $(row).find('td a').each((j, link) => {
             const href = $(link).attr('href');
             const linkText = $(link).text().trim();
 
-            // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
-            // 不能只靠.pdf后缀，否则会匹配到公告等其他文件
-            if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
-              const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-              // 避免重复添加相同链接
-              if (!results.find(r => r.link === pdfUrl)) {
-                console.log(`[搜索] 找到招股章程链接: ${linkText} -> ${pdfUrl}`);
-                results.push({
-                  title: `${name} 招股章程`,
-                  link: pdfUrl,
-                  code: formattedCode,
-                  name: name,
-                });
-              }
+            if (!href || !href.toLowerCase().includes('.pdf')) return;
+            if (!isFinalProspectus(linkText)) return;
+
+            const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+            if (!results.find(r => r.link === pdfUrl)) {
+              console.log(`[搜索] 命中最终招股章程: ${linkText} -> ${pdfUrl}`);
+              results.push({
+                title: `${name} 招股章程`,
+                link: pdfUrl,
+                code: formattedCode,
+                name: name,
+              });
             }
           });
+
+          // 如果语义匹配没找到，兜底：取招股章程列(cells[2])的第一个PDF
+          if (results.length === 0 && cells.length >= 3) {
+            $(cells[2]).find('a').each((j, link) => {
+              const href = $(link).attr('href');
+              if (href && href.toLowerCase().includes('.pdf')) {
+                const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                if (!results.find(r => r.link === pdfUrl)) {
+                  console.log(`[搜索] 兜底取招股章程列PDF: ${pdfUrl}`);
+                  results.push({
+                    title: `${name} 招股章程`,
+                    link: pdfUrl,
+                    code: formattedCode,
+                    name: name,
+                  });
+                }
+              }
+            });
+          }
         }
       }
     });
@@ -718,36 +764,52 @@ async function searchProspectus(stockCode) {
 
       $ = cheerio.load(response.data);
 
+      // GEM - 同样使用语义识别
       $('table tr').each((i, row) => {
         const cells = $(row).find('td');
-        if (cells.length >= 4) {
+        if (cells.length >= 2) {
           const code = $(cells[0]).text().trim();
           const name = $(cells[1]).text().trim();
 
           if (code === codeNum || code === formattedCode) {
-            // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
-            const linksInCell2 = $(cells[2]).find('a');
-            const linksInCell3 = $(cells[3]).find('a');
-            const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
-
-            allLinks.forEach((link) => {
+            // 扫描该行所有链接，语义识别最终版招股书
+            $(row).find('td a').each((j, link) => {
               const href = $(link).attr('href');
               const linkText = $(link).text().trim();
 
-              // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
-              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
-                const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-                if (!results.find(r => r.link === pdfUrl)) {
-                  console.log(`[搜索] 找到招股章程链接(GEM): ${linkText} -> ${pdfUrl}`);
-                  results.push({
-                    title: `${name} 招股章程`,
-                    link: pdfUrl,
-                    code: formattedCode,
-                    name: name,
-                  });
-                }
+              if (!href || !href.toLowerCase().includes('.pdf')) return;
+              if (!isFinalProspectus(linkText)) return;
+
+              const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+              if (!results.find(r => r.link === pdfUrl)) {
+                console.log(`[搜索] 命中最终招股章程(GEM): ${linkText} -> ${pdfUrl}`);
+                results.push({
+                  title: `${name} 招股章程`,
+                  link: pdfUrl,
+                  code: formattedCode,
+                  name: name,
+                });
               }
             });
+
+            // 兜底：取cells[2]的第一个PDF
+            if (results.length === 0 && cells.length >= 3) {
+              $(cells[2]).find('a').each((j, link) => {
+                const href = $(link).attr('href');
+                if (href && href.toLowerCase().includes('.pdf')) {
+                  const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                  if (!results.find(r => r.link === pdfUrl)) {
+                    console.log(`[搜索] 兜底取招股章程列PDF(GEM): ${pdfUrl}`);
+                    results.push({
+                      title: `${name} 招股章程`,
+                      link: pdfUrl,
+                      code: formattedCode,
+                      name: name,
+                    });
+                  }
+                }
+              });
+            }
           }
         }
       });
