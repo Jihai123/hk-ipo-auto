@@ -658,7 +658,7 @@ function isFinalProspectus(text) {
   if (!text) return false;
   const t = text.toLowerCase();
 
-  // 排除项：PHIP、申請版本、摘要、補充等
+  // 排除项：PHIP、申請版本、摘要、補充、結果、公告等
   const excludePatterns = [
     'phip', '聆訊後', '聆讯后', 'post hearing',
     '申請版本', '申请版本', 'application proof',
@@ -667,6 +667,10 @@ function isFinalProspectus(text) {
     '修訂', '修订', 'amendment',
     '勘誤', '勘误', 'errata',
     '澄清', 'clarification',
+    // 排除公告、结果类文件
+    '結果', '结果', 'results', 'allotment',
+    '公告', 'announcement', 'notice',
+    '配發', '配发',
   ];
 
   for (const p of excludePatterns) {
@@ -1282,10 +1286,32 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     }
 
     // 检查是否为完整招股书（而非公告）
-    // 招股书应该包含特定章节
+    const frontPages = text.slice(0, 30000); // 前几页
+    const frontPagesNoSpace = frontPages.replace(/\s+/g, '').toLowerCase();
+
+    // 1️⃣ 前几页必须含 Prospectus / 招股章程
+    const prospectusKeywords = ['prospectus', '招股章程', '招股書', '招股书'];
+    const hasProspectusKeyword = prospectusKeywords.some(k => frontPagesNoSpace.includes(k.toLowerCase()));
+    console.log(`[PDF验证] 前几页含招股章程关键字: ${hasProspectusKeyword}`);
+
+    // 2️⃣ 前几页不能含 結果 / 公告 / Allotment / Results
+    const excludeKeywords = ['結果', '结果', 'results', 'allotment', '公告', 'announcement', '配發', '配发'];
+    const foundExcluded = excludeKeywords.filter(k => frontPagesNoSpace.includes(k.toLowerCase()));
+    console.log(`[PDF验证] 前几页含排除关键字: ${foundExcluded.length > 0 ? foundExcluded.join(', ') : '无'}`);
+
+    // 3️⃣ 招股书应该包含特定章节
     const prospectusMarkers = ['全球發售', '風險因素', '行業概覽', '董事', '財務資料'];
     const markersFound = prospectusMarkers.filter(m => text.includes(m) || text.replace(/\s+/g, '').includes(m));
-    console.log(`[PDF] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/5 (${markersFound.join(', ')})`);
+    console.log(`[PDF验证] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/5 (${markersFound.join(', ')})`);
+
+    // 验证失败条件
+    if (!hasProspectusKeyword) {
+      throw new Error(`PDF前几页未找到"招股章程/Prospectus"关键字，可能下载的是公告而非招股书`);
+    }
+
+    if (foundExcluded.length > 0) {
+      throw new Error(`PDF前几页含有"${foundExcluded.join(', ')}"，可能下载的是配发结果公告而非招股书`);
+    }
 
     if (text.length < 50000 && markersFound.length < 3) {
       throw new Error(`PDF内容太少(${text.length}字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书`);
