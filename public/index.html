@@ -873,7 +873,7 @@
         // 保荐人列表
         if (item.key === 'sponsor' && score.sponsors?.length > 0) {
           const sponsorTags = score.sponsors.map(s =>
-            `<span class="sponsor-item">${s.name.substring(0, 18)}${s.count ? ` (${s.count}单)` : ''}</span>`
+            `<span class="sponsor-item">${(s.name || '未知').substring(0, 18)}${s.count ? ` (${s.count}单)` : ''}</span>`
           ).join('');
           extraHtml += `<div class="sponsors-list">${sponsorTags}</div>`;
         }
@@ -971,12 +971,13 @@
           html += `<div style="margin-top: 12px;"><span class="label">验证来源 (${ev.sources.length}个):</span></div>`;
           html += `<div style="margin-top: 8px;">`;
           ev.sources.forEach((src, idx) => {
-            const srcIcon = src.source.includes('全球發售') ? '📋' : src.source.includes('售股股東') ? '👤' : '💰';
+            const srcSource = src.source || '未知来源';
+            const srcIcon = srcSource.includes('全球發售') ? '📋' : srcSource.includes('售股股東') ? '👤' : '💰';
             html += `<div style="margin: 8px 0; padding: 8px; background: rgba(59, 130, 246, 0.08); border-radius: 4px; font-size: 12px;">`;
-            html += `<div style="color: #60a5fa; font-weight: 500;">${srcIcon} ${src.source}</div>`;
-            html += `<div style="margin-top: 4px;"><span style="color: #71717a;">关键词:</span> <span style="color: #fbbf24;">${src.keyword}</span></div>`;
+            html += `<div style="color: #60a5fa; font-weight: 500;">${srcIcon} ${srcSource}</div>`;
+            html += `<div style="margin-top: 4px;"><span style="color: #71717a;">关键词:</span> <span style="color: #fbbf24;">${src.keyword || '无'}</span></div>`;
             if (src.context) {
-              html += `<div style="margin-top: 4px; color: #a1a1aa; font-size: 11px; line-height: 1.5;">"...${src.context.substring(0, 100)}${src.context.length > 100 ? '...' : ''}"</div>`;
+              html += `<div style="margin-top: 4px; color: #a1a1aa; font-size: 11px; line-height: 1.5;">"...${(src.context || '').substring(0, 100)}${(src.context || '').length > 100 ? '...' : ''}"</div>`;
             }
             html += `</div>`;
           });
@@ -1010,9 +1011,9 @@
 
       // 保荐人
       if (key === 'sponsor' && ev.allMatched?.length > 0) {
-        html += `<div><span class="label">识别数量:</span> <span class="value">${ev.matchedCount} 个保荐人</span></div>`;
+        html += `<div><span class="label">识别数量:</span> <span class="value">${ev.matchedCount || 0} 个保荐人</span></div>`;
         const matchList = ev.allMatched.slice(0, 5).map(s =>
-          `${s.name.substring(0, 20)} (${s.count}单, ${s.rate >= 0 ? '+' : ''}${s.rate?.toFixed(1)}%)`
+          `${(s.name || '未知').substring(0, 20)} (${s.count || 0}单, ${(s.rate || 0) >= 0 ? '+' : ''}${(s.rate || 0).toFixed(1)}%)`
         ).join('<br>');
         html += `<div style="margin-top: 8px;"><span class="label">匹配列表:</span></div>`;
         html += `<div style="margin-left: 80px; color: #a1a1aa;">${matchList}</div>`;
