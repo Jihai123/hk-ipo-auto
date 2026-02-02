@@ -677,22 +677,18 @@ async function searchProspectus(stockCode) {
         const name = $(cells[1]).text().trim();
 
         if (code === codeNum || code === formattedCode) {
-          // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
+          // HKEX新上市表格结构: 代码 | 名称 | 招股章程 | 公告
+          // cells[2] 是招股章程列，该列的PDF链接就是招股书
+          // cells[3] 是公告列，需要更严格的过滤
+
+          // 优先从招股章程列(cells[2])获取
           const linksInCell2 = $(cells[2]).find('a');
-          const linksInCell3 = $(cells[3]).find('a');
-          const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
-
-          allLinks.forEach((link) => {
+          linksInCell2.each((j, link) => {
             const href = $(link).attr('href');
-            const linkText = $(link).text().trim();
-
-            // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
-            // 不能只靠.pdf后缀，否则会匹配到公告等其他文件
-            if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
+            if (href && href.includes('.pdf')) {
               const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-              // 避免重复添加相同链接
               if (!results.find(r => r.link === pdfUrl)) {
-                console.log(`[搜索] 找到招股章程链接: ${linkText} -> ${pdfUrl}`);
+                console.log(`[搜索] 找到招股章程(从招股章程列): ${pdfUrl}`);
                 results.push({
                   title: `${name} 招股章程`,
                   link: pdfUrl,
@@ -702,6 +698,28 @@ async function searchProspectus(stockCode) {
               }
             }
           });
+
+          // 如果招股章程列没找到，再从其他列找明确标注的链接
+          if (results.length === 0) {
+            const linksInCell3 = $(cells[3]).find('a');
+            linksInCell3.each((j, link) => {
+              const href = $(link).attr('href');
+              const linkText = $(link).text().trim();
+              // 只匹配明确标注为招股章程的链接
+              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
+                const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                if (!results.find(r => r.link === pdfUrl)) {
+                  console.log(`[搜索] 找到招股章程(从公告列): ${linkText} -> ${pdfUrl}`);
+                  results.push({
+                    title: `${name} 招股章程`,
+                    link: pdfUrl,
+                    code: formattedCode,
+                    name: name,
+                  });
+                }
+              }
+            });
+          }
         }
       }
     });
@@ -725,20 +743,15 @@ async function searchProspectus(stockCode) {
           const name = $(cells[1]).text().trim();
 
           if (code === codeNum || code === formattedCode) {
-            // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
+            // GEM表格结构同主板: 代码 | 名称 | 招股章程 | 公告
+            // 优先从招股章程列(cells[2])获取
             const linksInCell2 = $(cells[2]).find('a');
-            const linksInCell3 = $(cells[3]).find('a');
-            const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
-
-            allLinks.forEach((link) => {
+            linksInCell2.each((j, link) => {
               const href = $(link).attr('href');
-              const linkText = $(link).text().trim();
-
-              // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
-              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
+              if (href && href.includes('.pdf')) {
                 const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
                 if (!results.find(r => r.link === pdfUrl)) {
-                  console.log(`[搜索] 找到招股章程链接(GEM): ${linkText} -> ${pdfUrl}`);
+                  console.log(`[搜索] 找到招股章程(GEM招股章程列): ${pdfUrl}`);
                   results.push({
                     title: `${name} 招股章程`,
                     link: pdfUrl,
@@ -748,6 +761,27 @@ async function searchProspectus(stockCode) {
                 }
               }
             });
+
+            // 如果招股章程列没找到，再从其他列找
+            if (results.length === 0) {
+              const linksInCell3 = $(cells[3]).find('a');
+              linksInCell3.each((j, link) => {
+                const href = $(link).attr('href');
+                const linkText = $(link).text().trim();
+                if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
+                  const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                  if (!results.find(r => r.link === pdfUrl)) {
+                    console.log(`[搜索] 找到招股章程(GEM公告列): ${linkText} -> ${pdfUrl}`);
+                    results.push({
+                      title: `${name} 招股章程`,
+                      link: pdfUrl,
+                      code: formattedCode,
+                      name: name,
+                    });
+                  }
+                }
+              });
+            }
           }
         }
       });
