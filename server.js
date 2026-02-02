@@ -2090,26 +2090,51 @@ function scoreProspectus(rawText, stockCode) {
     return text.includes(keyword);
   };
 
-  // 检查是否是釋義缩写词列表格式（避免误匹配）
-  // 特征：上下文中有多个连续的短英文缩写（如"3D 5G AI AIGC AiP"）
-  // 或者上下文中有大量纯大写字母数字组成的词（PDF解析可能把词连在一起）
+  // 检查是否是釋義缩写词列表格式或流程图内容（避免误匹配）
+  // 特征：
+  // 1. 上下文中有多个连续的短英文缩写（如"3D 5G AI AIGC AiP"）
+  // 2. 上下文中有大量纯大写字母数字组成的词
+  // 3. 上下文包含em-dash(–)或箭头(→)等流程图符号
+  // 4. 上下文是"中文+缩写"交替的模式（如"設計 GA 發貨 LDCP"）
   const isDefinitionList = (keyword) => {
     const ctx = getContext(keyword);
-    // 检查上下文是否包含多个连续的技术缩写词
-    const words = ctx.split(/\s+/);
+    if (!ctx) return false;
+
+    // 特征1：包含流程图符号（em-dash、箭头、页码标记等）
+    const flowchartSymbols = ['–', '→', '←', '↓', '↑', '- -'];
+    const hasFlowchartSymbol = flowchartSymbols.some(s => ctx.includes(s));
+
+    // 特征2：包含页码标记（如"– 196 –"）
+    const hasPageMarker = /–\s*\d+\s*–/.test(ctx);
+
+    // 特征3：包含括号中的缩写（如"(RTL)"）- 通常是图表中的标注
+    const bracketedAbbrevCount = (ctx.match(/\([A-Z]{2,}\)/g) || []).length;
+
+    // 特征4：检查上下文是否包含多个连续的技术缩写词
+    const words = ctx.split(/[\s\-–]+/);
     let techWordCount = 0;
     let allUpperCount = 0;
     for (const w of words) {
       // 技术缩写词：1-15个字符的字母数字组合
-      if (/^[A-Z0-9a-z\-]{1,15}$/.test(w)) {
+      if (/^[A-Z0-9a-z]{1,15}$/.test(w)) {
         techWordCount++;
       }
       // 全大写的词（可能是缩写连接在一起）
-      if (/^[A-Z0-9\-]{2,}$/.test(w)) {
+      if (/^[A-Z0-9]{2,}$/.test(w)) {
         allUpperCount++;
       }
     }
-    // 如果超过50%都是技术词/缩写，或者超过40%是全大写词，认为是釋義列表
+
+    // 判断逻辑：
+    // - 如果有流程图符号+页码标记，很可能是图表内容
+    // - 如果有多个括号内缩写，很可能是图表标注
+    // - 如果超过50%都是技术词/缩写，或者超过40%是全大写词，认为是釋義列表
+    if (hasFlowchartSymbol && hasPageMarker) {
+      return true;
+    }
+    if (bracketedAbbrevCount >= 2) {
+      return true;
+    }
     return words.length > 5 && (techWordCount / words.length > 0.5 || allUpperCount / words.length > 0.4);
   };
 

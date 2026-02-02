@@ -948,13 +948,6 @@
 
       // 旧股检测（多层验证）
       if (key === 'oldShares') {
-        // 显示置信度
-        if (ev.confidence) {
-          const confLabel = ev.confidence === 'very_high' ? '非常高' : ev.confidence === 'high' ? '高' : '低';
-          const confColor = ev.confidence === 'very_high' ? '#22c55e' : ev.confidence === 'high' ? '#3b82f6' : '#71717a';
-          html += `<div><span class="label">置信度:</span> <span class="value" style="color: ${confColor}; font-weight: 600;">${confLabel}</span></div>`;
-        }
-
         // 显示新股/旧股数量和比例
         if (ev.newSharesCount && ev.saleSharesCount) {
           const total = parseInt(ev.newSharesCount) + parseInt(ev.saleSharesCount);
