@@ -686,11 +686,13 @@ async function searchProspectus(stockCode) {
             const href = $(link).attr('href');
             const linkText = $(link).text().trim();
 
-            // 查找招股章程链接
-            if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
+            // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
+            // 不能只靠.pdf后缀，否则会匹配到公告等其他文件
+            if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
               const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
               // 避免重复添加相同链接
               if (!results.find(r => r.link === pdfUrl)) {
+                console.log(`[搜索] 找到招股章程链接: ${linkText} -> ${pdfUrl}`);
                 results.push({
                   title: `${name} 招股章程`,
                   link: pdfUrl,
@@ -732,9 +734,11 @@ async function searchProspectus(stockCode) {
               const href = $(link).attr('href');
               const linkText = $(link).text().trim();
 
-              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
+              // 查找招股章程链接 - 必须linkText明确包含"招股章程"或"Prospectus"
+              if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus'))) {
                 const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
                 if (!results.find(r => r.link === pdfUrl)) {
+                  console.log(`[搜索] 找到招股章程链接(GEM): ${linkText} -> ${pdfUrl}`);
                   results.push({
                     title: `${name} 招股章程`,
                     link: pdfUrl,
@@ -1209,8 +1213,20 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     }
 
     // 检测解析结果
+    // 完整招股书通常有100万+字符，至少应有10万字符
+    // 如果只有几千字符，可能是公告/通知而非招股书
     if (!text || text.length < 5000) {
       throw new Error('PDF可能为扫描版，无法提取文字内容');
+    }
+
+    // 检查是否为完整招股书（而非公告）
+    // 招股书应该包含特定章节
+    const prospectusMarkers = ['全球發售', '風險因素', '行業概覽', '董事', '財務資料'];
+    const markersFound = prospectusMarkers.filter(m => text.includes(m) || text.replace(/\s+/g, '').includes(m));
+    console.log(`[PDF] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/5 (${markersFound.join(', ')})`);
+
+    if (text.length < 50000 && markersFound.length < 3) {
+      throw new Error(`PDF内容太少(${text.length}字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书`);
     }
 
     // 内容验证：确保PDF属于目标股票
