@@ -675,22 +675,29 @@ async function searchProspectus(stockCode) {
       if (cells.length >= 4) {
         const code = $(cells[0]).text().trim();
         const name = $(cells[1]).text().trim();
-        const links = $(cells[3]).find('a');
-        
+
         if (code === codeNum || code === formattedCode) {
-          links.each((j, link) => {
+          // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
+          const linksInCell2 = $(cells[2]).find('a');
+          const linksInCell3 = $(cells[3]).find('a');
+          const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
+
+          allLinks.forEach((link) => {
             const href = $(link).attr('href');
             const linkText = $(link).text().trim();
-            
+
             // 查找招股章程链接
             if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
               const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-              results.push({
-                title: `${name} 招股章程`,
-                link: pdfUrl,
-                code: formattedCode,
-                name: name,
-              });
+              // 避免重复添加相同链接
+              if (!results.find(r => r.link === pdfUrl)) {
+                results.push({
+                  title: `${name} 招股章程`,
+                  link: pdfUrl,
+                  code: formattedCode,
+                  name: name,
+                });
+              }
             }
           });
         }
@@ -714,21 +721,27 @@ async function searchProspectus(stockCode) {
         if (cells.length >= 4) {
           const code = $(cells[0]).text().trim();
           const name = $(cells[1]).text().trim();
-          const links = $(cells[3]).find('a');
 
           if (code === codeNum || code === formattedCode) {
-            links.each((j, link) => {
+            // 招股章程链接可能在第3列(cells[2])或第4列(cells[3])
+            const linksInCell2 = $(cells[2]).find('a');
+            const linksInCell3 = $(cells[3]).find('a');
+            const allLinks = [...linksInCell2.toArray(), ...linksInCell3.toArray()];
+
+            allLinks.forEach((link) => {
               const href = $(link).attr('href');
               const linkText = $(link).text().trim();
 
               if (href && (linkText.includes('招股章程') || linkText.includes('Prospectus') || href.includes('.pdf'))) {
                 const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-                results.push({
-                  title: `${name} 招股章程`,
-                  link: pdfUrl,
-                  code: formattedCode,
-                  name: name,
-                });
+                if (!results.find(r => r.link === pdfUrl)) {
+                  results.push({
+                    title: `${name} 招股章程`,
+                    link: pdfUrl,
+                    code: formattedCode,
+                    name: name,
+                  });
+                }
               }
             });
           }
@@ -1140,6 +1153,10 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     }
   }
 
+  // 验证pdfUrl
+  if (!pdfUrl) {
+    throw new Error('PDF链接为空，无法下载');
+  }
   console.log(`[PDF] 下载: ${pdfUrl.substring(0, 80)}...`);
 
   const tempPdfPath = path.join(CACHE_DIR, `temp_${stockCode}_${Date.now()}.pdf`);
@@ -1570,28 +1587,31 @@ function scoreProspectus(rawText, stockCode) {
   if (foundSponsors.length > 0) {
     // 取经验最丰富的保荐人作为主保荐人
     const mainSponsor = foundSponsors.sort((a, b) => b.count - a.count)[0];
+    const sponsorName = (mainSponsor.name || '未知保荐人').substring(0, 20);
+    const sponsorRate = mainSponsor.rate || 0;
+    const sponsorCount = mainSponsor.count || 0;
 
-    if (mainSponsor.count < 8) {
+    if (sponsorCount < 8) {
       scores.sponsor = {
         score: 0,
         reason: '数据不足',
-        details: `${mainSponsor.name.substring(0, 20)} (仅${mainSponsor.count}单，需≥8单)`,
+        details: `${sponsorName} (仅${sponsorCount}单，需≥8单)`,
         sponsors: foundSponsors.slice(0, 3),
         evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
       };
-    } else if (mainSponsor.rate >= 70) {
+    } else if (sponsorRate >= 70) {
       scores.sponsor = {
         score: 2,
         reason: '优质保荐人',
-        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        details: `${sponsorName} 历史涨幅+${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
         sponsors: foundSponsors.slice(0, 3),
         evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
       };
-    } else if (mainSponsor.rate >= 40) {
+    } else if (sponsorRate >= 40) {
       scores.sponsor = {
         score: 0,
         reason: '中等保荐人',
-        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        details: `${sponsorName} 历史涨幅+${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
         sponsors: foundSponsors.slice(0, 3),
         evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
       };
@@ -1599,7 +1619,7 @@ function scoreProspectus(rawText, stockCode) {
       scores.sponsor = {
         score: -2,
         reason: '低质保荐人',
-        details: `${mainSponsor.name.substring(0, 20)} 历史涨幅${mainSponsor.rate >= 0 ? '+' : ''}${mainSponsor.rate.toFixed(1)}%, ${mainSponsor.count}单`,
+        details: `${sponsorName} 历史涨幅${sponsorRate >= 0 ? '+' : ''}${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
         sponsors: foundSponsors.slice(0, 3),
         evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
       };
@@ -1639,6 +1659,7 @@ function scoreProspectus(rawText, stockCode) {
 
       if (fallbackFoundSponsors.length > 0) {
         const mainSponsor = fallbackFoundSponsors.sort((a, b) => (b.count || 0) - (a.count || 0))[0];
+        const fallbackName = (mainSponsor.name || '未知保荐人').substring(0, 20);
         const rate = mainSponsor.rate || 0;
         const count = mainSponsor.count || 0;
 
@@ -1656,7 +1677,7 @@ function scoreProspectus(rawText, stockCode) {
           scores.sponsor = {
             score: 0,
             reason: '数据不足',
-            details: `${mainSponsor.name.substring(0, 20)} (仅${count}单，需≥8单) [备用]`,
+            details: `${fallbackName} (仅${count}单，需≥8单) [备用]`,
             sponsors: fallbackFoundSponsors.slice(0, 3),
             evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
           };
@@ -1664,7 +1685,7 @@ function scoreProspectus(rawText, stockCode) {
           scores.sponsor = {
             score: 2,
             reason: '优质保荐人',
-            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
+            details: `${fallbackName} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
             sponsors: fallbackFoundSponsors.slice(0, 3),
             evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
           };
@@ -1672,7 +1693,7 @@ function scoreProspectus(rawText, stockCode) {
           scores.sponsor = {
             score: 0,
             reason: '中等保荐人',
-            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
+            details: `${fallbackName} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
             sponsors: fallbackFoundSponsors.slice(0, 3),
             evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
           };
@@ -1680,18 +1701,19 @@ function scoreProspectus(rawText, stockCode) {
           scores.sponsor = {
             score: -2,
             reason: '低质保荐人',
-            details: `${mainSponsor.name.substring(0, 20)} 历史涨幅${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%, ${count}单 [备用]`,
+            details: `${fallbackName} 历史涨幅${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%, ${count}单 [备用]`,
             sponsors: fallbackFoundSponsors.slice(0, 3),
             evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
           };
         }
       } else {
         // 从映射表找到了保荐人名称，但在数据库中没有业绩记录
+        const fallbackList = (fallbackSponsors || []).join('、') || '未知';
         scores.sponsor = {
           score: 0,
           reason: '无业绩记录',
-          details: `保荐人: ${fallbackSponsors.join('、').substring(0, 40)}... (无历史业绩)`,
-          sponsors: fallbackSponsors.map(name => ({ name })),
+          details: `保荐人: ${fallbackList.substring(0, 40)}... (无历史业绩)`,
+          sponsors: (fallbackSponsors || []).map(name => ({ name })),
           evidence: {
             ...sponsorEvidence,
             source: 'IPO映射表（备用方案）',
