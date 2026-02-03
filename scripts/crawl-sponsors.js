@@ -501,10 +501,27 @@ function saveData(sponsors, ipoRecords = []) {
     console.log(`   ✓ 已保存 ${Object.keys(ipoSponsorMap).length} 个股票代码→保荐人映射到 ${ipoMapPath}`);
   }
 
-  // 2. 如果有数据库，也保存到数据库
-  if (Database && fs.existsSync(DB_PATH)) {
+  // 3. 保存到数据库（如果 better-sqlite3 可用）
+  if (Database) {
     try {
       const db = new Database(DB_PATH);
+
+      // 确保表存在
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sponsor_stats (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sponsor_name TEXT UNIQUE NOT NULL,
+          total_count INTEGER DEFAULT 0,
+          up_count INTEGER DEFAULT 0,
+          down_count INTEGER DEFAULT 0,
+          flat_count INTEGER DEFAULT 0,
+          avg_first_day_return REAL,
+          avg_cumulative_return REAL,
+          win_rate REAL,
+          data_source TEXT,
+          last_updated TEXT
+        )
+      `);
 
       const insertStmt = db.prepare(`
         INSERT INTO sponsor_stats (
@@ -531,7 +548,7 @@ function saveData(sponsors, ipoRecords = []) {
       db.exec('COMMIT');
       db.close();
 
-      console.log(`   ✓ 已保存到数据库`);
+      console.log(`   ✓ 已保存到数据库 ${DB_PATH}`);
     } catch (e) {
       console.error('   ⚠️  数据库保存失败:', e.message);
     }
