@@ -1,24 +1,15 @@
 {
-  "updatedAt": "2026-02-03T08:17:24.517Z",
+  "updatedAt": "2026-02-03T12:41:30.288Z",
   "source": "aastocks",
   "sponsors": [
     {
       "name": "中國國際金融香港證券",
       "count": 64,
-      "upCount": 44,
-      "downCount": 20,
-      "avgFirstDay": 27.96,
-      "avgCumulative": 58.21,
-      "winRate": 68.75
-    },
-    {
-      "name": "中國國際金融香港證券有限公司",
-      "count": 61,
-      "upCount": 39,
-      "downCount": 20,
-      "flatCount": 2,
-      "avgFirstDay": 25.48,
-      "winRate": 63.93,
+      "upCount": 42,
+      "downCount": 19,
+      "flatCount": 3,
+      "avgFirstDay": 28.03,
+      "winRate": 65.63,
       "bestCase": {
         "code": "02635",
         "name": "諾比侃",
@@ -34,26 +25,17 @@
     },
     {
       "name": "中信證券(香港)",
-      "count": 42,
+      "count": 43,
       "upCount": 35,
-      "downCount": 7,
-      "avgFirstDay": 41.62,
-      "avgCumulative": 52.38,
-      "winRate": 83.33
-    },
-    {
-      "name": "中信證券(香港)有限公司",
-      "count": 40,
-      "upCount": 31,
-      "downCount": 7,
+      "downCount": 6,
       "flatCount": 2,
-      "avgFirstDay": 29.05,
-      "winRate": 77.5,
+      "avgFirstDay": 41.12,
+      "winRate": 81.4,
       "bestCase": {
-        "code": "02652",
-        "name": "長風藥業",
-        "perf": 161.02,
-        "date": "2025/10/08"
+        "code": "02591",
+        "name": "銀諾醫藥－Ｂ",
+        "perf": 206.48,
+        "date": "2025/08/15"
       },
       "worstCase": {
         "code": "02658",
@@ -63,13 +45,13 @@
       }
     },
     {
-      "name": "華泰金融控股(香港)有限公司",
-      "count": 34,
-      "upCount": 18,
+      "name": "華泰金融控股(香港)",
+      "count": 35,
+      "upCount": 19,
       "downCount": 13,
       "flatCount": 3,
-      "avgFirstDay": 8.71,
-      "winRate": 52.94,
+      "avgFirstDay": 8.49,
+      "winRate": 54.29,
       "bestCase": {
         "code": "06980",
         "name": "八馬茶業",
@@ -84,22 +66,13 @@
       }
     },
     {
-      "name": "華泰金融控股(香港)",
-      "count": 33,
-      "upCount": 20,
-      "downCount": 13,
-      "avgFirstDay": 9,
-      "avgCumulative": 23.51,
-      "winRate": 60.61
-    },
-    {
-      "name": "摩根士丹利亞洲有限公司",
-      "count": 15,
-      "upCount": 10,
+      "name": "摩根士丹利亞洲",
+      "count": 16,
+      "upCount": 11,
       "downCount": 3,
       "flatCount": 2,
-      "avgFirstDay": 15.8,
-      "winRate": 66.67,
+      "avgFirstDay": 20.54,
+      "winRate": 68.75,
       "bestCase": {
         "code": "09606",
         "name": "映恩生物－Ｂ",
@@ -114,25 +87,58 @@
       }
     },
     {
-      "name": "摩根士丹利亞洲",
-      "count": 15,
-      "upCount": 12,
-      "downCount": 3,
-      "avgFirstDay": 21.91,
-      "avgCumulative": 54.57,
-      "winRate": 80
-    },
-    {
-      "name": "建銀國際金融",
+      "name": "高盛(亞洲)",
       "count": 12,
-      "upCount": 10,
-      "downCount": 2,
-      "avgFirstDay": 11.38,
-      "avgCumulative": -9.06,
-      "winRate": 83.33
+      "upCount": 7,
+      "downCount": 3,
+      "flatCount": 2,
+      "avgFirstDay": 11.46,
+      "winRate": 58.33,
+      "bestCase": {
+        "code": "01768",
+        "name": "鳴鳴很忙",
+        "perf": 69.06,
+        "date": "2026/01/28"
+      },
+      "worstCase": {
+        "code": "02026",
+        "name": "小馬智行－Ｗ",
+        "perf": -9.28,
+        "date": "2025/11/06"
+      }
     },
     {
-      "name": "瑞銀證券香港有限公司",
+      "name": "海通國際資本",
+      "count": 12,
+      "upCount": 9,
+      "downCount": 2,
+      "flatCount": 1,
+      "avgFirstDay": 26.75,
+      "winRate": 75,
+      "bestCase": {
+        "code": "02659",
+        "name": "寶濟藥業－Ｂ",
+        "perf": 138.82,
+        "date": "2025/12/10"
+      },
+      "worstCase": {
+        "code": "02559",
+        "name": "嘀嗒出行",
+        "perf": -22.5,
+        "date": "2024/06/28"
+      }
+    },
+    {
+      "name": "高盛(亞洲)有限責任公司",
+      "count": 12,
+      "upCount": 9,
+      "downCount": 3,
+      "avgFirstDay": 11.46,
+      "avgCumulative": 38.52,
+      "winRate": 75
+    },
+    {
+      "name": "瑞銀證券香港",
       "count": 11,
       "upCount": 6,
       "downCount": 3,
@@ -153,94 +159,13 @@
       }
     },
     {
-      "name": "高盛(亞洲)有限責任公司",
-      "count": 11,
-      "upCount": 6,
-      "downCount": 3,
-      "flatCount": 2,
-      "avgFirstDay": 12.43,
-      "winRate": 54.55,
-      "bestCase": {
-        "code": "01768",
-        "name": "鳴鳴很忙",
-        "perf": 69.06,
-        "date": "2026/01/28"
-      },
-      "worstCase": {
-        "code": "02026",
-        "name": "小馬智行－Ｗ",
-        "perf": -9.28,
-        "date": "2025/11/06"
-      }
-    },
-    {
-      "name": "建銀國際金融有限公司",
-      "count": 11,
-      "upCount": 9,
-      "downCount": 2,
-      "flatCount": 0,
-      "avgFirstDay": 9.8,
-      "winRate": 81.82,
-      "bestCase": {
-        "code": "02587",
-        "name": "健康之路",
-        "perf": 36.67,
-        "date": "2024/12/30"
-      },
-      "worstCase": {
-        "code": "02592",
-        "name": "撥康視雲－Ｂ",
-        "perf": -38.61,
-        "date": "2025/07/03"
-      }
-    },
-    {
-      "name": "海通國際資本有限公司",
-      "count": 11,
-      "upCount": 8,
-      "downCount": 2,
-      "flatCount": 1,
-      "avgFirstDay": 28.86,
-      "winRate": 72.73,
-      "bestCase": {
-        "code": "02659",
-        "name": "寶濟藥業－Ｂ",
-        "perf": 138.82,
-        "date": "2025/12/10"
-      },
-      "worstCase": {
-        "code": "02559",
-        "name": "嘀嗒出行",
-        "perf": -22.5,
-        "date": "2024/06/28"
-      }
-    },
-    {
-      "name": "海通國際資本",
-      "count": 11,
-      "upCount": 10,
-      "downCount": 1,
-      "avgFirstDay": 31.22,
-      "avgCumulative": 7.23,
-      "winRate": 90.91
-    },
-    {
       "name": "國泰君安融資",
       "count": 11,
       "upCount": 9,
       "downCount": 2,
-      "avgFirstDay": 23.18,
-      "avgCumulative": 61.37,
-      "winRate": 81.82
-    },
-    {
-      "name": "國泰君安融資有限公司",
-      "count": 10,
-      "upCount": 8,
-      "downCount": 2,
       "flatCount": 0,
-      "avgFirstDay": 25.14,
-      "winRate": 80,
+      "avgFirstDay": 23.18,
+      "winRate": 81.82,
       "bestCase": {
         "code": "01384",
         "name": "滴普科技",
@@ -255,18 +180,39 @@
       }
     },
     {
-      "name": "招銀國際融資有限公司",
-      "count": 10,
-      "upCount": 6,
+      "name": "建銀國際金融",
+      "count": 11,
+      "upCount": 10,
+      "downCount": 1,
+      "flatCount": 0,
+      "avgFirstDay": 12.81,
+      "winRate": 90.91,
+      "bestCase": {
+        "code": "02587",
+        "name": "健康之路",
+        "perf": 36.67,
+        "date": "2024/12/30"
+      },
+      "worstCase": {
+        "code": "02592",
+        "name": "撥康視雲－Ｂ",
+        "perf": -38.61,
+        "date": "2025/07/03"
+      }
+    },
+    {
+      "name": "招銀國際融資",
+      "count": 11,
+      "upCount": 7,
       "downCount": 3,
       "flatCount": 1,
-      "avgFirstDay": 9.76,
-      "winRate": 60,
+      "avgFirstDay": 23.24,
+      "winRate": 63.64,
       "bestCase": {
-        "code": "02549",
-        "name": "卡羅特",
-        "perf": 58.3,
-        "date": "2024/10/02"
+        "code": "02627",
+        "name": "中慧生物－Ｂ",
+        "perf": 157.98,
+        "date": "2025/08/11"
       },
       "worstCase": {
         "code": "02586",
@@ -276,25 +222,7 @@
       }
     },
     {
-      "name": "瑞銀證券香港",
-      "count": 10,
-      "upCount": 7,
-      "downCount": 3,
-      "avgFirstDay": 16.22,
-      "avgCumulative": 37.02,
-      "winRate": 70
-    },
-    {
-      "name": "招銀國際融資",
-      "count": 10,
-      "upCount": 7,
-      "downCount": 3,
-      "avgFirstDay": 25.56,
-      "avgCumulative": 35.92,
-      "winRate": 70
-    },
-    {
-      "name": "中信建投(國際)融資有限公司",
+      "name": "中信建投(國際)融資",
       "count": 9,
       "upCount": 7,
       "downCount": 2,
@@ -315,7 +243,7 @@
       }
     },
     {
-      "name": "農銀國際融資有限公司",
+      "name": "農銀國際融資",
       "count": 8,
       "upCount": 5,
       "downCount": 3,
@@ -336,7 +264,7 @@
       }
     },
     {
-      "name": "廣發融資（香港）有限公司",
+      "name": "廣發融資（香港）",
       "count": 8,
       "upCount": 7,
       "downCount": 1,
@@ -357,7 +285,7 @@
       }
     },
     {
-      "name": "J.P. Morgan Securities (Far East) Limited",
+      "name": "J.P.MorganSecurities(FarEast)Limited",
       "count": 7,
       "upCount": 2,
       "downCount": 3,
@@ -378,7 +306,28 @@
       }
     },
     {
-      "name": "美林(亞太)有限公司",
+      "name": "花旗環球金融亞洲",
+      "count": 6,
+      "upCount": 3,
+      "downCount": 3,
+      "flatCount": 0,
+      "avgFirstDay": -6.04,
+      "winRate": 50,
+      "bestCase": {
+        "code": "06938",
+        "name": "瑞博生物－Ｂ",
+        "perf": 41.62,
+        "date": "2026/01/09"
+      },
+      "worstCase": {
+        "code": "02581",
+        "name": "明基醫院",
+        "perf": -49.46,
+        "date": "2025/12/22"
+      }
+    },
+    {
+      "name": "美林(亞太)",
       "count": 6,
       "upCount": 4,
       "downCount": 1,
@@ -399,7 +348,7 @@
       }
     },
     {
-      "name": "中國平安資本（香港）有限公司",
+      "name": "中國平安資本（香港）",
       "count": 5,
       "upCount": 4,
       "downCount": 1,
@@ -420,34 +369,13 @@
       }
     },
     {
-      "name": "花旗環球金融亞洲有限公司",
+      "name": "申萬宏源融資（香港）",
       "count": 5,
-      "upCount": 2,
-      "downCount": 3,
-      "flatCount": 0,
-      "avgFirstDay": -7.96,
-      "winRate": 40,
-      "bestCase": {
-        "code": "06938",
-        "name": "瑞博生物－Ｂ",
-        "perf": 41.62,
-        "date": "2026/01/09"
-      },
-      "worstCase": {
-        "code": "02581",
-        "name": "明基醫院",
-        "perf": -49.46,
-        "date": "2025/12/22"
-      }
-    },
-    {
-      "name": "申萬宏源融資（香港）有限公司",
-      "count": 4,
-      "upCount": 3,
+      "upCount": 4,
       "downCount": 1,
       "flatCount": 0,
-      "avgFirstDay": 77.25,
-      "winRate": 75,
+      "avgFirstDay": 63.32,
+      "winRate": 80,
       "bestCase": {
         "code": "02650",
         "name": "摯達科技",
@@ -462,13 +390,13 @@
       }
     },
     {
-      "name": "招銀國際金融有限公司",
-      "count": 4,
-      "upCount": 3,
+      "name": "招銀國際金融",
+      "count": 5,
+      "upCount": 4,
       "downCount": 1,
       "flatCount": 0,
-      "avgFirstDay": 32.53,
-      "winRate": 75,
+      "avgFirstDay": 26.11,
+      "winRate": 80,
       "bestCase": {
         "code": "02505",
         "name": "ＥＤＡ集團控股",
@@ -483,7 +411,7 @@
       }
     },
     {
-      "name": "中銀國際亞洲有限公司",
+      "name": "中銀國際亞洲",
       "count": 3,
       "upCount": 3,
       "downCount": 0,
@@ -504,7 +432,7 @@
       }
     },
     {
-      "name": "招商證券(香港)有限公司",
+      "name": "招商證券(香港)",
       "count": 3,
       "upCount": 1,
       "downCount": 2,
@@ -525,7 +453,7 @@
       }
     },
     {
-      "name": "工銀國際融資有限公司",
+      "name": "工銀國際融資",
       "count": 3,
       "upCount": 2,
       "downCount": 1,
@@ -546,7 +474,28 @@
       }
     },
     {
-      "name": "民銀資本有限公司",
+      "name": "鎧盛資本",
+      "count": 3,
+      "upCount": 1,
+      "downCount": 2,
+      "flatCount": 0,
+      "avgFirstDay": 38.36,
+      "winRate": 33.33,
+      "bestCase": {
+        "code": "02477",
+        "name": "經緯天地",
+        "perf": 164,
+        "date": "2024/01/12"
+      },
+      "worstCase": {
+        "code": "02695",
+        "name": "印象大紅袍",
+        "perf": -35.28,
+        "date": "2025/12/22"
+      }
+    },
+    {
+      "name": "民銀資本",
       "count": 3,
       "upCount": 3,
       "downCount": 0,
@@ -567,7 +516,7 @@
       }
     },
     {
-      "name": "浦銀國際融資有限公司",
+      "name": "浦銀國際融資",
       "count": 3,
       "upCount": 2,
       "downCount": 1,
@@ -588,7 +537,28 @@
       }
     },
     {
-      "name": "國金證券（香港）有限公司",
+      "name": "越秀融資",
+      "count": 3,
+      "upCount": 2,
+      "downCount": 1,
+      "flatCount": 0,
+      "avgFirstDay": 14.65,
+      "winRate": 66.67,
+      "bestCase": {
+        "code": "09881",
+        "name": "容大科技",
+        "perf": 42,
+        "date": "2025/06/10"
+      },
+      "worstCase": {
+        "code": "08629",
+        "name": "集信國控",
+        "perf": -4.04,
+        "date": "2024/09/06"
+      }
+    },
+    {
+      "name": "國金證券（香港）",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -609,7 +579,7 @@
       }
     },
     {
-      "name": "中國光大融資有限公司",
+      "name": "中國光大融資",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -630,7 +600,7 @@
       }
     },
     {
-      "name": "德意志證券亞洲有限公司",
+      "name": "德意志證券亞洲",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -651,7 +621,7 @@
       }
     },
     {
-      "name": "中國銀河國際證券(香港)有限公司",
+      "name": "中國銀河國際證券(香港)",
       "count": 2,
       "upCount": 1,
       "downCount": 0,
@@ -672,7 +642,7 @@
       }
     },
     {
-      "name": "交銀國際（亞洲）有限公司",
+      "name": "交銀國際（亞洲）",
       "count": 2,
       "upCount": 2,
       "downCount": 0,
@@ -693,7 +663,7 @@
       }
     },
     {
-      "name": "同人融資有限公司",
+      "name": "同人融資",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -714,7 +684,7 @@
       }
     },
     {
-      "name": "法國巴黎證券（亞洲）有限公司",
+      "name": "法國巴黎證券（亞洲）",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -735,7 +705,7 @@
       }
     },
     {
-      "name": "富瑞金融集團香港有限公司",
+      "name": "富瑞金融集團香港",
       "count": 2,
       "upCount": 1,
       "downCount": 0,
@@ -756,7 +726,7 @@
       }
     },
     {
-      "name": "光銀國際資本有限公司",
+      "name": "光銀國際資本",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -777,49 +747,7 @@
       }
     },
     {
-      "name": "鎧盛資本有限公司",
-      "count": 2,
-      "upCount": 1,
-      "downCount": 1,
-      "flatCount": 0,
-      "avgFirstDay": 75.18,
-      "winRate": 50,
-      "bestCase": {
-        "code": "02477",
-        "name": "經緯天地",
-        "perf": 164,
-        "date": "2024/01/12"
-      },
-      "worstCase": {
-        "code": "02465",
-        "name": "龍蟠科技",
-        "perf": -13.64,
-        "date": "2024/10/30"
-      }
-    },
-    {
-      "name": "越秀融資有限公司",
-      "count": 2,
-      "upCount": 1,
-      "downCount": 1,
-      "flatCount": 0,
-      "avgFirstDay": 0.98,
-      "winRate": 50,
-      "bestCase": {
-        "code": "08529",
-        "name": "優博控股",
-        "perf": 6,
-        "date": "2024/06/03"
-      },
-      "worstCase": {
-        "code": "08629",
-        "name": "集信國控",
-        "perf": -4.04,
-        "date": "2024/09/06"
-      }
-    },
-    {
-      "name": "中國國際金融(香港)有限公司",
+      "name": "中國國際金融(香港)",
       "count": 2,
       "upCount": 1,
       "downCount": 1,
@@ -840,7 +768,7 @@
       }
     },
     {
-      "name": "均富融資有限公司",
+      "name": "均富融資",
       "count": 2,
       "upCount": 2,
       "downCount": 0,
@@ -861,7 +789,7 @@
       }
     },
     {
-      "name": "力高企業融資有限公司",
+      "name": "力高企業融資",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -882,7 +810,28 @@
       }
     },
     {
-      "name": "邁時資本有限公司",
+      "name": "興證國際融資",
+      "count": 1,
+      "upCount": 0,
+      "downCount": 1,
+      "flatCount": 0,
+      "avgFirstDay": -35.28,
+      "winRate": 0,
+      "bestCase": {
+        "code": "02695",
+        "name": "印象大紅袍",
+        "perf": -35.28,
+        "date": "2025/12/22"
+      },
+      "worstCase": {
+        "code": "02695",
+        "name": "印象大紅袍",
+        "perf": -35.28,
+        "date": "2025/12/22"
+      }
+    },
+    {
+      "name": "邁時資本",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -903,7 +852,7 @@
       }
     },
     {
-      "name": "國元融資（香港）有限公司",
+      "name": "國元融資（香港）",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -924,7 +873,7 @@
       }
     },
     {
-      "name": "天風國際資本市場有限公司",
+      "name": "天風國際資本市場",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -945,7 +894,7 @@
       }
     },
     {
-      "name": "清科資本有限公司",
+      "name": "清科資本",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -966,7 +915,7 @@
       }
     },
     {
-      "name": "星展亞洲融資有限公司",
+      "name": "星展亞洲融資",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -987,7 +936,49 @@
       }
     },
     {
-      "name": "東方融資(香港)有限公司",
+      "name": "海通國際控股",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 3.5,
+      "winRate": 100,
+      "bestCase": {
+        "code": "02651",
+        "name": "大眾口腔",
+        "perf": 3.5,
+        "date": "2025/07/09"
+      },
+      "worstCase": {
+        "code": "02651",
+        "name": "大眾口腔",
+        "perf": 3.5,
+        "date": "2025/07/09"
+      }
+    },
+    {
+      "name": "摩根士利亞洲",
+      "count": 1,
+      "upCount": 1,
+      "downCount": 0,
+      "flatCount": 0,
+      "avgFirstDay": 0.76,
+      "winRate": 100,
+      "bestCase": {
+        "code": "02076",
+        "name": "ＢＯＳＳ直聘－Ｗ",
+        "perf": 0.76,
+        "date": "2025/07/04"
+      },
+      "worstCase": {
+        "code": "02076",
+        "name": "ＢＯＳＳ直聘－Ｗ",
+        "perf": 0.76,
+        "date": "2025/07/04"
+      }
+    },
+    {
+      "name": "東方融資(香港)",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -1008,7 +999,7 @@
       }
     },
     {
-      "name": "綽耀資本有限公司",
+      "name": "綽耀資本",
       "count": 1,
       "upCount": 0,
       "downCount": 0,
@@ -1029,7 +1020,7 @@
       }
     },
     {
-      "name": "日進資本有限公司",
+      "name": "日進資本",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -1050,7 +1041,7 @@
       }
     },
     {
-      "name": "財通國際融資有限公司",
+      "name": "財通國際融資",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1071,7 +1062,7 @@
       }
     },
     {
-      "name": "華金融資（國際）有限公司",
+      "name": "華金融資（國際）",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1092,7 +1083,7 @@
       }
     },
     {
-      "name": "第一上海融資有限公司",
+      "name": "第一上海融資",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -1113,7 +1104,7 @@
       }
     },
     {
-      "name": "中泰國際融資有限公司",
+      "name": "中泰國際融資",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1134,7 +1125,7 @@
       }
     },
     {
-      "name": "大華繼顯(香港)有限公司",
+      "name": "大華繼顯(香港)",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1155,7 +1146,7 @@
       }
     },
     {
-      "name": "野村國際(香港)有限公司",
+      "name": "野村國際(香港)",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1176,7 +1167,7 @@
       }
     },
     {
-      "name": "華升資本有限公司",
+      "name": "華升資本",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -1197,7 +1188,7 @@
       }
     },
     {
-      "name": "艾德資本有限公司",
+      "name": "艾德資本",
       "count": 1,
       "upCount": 1,
       "downCount": 0,
@@ -1218,7 +1209,7 @@
       }
     },
     {
-      "name": "匯富融資有限公司",
+      "name": "匯富融資",
       "count": 1,
       "upCount": 0,
       "downCount": 1,
@@ -1239,7 +1230,7 @@
       }
     },
     {
-      "name": "華興資本證券(香港)有限公司",
+      "name": "華興資本證券(香港)",
       "count": 1,
       "upCount": 0,
       "downCount": 0,
