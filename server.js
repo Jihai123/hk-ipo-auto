@@ -1703,32 +1703,51 @@ function scoreProspectus(rawText, stockCode) {
   if (partiesSection && partiesSection.length > 200) {
     sponsorSection = partiesSection;
     sponsorSectionTitle = '參與全球發售的各方';
-    console.log(`[保荐人] ✓ 找到章节，前200字: ${partiesSection.slice(0, 200)}`);
+    console.log(`[保荐人] ✓ 找到章节，前300字: ${partiesSection.slice(0, 300)}`);
 
     // 从章节中提取保荐人名称
-    // 格式1: "聯席保薦人 XXX公司\n地址"
-    // 格式2: "獨家保薦人 XXX公司"
-    const sponsorPatterns = [
-      /(?:聯席保薦人|獨家保薦人|联席保荐人|独家保荐人)\s*[（(]?[^）)]*[）)]?\s*([^\n]+有限公司)/gi,
-      /(?:聯席保薦人|獨家保薦人)\s*\n\s*([^\n]+有限公司)/gi,
-      /(?:聯席保薦人|獨家保薦人)[：:]\s*([^\n]+)/gi,
-    ];
+    // 格式：聯席保薦人 XXX有限公司\n地址\nYYY有限公司\n地址\n...整體協調人
+    // 策略：找到"聯席保薦人"或"獨家保薦人"，提取到"整體協調人"之间的所有"XXX有限公司"
 
-    for (const pattern of sponsorPatterns) {
-      let match;
-      while ((match = pattern.exec(sponsorSection)) !== null) {
-        const sponsorName = match[1].trim()
-          .replace(/\s+/g, '')
-          .replace(/香港$/, '')
-          .replace(/^[（(][^）)]+[）)]\s*/, ''); // 去除括号内的英文排序说明
+    // 步骤1：定位保荐人区块
+    const sponsorBlockMatch = sponsorSection.match(
+      /(?:聯席保薦人|獨家保薦人|联席保荐人|独家保荐人)([\s\S]*?)(?=整體協調人|整体协调人|聯席全球協調人|联席全球协调人|聯席賬簿管理人|$)/i
+    );
 
-        // 验证是否是有效的公司名称（含有"公司"或常见保荐人关键词）
-        if (sponsorName.length >= 4 &&
-            (sponsorName.includes('公司') ||
-             sponsorName.includes('Limited') ||
-             /證券|证券|資本|资本|融資|融资|金融|投資|投资/.test(sponsorName))) {
-          if (!extractedSponsors.includes(sponsorName)) {
-            extractedSponsors.push(sponsorName);
+    if (sponsorBlockMatch) {
+      const sponsorBlock = sponsorBlockMatch[1];
+      console.log(`[保荐人] 保荐人区块长度: ${sponsorBlock.length}, 前200字: ${sponsorBlock.slice(0, 200)}`);
+
+      // 步骤2：从区块中提取所有"XXX有限公司"
+      const companyMatches = sponsorBlock.match(/[^\n香港中環皇后大道德輔道萬宜廣場國際金融中心新紀元低座高座樓層室號址區街路巷弄0-9\s]{2,}(?:有限公司|Limited)/gi);
+
+      if (companyMatches) {
+        for (const company of companyMatches) {
+          const cleanName = company.trim().replace(/\s+/g, '');
+          // 验证是否是有效的公司名称
+          if (cleanName.length >= 6 &&
+              (cleanName.includes('公司') || cleanName.includes('Limited')) &&
+              !cleanName.includes('本公司') &&
+              !cleanName.includes('閣下') &&
+              !/^[0-9]+/.test(cleanName)) {
+            if (!extractedSponsors.includes(cleanName)) {
+              extractedSponsors.push(cleanName);
+              console.log(`[保荐人] 提取: ${cleanName}`);
+            }
+          }
+        }
+      }
+    }
+
+    // 备用策略：如果上面没提取到，尝试直接匹配"XXX證券/資本/金融有限公司"
+    if (extractedSponsors.length === 0) {
+      const fallbackMatches = sponsorSection.match(/[\u4e00-\u9fa5]+(?:證券|证券|資本|资本|融資|融资|金融|投資|投资)[\u4e00-\u9fa5]*有限公司/gi);
+      if (fallbackMatches) {
+        for (const company of fallbackMatches) {
+          const cleanName = company.trim().replace(/\s+/g, '');
+          if (cleanName.length >= 6 && !extractedSponsors.includes(cleanName)) {
+            extractedSponsors.push(cleanName);
+            console.log(`[保荐人] 备用提取: ${cleanName}`);
           }
         }
       }
