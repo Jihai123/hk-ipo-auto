@@ -433,27 +433,41 @@ function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxL
     return null;
   }
 
-  // 步骤2：估算页码对应的文本位置
-  // 招股书通常每页约2000-3000字符（去空格后）
-  // 但前面可能有封面、目录等，实际内容从约20页开始
-  // 估算位置 = (页码 - 20) * 2500，至少从0开始
-  const estimatedPosition = Math.max(0, (targetPage - 20) * 2500);
-  const searchStart = Math.max(0, estimatedPosition - 50000); // 向前扩展搜索范围
-  const searchEnd = Math.min(text.length, estimatedPosition + 100000); // 向后扩展搜索范围
+  // 步骤2：在全文中搜索页码标记 "– 82 –" 或 "- 82 -"
+  // 招股书页码格式通常是：– 82 – 或 - 82 - 或 —82—
+  const pageMarkerPatterns = [
+    new RegExp(`[–—-]\\s*${targetPage}\\s*[–—-]`, 'g'),
+    new RegExp(`-\\s*${targetPage}\\s*-`, 'g'),
+  ];
+
+  let pageMarkerIndex = -1;
+  for (const pattern of pageMarkerPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      pageMarkerIndex = text.indexOf(match[0]);
+      console.log(`[目录定位] 找到页码标记 "${match[0]}"，位置: ${pageMarkerIndex}`);
+      break;
+    }
+  }
+
+  if (pageMarkerIndex === -1) {
+    console.log(`[目录定位] 未找到页码标记 – ${targetPage} –`);
+    return null;
+  }
+
+  // 步骤3：在页码标记前后搜索章节标题
+  const searchStart = Math.max(0, pageMarkerIndex - 5000); // 页码前5000字符
+  const searchEnd = Math.min(text.length, pageMarkerIndex + 20000); // 页码后20000字符
   const searchText = text.slice(searchStart, searchEnd);
 
-  console.log(`[目录定位] 估算位置: ${estimatedPosition}, 搜索范围: ${searchStart}-${searchEnd}`);
+  console.log(`[目录定位] 搜索范围: ${searchStart}-${searchEnd}`);
 
-  // 步骤3：在估算位置附近搜索章节标题
   for (const titlePattern of titlePatterns) {
     const regex = new RegExp(titlePattern.source, 'gi');
     let match;
-    let bestMatch = null;
-    let bestDistance = Infinity;
 
     while ((match = regex.exec(searchText)) !== null) {
       const absolutePosition = searchStart + match.index;
-      const distance = Math.abs(absolutePosition - estimatedPosition);
 
       // 检查是否是目录格式（标题后跟点号）
       const afterMatch = searchText.slice(match.index + match[0].length, match.index + match[0].length + 30);
@@ -461,30 +475,24 @@ function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxL
         continue; // 跳过目录条目
       }
 
-      // 选择最接近估算位置的匹配
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestMatch = {
-          index: match.index,
-          absolutePosition: absolutePosition,
-          text: match[0]
-        };
+      // 检查是否是释义引用（标题前有「或"）
+      const beforeMatch = searchText.slice(Math.max(0, match.index - 5), match.index);
+      if (/[「"']$/.test(beforeMatch)) {
+        continue; // 跳过释义中的引用
       }
-    }
 
-    if (bestMatch) {
-      console.log(`[目录定位] ✓ 找到章节标题，位置: ${bestMatch.absolutePosition}, 距离估算: ${bestDistance}`);
+      console.log(`[目录定位] ✓ 找到章节标题，位置: ${absolutePosition}`);
 
       // 计算章节结束位置
-      const sectionStart = bestMatch.index;
+      const sectionStart = match.index;
       let sectionEnd = Math.min(sectionStart + maxLength, searchText.length);
 
       for (const ep of endPatterns) {
         const endRegex = new RegExp(ep.source, 'i');
-        const afterTitle = searchText.slice(sectionStart + bestMatch.text.length);
+        const afterTitle = searchText.slice(sectionStart + match[0].length);
         const endMatch = afterTitle.match(endRegex);
         if (endMatch) {
-          sectionEnd = Math.min(sectionEnd, sectionStart + bestMatch.text.length + endMatch.index);
+          sectionEnd = Math.min(sectionEnd, sectionStart + match[0].length + endMatch.index);
         }
       }
 
@@ -492,7 +500,7 @@ function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxL
     }
   }
 
-  console.log(`[目录定位] 未在估算位置附近找到章节标题`);
+  console.log(`[目录定位] 未在页码附近找到章节标题`);
   return null;
 }
 
