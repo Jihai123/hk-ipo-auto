@@ -2081,24 +2081,141 @@ function scoreProspectus(rawText, stockCode) {
     }
   }
 
-  // ========== 3. 基石投资者（严格限定章节+词边界检查，避免误匹配）==========
+  // ========== 3. 基石投资者（优化版：基于目录定位章节+表格解析）==========
   console.log(`\n[基石投资者] ========== 开始 ==========`);
 
-  // 基石投资者通常在招股书目录之后、概要之前有专门章节
   // 使用去空格版本搜索
   const textNoSpaceForCornerstone = text.replace(/\s+/g, '');
-  const cornerstoneSection = extractSection(
+
+  // -------- 策略1: 通过目录定位基石投资者章节 --------
+  console.log(`[基石投资者] 尝试目录定位...`);
+
+  // 目录中基石投资者的模式（包含页码）
+  const cornerstone_tocPatterns = [
+    /基石投資者\.{2,}\s*(\d+)/i,
+    /基石投资者\.{2,}\s*(\d+)/i,
+    /CORNERSTONEINVESTORS?\.{2,}\s*(\d+)/i,
+    /基石投資\.{2,}\s*(\d+)/i,
+  ];
+
+  // 章节标题模式
+  const cornerstone_titlePatterns = [
+    /基石投資者/i,
+    /基石投资者/i,
+    /CORNERSTONEINVESTORS?/i,
+  ];
+
+  // 结束标记模式
+  const cornerstone_endPatterns = [
+    /風險因素/i, /风险因素/i,
+    /行業概覽/i, /行业概览/i,
+    /概要/i, /SUMMARY/i,
+    /歷史、重組/i, /历史、重组/i,
+    /業務/i, /业务/i,
+  ];
+
+  // 优先使用目录定位
+  let cornerstoneSection = extractSectionByTOC(
     textNoSpaceForCornerstone,
-    [/基石投資者/i, /基石投资者/i, /CORNERSTONEINVESTOR/i],
-    [/風險因素/i, /风险因素/i, /行業概覽/i, /行业概览/i, /概要/i, /SUMMARY/i],
-    50000  // 减少章节长度，避免误匹配
+    cornerstone_tocPatterns,
+    cornerstone_titlePatterns,
+    cornerstone_endPatterns,
+    80000  // 基石投资者章节可能较长，包含表格
   );
+
+  // 如果目录定位失败，回退到普通搜索
+  if (!cornerstoneSection || cornerstoneSection.length < 200) {
+    console.log(`[基石投资者] 目录定位失败，回退到普通搜索`);
+    cornerstoneSection = extractSection(
+      textNoSpaceForCornerstone,
+      cornerstone_titlePatterns,
+      cornerstone_endPatterns,
+      50000,
+      true // 跳过目录
+    );
+  }
 
   console.log(`[基石投资者] 基石章节长度: ${cornerstoneSection?.length || 0}`);
 
+  // -------- 策略2: 从表格中提取投资者名称 --------
+  let tableInvestors = [];
+  const hasCornerstoneSection = cornerstoneSection && cornerstoneSection.length > 500;
+
+  if (hasCornerstoneSection) {
+    console.log(`[基石投资者] ✓ 找到基石章节，尝试解析表格...`);
+    console.log(`[基石投资者] 章节前500字: ${cornerstoneSection.slice(0, 500)}`);
+
+    // 从表格中提取投资者名称
+    // 表格特征：投资者名称 + 认购金额（百万美元/港元）+ 股份数目 + 百分比
+    // 例如：Charoen Pokphand Foods....200百萬美元   39,992,200   14.60%
+
+    // 模式1：提取含有"百萬美元"或"百萬港元"的行中的投资者名称
+    const tableRowPatterns = [
+      // 中文投资者名称 + 金额 + 股份
+      /([\u4e00-\u9fa5]{2,20}(?:集團|集团|基金|投資|投资|控股|資本|资本|國際|国际|有限公司)?)\s*[\.。\s]*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi,
+      // 英文投资者名称 + 金额
+      /([A-Z][A-Za-z0-9\s&.,\-'()]+(?:Ltd\.?|Limited|Inc\.?|Corp\.?|LLC|L\.P\.|Partners?|Fund|Capital|Investment|Holdings?)?)\s*[\.。\s]*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi,
+      // 简化模式：名称后跟数字和百萬
+      /([\u4e00-\u9fa5A-Za-z][^\n\r]{3,40}?)\s*[\.。\s]{2,}(\d+(?:\.\d+)?)\s*(?:百萬|百万)/gi,
+    ];
+
+    for (const pattern of tableRowPatterns) {
+      let match;
+      const regex = new RegExp(pattern.source, pattern.flags);
+      while ((match = regex.exec(cornerstoneSection)) !== null) {
+        let investorName = match[1].trim();
+        const amount = match[2];
+
+        // 清理投资者名称
+        investorName = investorName
+          .replace(/[\.。\s]+$/, '')  // 去除末尾的点号和空格
+          .replace(/^\s*[-–]\s*/, '')  // 去除开头的破折号
+          .trim();
+
+        // 验证名称有效性（长度合理，不是纯数字或百分比）
+        if (investorName.length >= 2 &&
+            investorName.length <= 50 &&
+            !/^\d+$/.test(investorName) &&
+            !/^[\d.%]+$/.test(investorName) &&
+            !/^(佔|占|约|約|股份|發售|发售)/.test(investorName)) {
+
+          // 避免重复
+          if (!tableInvestors.find(inv => inv.name === investorName)) {
+            tableInvestors.push({ name: investorName, amount: amount });
+            console.log(`[基石投资者] 表格提取: "${investorName}" (${amount}百万)`);
+          }
+        }
+      }
+    }
+
+    // 模式2：查找"基石投資者"后面的公司名称列表
+    // 例如：本公司基石投資者包括 XXX、YYY 及 ZZZ
+    const listPatterns = [
+      /基石投?資?者?(?:包括|為|为|有)?\s*[:：]?\s*((?:[\u4e00-\u9fa5A-Za-z][^。；;]{2,30}[,、，;；及和]?\s*)+)/gi,
+      /(?:以下|下列)基石投資者\s*[:：]?\s*((?:[\u4e00-\u9fa5A-Za-z][^。；;]{2,30}[,、，;；及和]?\s*)+)/gi,
+    ];
+
+    for (const pattern of listPatterns) {
+      const listMatch = cornerstoneSection.match(pattern);
+      if (listMatch && listMatch[1]) {
+        const investorList = listMatch[1].split(/[,、，;；及和]+/);
+        for (let inv of investorList) {
+          inv = inv.trim().replace(/[\.。\s]+$/, '');
+          if (inv.length >= 2 && inv.length <= 40 && !/^\d+$/.test(inv)) {
+            if (!tableInvestors.find(existing => existing.name === inv)) {
+              tableInvestors.push({ name: inv, amount: '未知' });
+              console.log(`[基石投资者] 列表提取: "${inv}"`);
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`[基石投资者] 表格/列表共提取 ${tableInvestors.length} 个投资者`);
+  }
+
   // 如果没有基石投资者章节，只在摘要/概要部分搜索（前15万字）
   // 避免在财务数据等无关内容中误匹配
-  const hasCornerstoneSection = cornerstoneSection && cornerstoneSection.length > 500;
   let investorSearchText = cornerstoneSection;
   if (!cornerstoneSection) {
     console.log(`[基石投资者] 无基石专属章节，使用概要/摘要搜索`);
@@ -2161,22 +2278,81 @@ function scoreProspectus(rawText, stockCode) {
   };
 
   const foundInvestorDetails = [];
+
+  // -------- 策略3: 明星基石匹配（双重来源）--------
+  console.log(`[基石投资者] 开始明星基石匹配...`);
+
   for (const inv of STAR_CORNERSTONE) {
     const normalizedInv = normalizeText(inv);
-    // 使用词边界检查
+    let matched = false;
+    let matchContext = '';
+    let matchSource = '';
+
+    // 来源1：从原文中直接匹配
     if (isInvestorWordBoundaryMatch(investorSearchText, inv) ||
         isInvestorWordBoundaryMatch(normalizedInvestorText, normalizedInv)) {
       // 提取匹配位置和上下文
       const invIndex = investorSearchText.indexOf(inv);
       // 验证上下文是否有效
-      if (!isValidCornerstoneContext(investorSearchText, inv, invIndex)) {
-        continue; // 跳过无效匹配
+      if (isValidCornerstoneContext(investorSearchText, inv, invIndex)) {
+        matched = true;
+        matchSource = '原文匹配';
+        matchContext = invIndex !== -1
+          ? investorSearchText.slice(Math.max(0, invIndex - 20), Math.min(investorSearchText.length, invIndex + inv.length + 40)).replace(/\s+/g, ' ')
+          : '';
       }
-      const context = invIndex !== -1
-        ? investorSearchText.slice(Math.max(0, invIndex - 20), Math.min(investorSearchText.length, invIndex + inv.length + 40)).replace(/\s+/g, ' ')
-        : '';
-      foundInvestorDetails.push({ keyword: inv, context });
-      console.log(`[基石投资者] ✓ 匹配: ${inv}`);
+    }
+
+    // 来源2：从表格提取的投资者名称中匹配
+    if (!matched && tableInvestors.length > 0) {
+      for (const tableInv of tableInvestors) {
+        const tableInvName = tableInv.name;
+        const normalizedTableInv = normalizeText(tableInvName);
+        // 检查明星基石关键词是否出现在表格投资者名称中
+        if (tableInvName.includes(inv) ||
+            normalizedTableInv.includes(normalizedInv) ||
+            // 反向匹配：表格投资者名称是否包含明星关键词的变体
+            (inv.length > 3 && new RegExp(inv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(tableInvName))) {
+          matched = true;
+          matchSource = '表格匹配';
+          matchContext = `表格投资者: ${tableInvName} (${tableInv.amount}百万)`;
+          console.log(`[基石投资者] ✓ 表格匹配: "${inv}" -> "${tableInvName}"`);
+          break;
+        }
+      }
+    }
+
+    if (matched) {
+      foundInvestorDetails.push({ keyword: inv, context: matchContext, source: matchSource });
+      console.log(`[基石投资者] ✓ 匹配: ${inv} (${matchSource})`);
+    }
+  }
+
+  // 额外：将表格提取的投资者也与明星名单做反向匹配
+  // 有些情况下投资者全名包含明星关键词，但关键词本身不在原文中单独出现
+  if (tableInvestors.length > 0) {
+    console.log(`[基石投资者] 反向匹配表格投资者...`);
+    for (const tableInv of tableInvestors) {
+      const tableInvName = tableInv.name;
+      const normalizedTableInv = normalizeText(tableInvName);
+
+      for (const starInv of STAR_CORNERSTONE) {
+        const normalizedStar = normalizeText(starInv);
+        // 检查是否已匹配过
+        if (foundInvestorDetails.find(d => d.keyword === starInv)) {
+          continue;
+        }
+        // 宽松匹配：表格投资者名称是否包含明星关键词
+        if (tableInvName.toLowerCase().includes(starInv.toLowerCase()) ||
+            normalizedTableInv.includes(normalizedStar)) {
+          foundInvestorDetails.push({
+            keyword: starInv,
+            context: `表格投资者: ${tableInvName} (${tableInv.amount}百万)`,
+            source: '表格反向匹配'
+          });
+          console.log(`[基石投资者] ✓ 表格反向匹配: "${tableInvName}" 包含 "${starInv}"`);
+        }
+      }
     }
   }
 
@@ -2209,12 +2385,16 @@ function scoreProspectus(rawText, stockCode) {
   }))];
 
   const cornerstoneEvidence = {
-    section: cornerstoneSection ? '基石投資者章节' : '招股书概要/前15万字',
+    section: cornerstoneSection ? '基石投資者章节（目录定位）' : '招股书概要/前15万字',
     sectionLength: investorSearchText.length,
     matchedKeywords: foundInvestorDetails.map(d => d.keyword),
     matchedContexts: foundInvestorDetails.slice(0, 3).map(d => d.context),
+    matchSources: foundInvestorDetails.slice(0, 3).map(d => d.source || '原文匹配'),
+    tableExtracted: tableInvestors.map(inv => `${inv.name} (${inv.amount}百万)`),
     starList: '高瓴、红杉、淡马锡、GIC、黑石、贝莱德、中投公司、社保基金等',
   };
+
+  console.log(`[基石投资者] ========== 完成 ==========`);
 
   if (uniqueInvestors.length > 0) {
     scores.cornerstone = {
