@@ -1718,22 +1718,45 @@ function scoreProspectus(rawText, stockCode) {
       const sponsorBlock = sponsorBlockMatch[1];
       console.log(`[保荐人] 保荐人区块长度: ${sponsorBlock.length}, 前200字: ${sponsorBlock.slice(0, 200)}`);
 
-      // 步骤2：从区块中提取所有"XXX有限公司"
-      const companyMatches = sponsorBlock.match(/[^\n香港中環皇后大道德輔道萬宜廣場國際金融中心新紀元低座高座樓層室號址區街路巷弄0-9\s]{2,}(?:有限公司|Limited)/gi);
+      // 步骤2：按"有限公司"分割，提取每个公司名
+      // 文本格式：XXX有限公司地址YYY有限公司地址...
+      const parts = sponsorBlock.split(/有限公司/);
 
-      if (companyMatches) {
-        for (const company of companyMatches) {
-          const cleanName = company.trim().replace(/\s+/g, '');
-          // 验证是否是有效的公司名称
-          if (cleanName.length >= 6 &&
-              (cleanName.includes('公司') || cleanName.includes('Limited')) &&
-              !cleanName.includes('本公司') &&
-              !cleanName.includes('閣下') &&
-              !/^[0-9]+/.test(cleanName)) {
-            if (!extractedSponsors.includes(cleanName)) {
-              extractedSponsors.push(cleanName);
-              console.log(`[保荐人] 提取: ${cleanName}`);
-            }
+      // 地址关键词（用于从后往前找公司名开始位置）
+      const addressKeywords = ['香港', '九龍', '新界', '中環', '金鐘', '灣仔', '銅鑼灣', '尖沙咀',
+        '上環', '西環', '北角', '鰂魚涌', '觀塘', '荃灣', '沙田', '大埔',
+        '樓', '層', '室', '號', '街', '道', '路', '廣場', '中心', '大廈', '大樓'];
+
+      for (let i = 0; i < parts.length - 1; i++) { // 最后一个part是"有限公司"之后的内容，跳过
+        let part = parts[i];
+
+        // 从后往前找公司名开始位置（跳过地址词）
+        let companyStart = 0;
+        for (let j = part.length - 1; j >= 0; j--) {
+          const remaining = part.slice(j);
+          // 检查是否以地址关键词开头
+          const isAddressStart = addressKeywords.some(kw => remaining.startsWith(kw));
+          // 检查是否是数字（门牌号）
+          const isNumber = /^[0-9]/.test(remaining);
+
+          if (isAddressStart || isNumber) {
+            companyStart = j + 1;
+            break;
+          }
+        }
+
+        // 提取公司名
+        let companyName = part.slice(companyStart) + '有限公司';
+        companyName = companyName.trim();
+
+        // 验证是否是有效的公司名称
+        if (companyName.length >= 8 &&
+            companyName.length <= 30 &&
+            !companyName.startsWith('有限公司') &&
+            !/^[0-9]/.test(companyName)) {
+          if (!extractedSponsors.includes(companyName)) {
+            extractedSponsors.push(companyName);
+            console.log(`[保荐人] 提取: ${companyName}`);
           }
         }
       }
