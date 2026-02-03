@@ -1860,8 +1860,13 @@ function scoreProspectus(rawText, stockCode) {
     for (const extractedName of extractedSponsors) {
       // 在保荐人数据库中查找匹配
       let matched = false;
+      console.log(`[保荐人匹配] 尝试匹配: "${extractedName}"`);
+      console.log(`[保荐人匹配] 标准化后: "${normalizeText(extractedName)}"`);
       for (const [dbName, data] of Object.entries(SPONSORS)) {
-        if (matchSponsorName(extractedName, dbName) || matchSponsorName(dbName, extractedName)) {
+        const match1 = matchSponsorName(extractedName, dbName);
+        const match2 = matchSponsorName(dbName, extractedName);
+        if (match1 || match2) {
+          console.log(`[保荐人匹配] ✓ 匹配成功: "${extractedName}" <-> "${dbName}"`);
           // 找到匹配的保荐人数据
           if (!foundSponsors.some(s => s.extractedName === extractedName)) {
             foundSponsors.push({
@@ -1873,6 +1878,13 @@ function scoreProspectus(rawText, stockCode) {
             matched = true;
             break;
           }
+        }
+      }
+      if (!matched) {
+        console.log(`[保荐人匹配] ✗ 未找到匹配，数据库中的保荐人列表:`);
+        const dbNames = Object.keys(SPONSORS).slice(0, 10);
+        for (const dbName of dbNames) {
+          console.log(`[保荐人匹配]   - "${dbName}" (标准化: "${normalizeText(dbName)}")`);
         }
       }
       // 即使数据库中没有匹配，也记录提取到的名称
@@ -1912,7 +1924,9 @@ function scoreProspectus(rawText, stockCode) {
     allMatched: foundSponsors.map(s => ({
       extractedName: s.extractedName,
       dbName: s.name,
+      name: s.name,  // 前端使用 name 字段
       avgFirstDay: s.rate,
+      rate: s.rate,  // 前端使用 rate 字段
       count: s.count,
       winRate: s.winRate,
     })),
