@@ -1723,12 +1723,23 @@ function scoreProspectus(rawText, stockCode) {
       const parts = sponsorBlock.split(/有限公司/);
 
       // 地址关键词（用于从后往前找公司名开始位置）
-      const addressKeywords = ['香港', '九龍', '新界', '中環', '金鐘', '灣仔', '銅鑼灣', '尖沙咀',
+      // 注意：不包含"香港"，因为可能是公司名的一部分如"中國國際金融香港證券"
+      const addressKeywords = ['九龍', '新界', '中環', '金鐘', '灣仔', '銅鑼灣', '尖沙咀',
         '上環', '西環', '北角', '鰂魚涌', '觀塘', '荃灣', '沙田', '大埔',
-        '樓', '層', '室', '號', '街', '道', '路', '廣場', '中心', '大廈', '大樓'];
+        '樓', '層', '室', '號', '街', '道', '路', '廣場', '大廈', '大樓'];
 
       for (let i = 0; i < parts.length - 1; i++) { // 最后一个part是"有限公司"之后的内容，跳过
         let part = parts[i];
+
+        // 第一个part特殊处理：直接作为完整公司名（前面没有地址）
+        if (i === 0) {
+          let companyName = part.trim() + '有限公司';
+          if (companyName.length >= 8 && companyName.length <= 35) {
+            extractedSponsors.push(companyName);
+            console.log(`[保荐人] 提取(首个): ${companyName}`);
+          }
+          continue;
+        }
 
         // 从后往前找公司名开始位置（跳过地址词）
         let companyStart = 0;
@@ -1738,9 +1749,12 @@ function scoreProspectus(rawText, stockCode) {
           const isAddressStart = addressKeywords.some(kw => remaining.startsWith(kw));
           // 检查是否是数字（门牌号）
           const isNumber = /^[0-9]/.test(remaining);
+          // 检查是否是"香港"后面紧跟地址特征
+          const isHongKongAddress = remaining.startsWith('香港') &&
+            (remaining.length <= 2 || addressKeywords.some(kw => remaining.slice(2).startsWith(kw)) || /^香港[0-9]/.test(remaining));
 
-          if (isAddressStart || isNumber) {
-            companyStart = j + 1;
+          if (isAddressStart || isNumber || isHongKongAddress) {
+            companyStart = j + (isHongKongAddress ? 2 : 0) + 1;
             break;
           }
         }
@@ -1751,7 +1765,7 @@ function scoreProspectus(rawText, stockCode) {
 
         // 验证是否是有效的公司名称
         if (companyName.length >= 8 &&
-            companyName.length <= 30 &&
+            companyName.length <= 35 &&
             !companyName.startsWith('有限公司') &&
             !/^[0-9]/.test(companyName)) {
           if (!extractedSponsors.includes(companyName)) {
