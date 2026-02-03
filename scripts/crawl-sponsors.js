@@ -367,6 +367,24 @@ async function crawlSponsorPage(page = 1) {
 }
 
 /**
+ * 标准化保荐人名称（去除"有限公司"等后缀，合并相同公司）
+ * @param {string} name - 原始保荐人名称
+ * @returns {string} 标准化后的名称
+ */
+function normalizeSponsorName(name) {
+  if (!name) return '';
+
+  // 去除常见后缀
+  let normalized = name
+    .replace(/有限責任公司$/g, '')
+    .replace(/有限公司$/g, '')
+    .replace(/\s+/g, '')  // 去除空格
+    .trim();
+
+  return normalized || name;
+}
+
+/**
  * 从IPO记录汇总保荐人统计
  */
 function aggregateSponsorStats(ipoRecords) {
@@ -376,9 +394,12 @@ function aggregateSponsorStats(ipoRecords) {
     for (const sponsorName of record.sponsors) {
       if (!sponsorName) continue;
 
-      if (!sponsorMap.has(sponsorName)) {
-        sponsorMap.set(sponsorName, {
-          name: sponsorName,
+      // 标准化保荐人名称
+      const normalizedName = normalizeSponsorName(sponsorName);
+
+      if (!sponsorMap.has(normalizedName)) {
+        sponsorMap.set(normalizedName, {
+          name: normalizedName,
           count: 0,
           upCount: 0,
           downCount: 0,
@@ -388,7 +409,7 @@ function aggregateSponsorStats(ipoRecords) {
         });
       }
 
-      const stat = sponsorMap.get(sponsorName);
+      const stat = sponsorMap.get(normalizedName);
       stat.count++;
       stat.totalReturn += record.firstDayPerf;
       stat.records.push({
