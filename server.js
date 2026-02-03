@@ -1718,7 +1718,27 @@ function scoreProspectus(rawText, stockCode) {
       const sponsorBlock = sponsorBlockMatch[1];
       console.log(`[保荐人] 保荐人区块长度: ${sponsorBlock.length}, 前200字: ${sponsorBlock.slice(0, 200)}`);
 
-      // 步骤2：按"有限公司"分割，提取每个公司名
+      // 步骤2a：先提取英文公司名（以Limited结尾）
+      // 模式：以大写字母开头，包含字母、数字、点号、括号，以Limited结尾
+      // 注意：PDF解析后空格可能被移除，所以不强制要求空格
+      const englishCompanyMatches = sponsorBlock.match(/[A-Z][A-Za-z0-9.()&',\-\s]+Limited/g);
+      if (englishCompanyMatches) {
+        for (const match of englishCompanyMatches) {
+          // 清理公司名
+          let companyName = match.trim();
+          // 验证长度合理（至少15个字符，最多80个字符）且不是纯地址
+          // 排除包含香港地址特征的误匹配
+          const isLikelyAddress = /^(Floor|Room|Suite|Level|Unit)/i.test(companyName);
+          if (companyName.length >= 15 && companyName.length <= 80 && !isLikelyAddress) {
+            if (!extractedSponsors.includes(companyName)) {
+              extractedSponsors.push(companyName);
+              console.log(`[保荐人] 提取(英文): ${companyName}`);
+            }
+          }
+        }
+      }
+
+      // 步骤2b：按"有限公司"分割，提取中文公司名
       // 文本格式：XXX有限公司地址YYY有限公司地址...
       const parts = sponsorBlock.split(/有限公司/);
 
