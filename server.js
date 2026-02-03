@@ -408,6 +408,95 @@ function matchSponsorName(searchText, sponsorName) {
 }
 
 /**
+ * 通过目录定位章节位置
+ * 招股书目录格式通常是：董事、監事及參與全球發售的各方.............. 215
+ * @param {string} text - 全文(已去空格)
+ * @param {Array} tocPatterns - 目录匹配模式（章节名+页码）
+ * @param {Array} titlePatterns - 章节标题模式
+ * @param {number} maxLength - 最大章节长度
+ * @returns {string} 章节内容
+ */
+function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxLength = 50000) {
+  // 步骤1：从目录中找到章节页码
+  let targetPage = null;
+  for (const pattern of tocPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      targetPage = parseInt(match[1], 10);
+      console.log(`[目录定位] 找到目录条目，章节在第 ${targetPage} 页`);
+      break;
+    }
+  }
+
+  if (!targetPage) {
+    console.log(`[目录定位] 未找到目录页码，回退到普通搜索`);
+    return null;
+  }
+
+  // 步骤2：估算页码对应的文本位置
+  // 招股书通常每页约2000-3000字符（去空格后）
+  // 但前面可能有封面、目录等，实际内容从约20页开始
+  // 估算位置 = (页码 - 20) * 2500，至少从0开始
+  const estimatedPosition = Math.max(0, (targetPage - 20) * 2500);
+  const searchStart = Math.max(0, estimatedPosition - 50000); // 向前扩展搜索范围
+  const searchEnd = Math.min(text.length, estimatedPosition + 100000); // 向后扩展搜索范围
+  const searchText = text.slice(searchStart, searchEnd);
+
+  console.log(`[目录定位] 估算位置: ${estimatedPosition}, 搜索范围: ${searchStart}-${searchEnd}`);
+
+  // 步骤3：在估算位置附近搜索章节标题
+  for (const titlePattern of titlePatterns) {
+    const regex = new RegExp(titlePattern.source, 'gi');
+    let match;
+    let bestMatch = null;
+    let bestDistance = Infinity;
+
+    while ((match = regex.exec(searchText)) !== null) {
+      const absolutePosition = searchStart + match.index;
+      const distance = Math.abs(absolutePosition - estimatedPosition);
+
+      // 检查是否是目录格式（标题后跟点号）
+      const afterMatch = searchText.slice(match.index + match[0].length, match.index + match[0].length + 30);
+      if (/^\.{2,}|^\s*\.[\s.]*\./.test(afterMatch)) {
+        continue; // 跳过目录条目
+      }
+
+      // 选择最接近估算位置的匹配
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestMatch = {
+          index: match.index,
+          absolutePosition: absolutePosition,
+          text: match[0]
+        };
+      }
+    }
+
+    if (bestMatch) {
+      console.log(`[目录定位] ✓ 找到章节标题，位置: ${bestMatch.absolutePosition}, 距离估算: ${bestDistance}`);
+
+      // 计算章节结束位置
+      const sectionStart = bestMatch.index;
+      let sectionEnd = Math.min(sectionStart + maxLength, searchText.length);
+
+      for (const ep of endPatterns) {
+        const endRegex = new RegExp(ep.source, 'i');
+        const afterTitle = searchText.slice(sectionStart + bestMatch.text.length);
+        const endMatch = afterTitle.match(endRegex);
+        if (endMatch) {
+          sectionEnd = Math.min(sectionEnd, sectionStart + bestMatch.text.length + endMatch.index);
+        }
+      }
+
+      return searchText.slice(sectionStart, sectionEnd);
+    }
+  }
+
+  console.log(`[目录定位] 未在估算位置附近找到章节标题`);
+  return null;
+}
+
+/**
  * 提取特定章节内容（智能跳过目录）
  * @param {string} text - 全文
  * @param {Array} startPatterns - 开始标记正则数组
@@ -1540,9 +1629,9 @@ function scoreProspectus(rawText, stockCode) {
     };
   }
   
-  // ========== 2. 保荐人评分（优化版：基于章节精准定位）==========
+  // ========== 2. 保荐人评分（优化版：基于目录定位章节）==========
   // 核心判断逻辑：
-  // - 限定在"董事及參與全球發售的各方"或"參與全球發售的各方"章节中识别
+  // - 通过目录页码定位"董事及參與全球發售的各方"章节
   // - 查找"聯席保薦人"或"獨家保薦人"后面跟的公司名称
   // - 输出：保荐人名称、保荐数量、首日涨幅、证据原文
 
@@ -1555,25 +1644,51 @@ function scoreProspectus(rawText, stockCode) {
   // 用去空格版本搜索章节
   const textNoSpaceForSponsor = text.replace(/\s+/g, '');
 
-  // -------- 策略1: 在"參與全球發售的各方"章节中精准提取 --------
-  const partiesSection = extractSection(
+  // -------- 策略1: 通过目录定位章节 --------
+  const tocPatterns = [
+    /董事、監事及參與全球發售的各方\.{2,}\s*(\d+)/i,
+    /董事及參與全球發售的各方\.{2,}\s*(\d+)/i,
+    /參與全球發售的各方\.{2,}\s*(\d+)/i,
+    /董事、监事及参与全球发售的各方\.{2,}\s*(\d+)/i,
+    /PARTIESINVOLVEDINTHEGLOBALOFFERING\.{2,}\s*(\d+)/i,
+  ];
+
+  const titlePatterns = [
+    /董事、監事及參與全球發售的各方/i,
+    /董事及參與全球發售的各方/i,
+    /參與全球發售的各方/i,
+    /参与全球发售的各方/i,
+    /PARTIESINVOLVED/i,
+  ];
+
+  const endPatterns = [
+    /公司資料/i, /公司资料/i,
+    /行業概覽/i, /行业概览/i,
+    /監管概覽/i, /监管概览/i,
+    /CORPORATEINFORMATION/i,
+    /INDUSTRYOVERVIEW/i,
+  ];
+
+  // 优先使用目录定位
+  let partiesSection = extractSectionByTOC(
     textNoSpaceForSponsor,
-    [
-      /董事及參與全球發售的各方/i,
-      /參與全球發售的各方/i,
-      /参与全球发售的各方/i,
-      /PARTIESINVOLVED/i
-    ],
-    [
-      /公司資料/i, /公司资料/i,
-      /行業概覽/i, /行业概览/i,
-      /監管概覽/i, /监管概览/i,
-      /CORPORATEINFORMATION/i,
-      /INDUSTRYOVERVIEW/i
-    ],
-    40000,
-    true // 跳过目录
+    tocPatterns,
+    titlePatterns,
+    endPatterns,
+    40000
   );
+
+  // 如果目录定位失败，回退到普通搜索
+  if (!partiesSection || partiesSection.length < 200) {
+    console.log(`[保荐人] 目录定位失败，回退到普通搜索`);
+    partiesSection = extractSection(
+      textNoSpaceForSponsor,
+      titlePatterns,
+      endPatterns,
+      40000,
+      true // 跳过目录
+    );
+  }
 
   console.log(`[保荐人] 參與全球發售的各方章节长度: ${partiesSection?.length || 0}`);
 
