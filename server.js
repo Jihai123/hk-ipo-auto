@@ -455,12 +455,12 @@ function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxL
     return null;
   }
 
-  // 步骤3：在页码标记前后搜索章节标题
+  // 步骤3：在页码标记附近搜索章节标题（扩大搜索范围）
   const searchStart = Math.max(0, pageMarkerIndex - 5000); // 页码前5000字符
-  const searchEnd = Math.min(text.length, pageMarkerIndex + 20000); // 页码后20000字符
+  const searchEnd = Math.min(text.length, pageMarkerIndex + 50000); // 页码后50000字符（约10页）
   const searchText = text.slice(searchStart, searchEnd);
 
-  console.log(`[目录定位] 搜索范围: ${searchStart}-${searchEnd}`);
+  console.log(`[目录定位] 搜索范围: ${searchStart}-${searchEnd}，长度: ${searchEnd - searchStart}`);
 
   for (const titlePattern of titlePatterns) {
     const regex = new RegExp(titlePattern.source, 'gi');
@@ -481,22 +481,31 @@ function extractSectionByTOC(text, tocPatterns, titlePatterns, endPatterns, maxL
         continue; // 跳过释义中的引用
       }
 
-      console.log(`[目录定位] ✓ 找到章节标题，位置: ${absolutePosition}`);
+      console.log(`[目录定位] ✓ 找到章节标题，绝对位置: ${absolutePosition}`);
 
-      // 计算章节结束位置
-      const sectionStart = match.index;
-      let sectionEnd = Math.min(sectionStart + maxLength, searchText.length);
+      // 关键修改：从全文中截取章节内容，而不是从searchText中截取
+      // 这样可以获取完整的章节内容
+      const sectionStart = absolutePosition;
+      let sectionEnd = Math.min(sectionStart + maxLength, text.length);
 
+      // 在章节内容中查找结束标记
+      const sectionContent = text.slice(sectionStart, sectionEnd);
       for (const ep of endPatterns) {
         const endRegex = new RegExp(ep.source, 'i');
-        const afterTitle = searchText.slice(sectionStart + match[0].length);
+        const titleLength = match[0].length;
+        const afterTitle = sectionContent.slice(titleLength);
         const endMatch = afterTitle.match(endRegex);
         if (endMatch) {
-          sectionEnd = Math.min(sectionEnd, sectionStart + match[0].length + endMatch.index);
+          const newEnd = sectionStart + titleLength + endMatch.index;
+          if (newEnd > sectionStart + 1000) { // 确保至少有1000字符
+            sectionEnd = Math.min(sectionEnd, newEnd);
+          }
         }
       }
 
-      return searchText.slice(sectionStart, sectionEnd);
+      const result = text.slice(sectionStart, sectionEnd);
+      console.log(`[目录定位] 章节长度: ${result.length}，截取范围: ${sectionStart}-${sectionEnd}`);
+      return result;
     }
   }
 
