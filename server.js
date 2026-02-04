@@ -2142,53 +2142,127 @@ function scoreProspectus(rawText, stockCode) {
   const hasCornerstoneSection = cornerstoneSection && cornerstoneSection.length > 500;
 
   if (hasCornerstoneSection) {
-    console.log(`[基石投资者] ✓ 找到基石章节，尝试解析表格...`);
+    console.log(`[基石投资者] ✓ 找到基石章节，长度: ${cornerstoneSection.length}`);
     console.log(`[基石投资者] 章节前500字: ${cornerstoneSection.slice(0, 500)}`);
 
-    // 从表格中提取投资者名称
-    // 表格特征：投资者名称 + 认购金额（百万美元/港元）+ 股份数目 + 百分比
-    // 例如：Charoen Pokphand Foods....200百萬美元   39,992,200   14.60%
-
-    // 模式1：提取含有"百萬美元"或"百萬港元"的行中的投资者名称
-    const tableRowPatterns = [
-      // 中文投资者名称 + 金额 + 股份
-      /([\u4e00-\u9fa5]{2,20}(?:集團|集团|基金|投資|投资|控股|資本|资本|國際|国际|有限公司)?)\s*[\.。\s]*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi,
-      // 英文投资者名称 + 金额
-      /([A-Z][A-Za-z0-9\s&.,\-'()]+(?:Ltd\.?|Limited|Inc\.?|Corp\.?|LLC|L\.P\.|Partners?|Fund|Capital|Investment|Holdings?)?)\s*[\.。\s]*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi,
-      // 简化模式：名称后跟数字和百萬
-      /([\u4e00-\u9fa5A-Za-z][^\n\r]{3,40}?)\s*[\.。\s]{2,}(\d+(?:\.\d+)?)\s*(?:百萬|百万)/gi,
+    // -------- 步骤2.1: 定位表格位置 --------
+    // 表格引导语特征：
+    // - "下表載列基石投資的詳情"
+    // - "基於發售價XX港元"
+    // - 表头包含"認購金額"、"發售股份"
+    const tableLocatorPatterns = [
+      /下表載列基石投資?的?詳情/i,
+      /下表载列基石投资?的?详情/i,
+      /基於發售價[\d.]+港元/i,
+      /基于发售价[\d.]+港元/i,
+      /認購金額.*發售股份/i,
+      /认购金额.*发售股份/i,
+      /基石投資者.*認購金額/i,
     ];
 
-    for (const pattern of tableRowPatterns) {
-      let match;
-      const regex = new RegExp(pattern.source, pattern.flags);
-      while ((match = regex.exec(cornerstoneSection)) !== null) {
-        let investorName = match[1].trim();
+    let tableStartIndex = 0;
+    for (const pattern of tableLocatorPatterns) {
+      const match = cornerstoneSection.match(pattern);
+      if (match) {
+        tableStartIndex = cornerstoneSection.indexOf(match[0]);
+        console.log(`[基石投资者] 表格定位: 找到"${match[0].slice(0, 30)}..."，位置: ${tableStartIndex}`);
+        break;
+      }
+    }
+
+    // 从表格位置开始截取内容进行解析（表格通常在定位点后30000字符内）
+    const tableSection = cornerstoneSection.slice(tableStartIndex, tableStartIndex + 30000);
+    console.log(`[基石投资者] 表格区域长度: ${tableSection.length}，前200字: ${tableSection.slice(0, 200)}`);
+
+    // -------- 步骤2.2: 解析表格数据行 --------
+    // 表格特征：投资者名称 + 认购金额（百万美元/港元）+ 股份数目 + 百分比
+    // 例如：Charoen Pokphand Foods....200百萬美元   39,992,200   14.60%
+    // 例如：富達基金................80百萬美元   15,996,800   5.84%
+
+    let match;
+
+    // 模式1：英文投资者名称（开头大写，后跟点号和金额）
+    const englishInvestorPattern = /([A-Z][A-Za-z0-9\s&.,\-'()]+?)\.{2,}\s*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi;
+    while ((match = englishInvestorPattern.exec(tableSection)) !== null) {
+      let investorName = match[1].trim().replace(/\s+/g, ' ');
+      const amount = match[2];
+      if (investorName.length >= 3 && investorName.length <= 60) {
+        if (!tableInvestors.find(inv => inv.name === investorName)) {
+          tableInvestors.push({ name: investorName, amount: amount });
+          console.log(`[基石投资者] 表格提取(英文): "${investorName}" (${amount}百万)`);
+        }
+      }
+    }
+
+    // 模式2：中文投资者名称（中文字符开头，后跟点号和金额）
+    const chineseInvestorPattern = /([\u4e00-\u9fa5][\u4e00-\u9fa5A-Za-z0-9()（）\s]{1,25}?)\.{2,}\s*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi;
+    while ((match = chineseInvestorPattern.exec(tableSection)) !== null) {
+      let investorName = match[1].trim();
+      const amount = match[2];
+      // 排除表头和无效项
+      if (investorName.length >= 2 &&
+          investorName.length <= 30 &&
+          !/^(基石投資者|基石投资者|認購金額|认购金额)/.test(investorName)) {
+        if (!tableInvestors.find(inv => inv.name === investorName)) {
+          tableInvestors.push({ name: investorName, amount: amount });
+          console.log(`[基石投资者] 表格提取(中文): "${investorName}" (${amount}百万)`);
+        }
+      }
+    }
+
+    // 模式3：带破折号前缀的投资者（如 "– Wii Pte. Ltd."）
+    const dashPrefixPattern = /[–\-]\s*([A-Za-z][A-Za-z0-9\s&.,\-'()]+?)\.{2,}\s*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi;
+    while ((match = dashPrefixPattern.exec(tableSection)) !== null) {
+      let investorName = match[1].trim();
+      const amount = match[2];
+      if (investorName.length >= 3 && investorName.length <= 50) {
+        if (!tableInvestors.find(inv => inv.name === investorName)) {
+          tableInvestors.push({ name: investorName, amount: amount });
+          console.log(`[基石投资者] 表格提取(子项): "${investorName}" (${amount}百万)`);
+        }
+      }
+    }
+
+    // 模式4：多行公司名称（如"加皇環球資產管理(亞洲)\n有限公司"）
+    // 查找"有限公司"前的完整名称
+    const fullNamePattern = /([\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z0-9()（）\s]{2,30}有限公司)\.{0,}\s*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi;
+    while ((match = fullNamePattern.exec(tableSection)) !== null) {
+      let investorName = match[1].trim().replace(/\s+/g, '');
+      const amount = match[2];
+      if (investorName.length >= 4 && investorName.length <= 40) {
+        if (!tableInvestors.find(inv => inv.name === investorName)) {
+          tableInvestors.push({ name: investorName, amount: amount });
+          console.log(`[基石投资者] 表格提取(全名): "${investorName}" (${amount}百万)`);
+        }
+      }
+    }
+
+    // 模式5：备用 - 直接匹配"XX百萬美元"前的名称（更宽松）
+    if (tableInvestors.length === 0) {
+      console.log(`[基石投资者] 标准模式未匹配，尝试宽松模式...`);
+      const loosePattern = /([^\d\n\r,，]{3,40}?)\s*(\d+(?:\.\d+)?)\s*(?:百萬|百万)(?:美元|港元)/gi;
+      while ((match = loosePattern.exec(tableSection)) !== null) {
+        let investorName = match[1].trim()
+          .replace(/[\.。\s]+$/, '')
+          .replace(/^\s*[–\-]\s*/, '');
         const amount = match[2];
 
-        // 清理投资者名称
-        investorName = investorName
-          .replace(/[\.。\s]+$/, '')  // 去除末尾的点号和空格
-          .replace(/^\s*[-–]\s*/, '')  // 去除开头的破折号
-          .trim();
-
-        // 验证名称有效性（长度合理，不是纯数字或百分比）
         if (investorName.length >= 2 &&
             investorName.length <= 50 &&
             !/^\d+$/.test(investorName) &&
             !/^[\d.%]+$/.test(investorName) &&
-            !/^(佔|占|约|約|股份|發售|发售)/.test(investorName)) {
+            !/^(佔|占|约|約|股份|發售|发售|認購|认购|基於|基于|假設|假设)/.test(investorName) &&
+            !/^(百分比|數目|数目|金額|金额)/.test(investorName)) {
 
-          // 避免重复
           if (!tableInvestors.find(inv => inv.name === investorName)) {
             tableInvestors.push({ name: investorName, amount: amount });
-            console.log(`[基石投资者] 表格提取: "${investorName}" (${amount}百万)`);
+            console.log(`[基石投资者] 表格提取(宽松): "${investorName}" (${amount}百万)`);
           }
         }
       }
     }
 
-    // 模式2：查找"基石投資者"后面的公司名称列表
+    // 模式6：查找"基石投資者"后面的公司名称列表
     // 例如：本公司基石投資者包括 XXX、YYY 及 ZZZ
     const listPatterns = [
       /基石投?資?者?(?:包括|為|为|有)?\s*[:：]?\s*((?:[\u4e00-\u9fa5A-Za-z][^。；;]{2,30}[,、，;；及和]?\s*)+)/gi,
@@ -2212,6 +2286,9 @@ function scoreProspectus(rawText, stockCode) {
     }
 
     console.log(`[基石投资者] 表格/列表共提取 ${tableInvestors.length} 个投资者`);
+    if (tableInvestors.length > 0) {
+      console.log(`[基石投资者] 提取结果: ${tableInvestors.map(inv => inv.name).join(', ')}`);
+    }
   }
 
   // 如果没有基石投资者章节，只在摘要/概要部分搜索（前15万字）
