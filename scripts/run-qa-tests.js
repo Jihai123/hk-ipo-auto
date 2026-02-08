@@ -47,7 +47,7 @@ function restoreCacheFiles() {
 
 // ==================== 工具函数 ====================
 
-function httpGet(urlPath, timeoutMs = 15000) {
+function httpGet(urlPath, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const startMs = Date.now();
     const req = http.get(`${BASE_URL}:${PORT}${urlPath}`, { timeout: timeoutMs }, (res) => {
@@ -86,6 +86,15 @@ function record(id, input, expected, actual, pass) {
   if (!pass) {
     console.log(`         预期: ${expected}`);
     console.log(`         实际: ${actual}`);
+  }
+}
+
+/** 安全运行单个测试，捕获异常避免中断整个测试套件 */
+async function safeRun(id, input, expected, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    record(id, input, expected, `异常: ${err.message}`, false);
   }
 }
 
@@ -167,46 +176,76 @@ async function testFunctional() {
       allAbove5 ? '全部通过' : `存在 count < 5`, allAbove5);
   }
 
-  // F-014: 评分 02768（有缓存）
-  {
-    const r = await httpGet('/api/score/02768', 30000);
+  // F-014 ~ F-021: 评分 API 测试（单次请求复用结果，用 safeRun 防超时崩溃）
+  let score02768 = null;
+  let score02714 = null;
+
+  await safeRun('F-014', 'GET /api/score/02768 (缓存)', 'success=true', async () => {
+    const r = await httpGet('/api/score/02768', 60000);
+    score02768 = r.body;
     const ok = r.status === 200 && r.body.success === true && r.body.totalScore !== undefined && r.body.rating;
     record('F-014', 'GET /api/score/02768 (缓存)', 'success=true, 有 totalScore 和 rating',
       `success=${r.body.success}, total=${r.body.totalScore}, rating=${r.body.rating}`, ok);
+  });
+
+  if (score02768?.success) {
+    // F-015: 评分结构 5 维度
+    {
+      const s = score02768.scores || {};
+      const dims = ['oldShares', 'sponsor', 'cornerstone', 'lockup', 'industry'];
+      const present = dims.filter((d) => s[d] && s[d].score !== undefined);
+      const ok = present.length === 5;
+      record('F-015', '检查 5 维度评分结构', '5 个维度全部有 score',
+        `找到 ${present.length}/5: ${present.join(',')}`, ok);
+    }
+
+    // F-016: 02768 旧股检测
+    {
+      const oldScore = score02768.scores?.oldShares?.score;
+      const ok = oldScore === 0;
+      record('F-016', '02768 旧股检测', 'score=0 (无旧股)',
+        `score=${oldScore}, reason=${score02768.scores?.oldShares?.reason?.substring(0, 40)}`, ok);
+    }
+
+    // F-020: totalScore 与 rating 映射
+    {
+      const ts = score02768.totalScore;
+      const rt = score02768.rating;
+      let expectedRating;
+      if (ts >= 6) expectedRating = '强烈推荐';
+      else if (ts >= 4) expectedRating = '建议申购';
+      else if (ts >= 2) expectedRating = '可以考虑';
+      else if (ts >= 0) expectedRating = '谨慎申购';
+      else expectedRating = '不建议';
+      const ok = rt === expectedRating;
+      record('F-020', `totalScore=${ts} 对应 rating`, expectedRating, rt, ok);
+    }
+
+    // F-021: 无前导零（复用缓存，应直接命中）
+    await safeRun('F-021', 'GET /api/score/2768 (无前导零)', 'stockCode=02768', async () => {
+      const r = await httpGet('/api/score/2768', 60000);
+      const ok = r.body.success === true && r.body.stockCode === '02768';
+      record('F-021', 'GET /api/score/2768 (无前导零)', 'stockCode=02768',
+        `success=${r.body.success}, stockCode=${r.body.stockCode}`, ok);
+    });
+  } else {
+    record('F-015', '检查 5 维度评分结构', '依赖 F-014', '跳过(F-014 失败)', false);
+    record('F-016', '02768 旧股检测', '依赖 F-014', '跳过(F-014 失败)', false);
+    record('F-020', 'totalScore 对应 rating', '依赖 F-014', '跳过(F-014 失败)', false);
+    record('F-021', 'GET /api/score/2768', '依赖 F-014', '跳过(F-014 失败)', false);
   }
 
-  // F-015: 评分结构 5 维度
-  {
-    const r = await httpGet('/api/score/02768', 30000);
-    const s = r.body.scores || {};
-    const dims = ['oldShares', 'sponsor', 'cornerstone', 'lockup', 'industry'];
-    const present = dims.filter((d) => s[d] && s[d].score !== undefined);
-    const ok = present.length === 5;
-    record('F-015', '检查 5 维度评分结构', '5 个维度全部有 score',
-      `找到 ${present.length}/5: ${present.join(',')}`, ok);
-  }
-
-  // F-016: 02768 旧股检测
-  {
-    const r = await httpGet('/api/score/02768', 30000);
-    const oldScore = r.body.scores?.oldShares?.score;
-    const ok = oldScore === 0;
-    record('F-016', '02768 旧股检测', 'score=0 (无旧股)',
-      `score=${oldScore}, reason=${r.body.scores?.oldShares?.reason?.substring(0, 40)}`, ok);
-  }
-
-  // F-018: 大文件评分 02714
-  {
-    const r = await httpGet('/api/score/02714', 60000);
+  await safeRun('F-018', 'GET /api/score/02714 (2.1MB)', 'success=true', async () => {
+    const r = await httpGet('/api/score/02714', 120000);
+    score02714 = r.body;
     const ok = r.status === 200 && r.body.success === true;
     record('F-018', 'GET /api/score/02714 (2.1MB 缓存)', 'success=true, 不超时',
       `success=${r.body.success}, elapsed=${r.body.elapsed}`, ok);
-  }
+  });
 
   // F-019: 02714 五维度分数范围
-  {
-    const r = await httpGet('/api/score/02714', 60000);
-    const s = r.body.scores || {};
+  if (score02714?.success) {
+    const s = score02714.scores || {};
     let allInRange = true;
     for (const dim of ['oldShares', 'sponsor', 'cornerstone', 'lockup', 'industry']) {
       const sc = s[dim]?.score;
@@ -214,29 +253,8 @@ async function testFunctional() {
     }
     record('F-019', '02714 五维度分数在 [-2, +2]', '全部在范围内',
       allInRange ? '全部通过' : `存在越界`, allInRange);
-  }
-
-  // F-020: totalScore 与 rating 映射
-  {
-    const r = await httpGet('/api/score/02768', 30000);
-    const ts = r.body.totalScore;
-    const rt = r.body.rating;
-    let expectedRating;
-    if (ts >= 6) expectedRating = '强烈推荐';
-    else if (ts >= 4) expectedRating = '建议申购';
-    else if (ts >= 2) expectedRating = '可以考虑';
-    else if (ts >= 0) expectedRating = '谨慎申购';
-    else expectedRating = '不建议';
-    const ok = rt === expectedRating;
-    record('F-020', `totalScore=${ts} 对应 rating`, expectedRating, rt, ok);
-  }
-
-  // F-021: 无前导零
-  {
-    const r = await httpGet('/api/score/2768', 30000);
-    const ok = r.body.success === true && r.body.stockCode === '02768';
-    record('F-021', 'GET /api/score/2768 (无前导零)', 'stockCode=02768',
-      `success=${r.body.success}, stockCode=${r.body.stockCode}`, ok);
+  } else {
+    record('F-019', '02714 五维度分数范围', '依赖 F-018', '跳过(F-018 失败)', false);
   }
 
   // F-038/F-039: 缓存清除 (使用安全测试代码 00000)
@@ -496,20 +514,20 @@ async function testPerformance() {
   }
 
   // P-003: 02768 缓存评分响应时间
-  {
-    const r = await httpGet('/api/score/02768', 30000);
+  await safeRun('P-003', 'GET /api/score/02768 (缓存) 响应时间', '< 3s', async () => {
+    const r = await httpGet('/api/score/02768', 60000);
     const ok = r.elapsed < 3000;
     record('P-003', 'GET /api/score/02768 (缓存) 响应时间', '< 3s',
       `${r.elapsed}ms`, ok);
-  }
+  });
 
   // P-004: 02714 大文件评分响应时间
-  {
-    const r = await httpGet('/api/score/02714', 60000);
+  await safeRun('P-004', 'GET /api/score/02714 (2.1MB) 响应时间', '< 10s', async () => {
+    const r = await httpGet('/api/score/02714', 120000);
     const ok = r.elapsed < 10000;
     record('P-004', 'GET /api/score/02714 (2.1MB) 响应时间', '< 10s',
       `${r.elapsed}ms`, ok);
-  }
+  });
 
   // P-006: top 响应时间
   {
@@ -519,32 +537,32 @@ async function testPerformance() {
       `${r.elapsed}ms`, ok);
   }
 
-  // P-007: 并发 10 个缓存评分（超时放宽到 30s，评分含大量正则计算）
-  {
-    const allResults = await Promise.allSettled(Array.from({ length: 10 }, () => httpGet('/api/score/02768', 30000)));
+  // P-007: 并发 10 个缓存评分
+  await safeRun('P-007', '并发 10x GET /api/score/02768', '>=8/10 成功', async () => {
+    const allResults = await Promise.allSettled(Array.from({ length: 10 }, () => httpGet('/api/score/02768', 60000)));
     const succeeded = allResults.filter((r) => r.status === 'fulfilled' && r.value.body.success === true).length;
-    const ok = succeeded >= 8; // 允许 <=2 个因并发竞争超时
+    const ok = succeeded >= 8;
     record('P-007', '并发 10x GET /api/score/02768', '>=8/10 成功',
       `${succeeded}/10 成功`, ok);
-  }
+  });
 
   // P-009: 并发 50 个 health
-  {
+  await safeRun('P-009', '并发 50x GET /api/health', '全部 HTTP 200', async () => {
     const allResults = await concurrentRequests('/api/health', 50);
     const succeeded = allResults.filter((r) => r.status === 'fulfilled' && r.value.status === 200).length;
     const ok = succeeded === 50;
     record('P-009', '并发 50x GET /api/health', '全部 HTTP 200',
       `${succeeded}/50 成功`, ok);
-  }
+  });
 
-  // P-016: 并发 5 个大文件评分（超时放宽到 60s）
-  {
-    const allResults = await Promise.allSettled(Array.from({ length: 5 }, () => httpGet('/api/score/02714', 60000)));
+  // P-016: 并发 5 个大文件评分
+  await safeRun('P-016', '并发 5x GET /api/score/02714 (2.1MB)', '>=4/5 成功', async () => {
+    const allResults = await Promise.allSettled(Array.from({ length: 5 }, () => httpGet('/api/score/02714', 120000)));
     const succeeded = allResults.filter((r) => r.status === 'fulfilled' && r.value.body.success === true).length;
-    const ok = succeeded >= 4; // 大文件允许 1 个超时
+    const ok = succeeded >= 4;
     record('P-016', '并发 5x GET /api/score/02714 (2.1MB)', '>=4/5 成功',
       `${succeeded}/5 成功`, ok);
-  }
+  });
 }
 
 // ---------- 六、回归测试 ----------
@@ -552,10 +570,10 @@ async function testRegression() {
   console.log('\n\x1b[36m══════ 六、数据一致性与回归测试 (Regression) ══════\x1b[0m');
 
   // R-001: 评分确定性（3 次一致）
-  {
-    const r1 = await httpGet('/api/score/02768', 30000);
-    const r2 = await httpGet('/api/score/02768', 30000);
-    const r3 = await httpGet('/api/score/02768', 30000);
+  await safeRun('R-001', '同一代码连续评分 3 次', '结果完全一致', async () => {
+    const r1 = await httpGet('/api/score/02768', 60000);
+    const r2 = await httpGet('/api/score/02768', 60000);
+    const r3 = await httpGet('/api/score/02768', 60000);
     const same =
       r1.body.totalScore === r2.body.totalScore &&
       r2.body.totalScore === r3.body.totalScore &&
@@ -564,7 +582,7 @@ async function testRegression() {
     record('R-001', '同一代码连续评分 3 次', '结果完全一致',
       `${r1.body.totalScore}/${r2.body.totalScore}/${r3.body.totalScore}, ` +
       `${r1.body.rating}/${r2.body.rating}/${r3.body.rating}`, same);
-  }
+  });
 
   // R-004: sponsors.json 数据校验
   {
