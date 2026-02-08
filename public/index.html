@@ -558,12 +558,22 @@
     /* ===== LOADING ===== */
     .loading {
       text-align: center;
-      padding: 64px 20px;
+      padding: 48px 20px;
       display: none;
+      max-width: 560px;
+      margin: 32px auto;
     }
 
     .loading.active {
       display: block;
+    }
+
+    .loading-card {
+      background: var(--color-surface);
+      border-radius: var(--radius-xl);
+      padding: 40px 36px;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--color-border-light);
     }
 
     .spinner {
@@ -592,6 +602,76 @@
       margin-top: 8px;
     }
 
+    /* Progress bar */
+    .progress-container {
+      margin-top: 24px;
+    }
+
+    .progress-bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--color-border-light);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: var(--radius-full);
+      background: var(--gradient-accent);
+      transition: width 0.6s ease;
+      width: 0%;
+    }
+
+    .progress-steps {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--color-text-faint);
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+
+    .progress-step.active {
+      color: var(--color-accent-mid);
+    }
+
+    .progress-step.done {
+      color: var(--color-success);
+    }
+
+    .progress-step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-border-light);
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+
+    .progress-step.active .progress-step-dot {
+      background: var(--color-accent-mid);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .progress-step.done .progress-step-dot {
+      background: var(--color-success);
+    }
+
+    .loading-timer {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--color-text-faint);
+    }
+
     /* ===== ERROR ===== */
     .error-message {
       max-width: 1200px;
@@ -608,11 +688,48 @@
       background: var(--color-danger-light);
       border: 1px solid rgba(239, 68, 68, 0.15);
       border-radius: var(--radius-md);
-      padding: 16px 24px;
+      padding: 20px 24px;
       text-align: center;
       color: var(--color-danger);
       font-size: 14px;
       font-weight: 500;
+      line-height: 1.7;
+    }
+
+    .error-message-inner .error-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .error-message-inner .error-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .error-message-inner .error-detail {
+      font-size: 13px;
+      color: #b91c1c;
+      opacity: 0.8;
+    }
+
+    .error-retry-btn {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 8px 24px;
+      border-radius: var(--radius-full);
+      background: var(--color-danger);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .error-retry-btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
     }
 
     /* ===== RESULT CARD ===== */
@@ -1655,14 +1772,45 @@
 
   <!-- Loading -->
   <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <div class="loading-text">正在分析招股书...</div>
-    <div class="loading-sub" id="loadingStatus">下载PDF中，请稍候（大文件可能需要1-2分钟）</div>
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loadingText">正在分析招股书...</div>
+      <div class="loading-sub" id="loadingStatus">下载PDF中，请稍候（大文件可能需要1-2分钟）</div>
+      <div class="progress-container">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+        <div class="progress-steps">
+          <div class="progress-step" id="step1">
+            <span class="progress-step-dot"></span>
+            搜索招股书
+          </div>
+          <div class="progress-step" id="step2">
+            <span class="progress-step-dot"></span>
+            下载PDF
+          </div>
+          <div class="progress-step" id="step3">
+            <span class="progress-step-dot"></span>
+            解析内容
+          </div>
+          <div class="progress-step" id="step4">
+            <span class="progress-step-dot"></span>
+            生成评分
+          </div>
+        </div>
+        <div class="loading-timer" id="loadingTimer">已用时 0 秒</div>
+      </div>
+    </div>
   </div>
 
   <!-- Error -->
   <div class="error-message" id="errorMessage">
-    <div class="error-message-inner" id="errorMessageInner"></div>
+    <div class="error-message-inner" id="errorMessageInner">
+      <div class="error-icon" id="errorIcon"></div>
+      <div class="error-title" id="errorTitle"></div>
+      <div class="error-detail" id="errorDetail"></div>
+      <button class="error-retry-btn" onclick="retryLastSearch()">重新尝试</button>
+    </div>
   </div>
 
   <!-- Result Card -->
@@ -1955,6 +2103,10 @@
 
   <script>
     const API_BASE = '/hk';
+    const REQUEST_TIMEOUT_MS = 180000; // 3 minutes frontend timeout
+    let loadingTimerInterval = null;
+    let loadingStartTime = null;
+    let currentAbortController = null;
 
     // Quick search
     function quickSearch(code) {
@@ -1972,26 +2124,94 @@
         return;
       }
 
+      // Abort previous request if still running
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+
+      currentAbortController = new AbortController();
+      const timeoutId = setTimeout(() => currentAbortController.abort(), REQUEST_TIMEOUT_MS);
+
       showLoading();
       hideError();
       hideResult();
+      setProgress(1, '正在搜索招股书...', '连接港交所，查找招股书PDF...', 10);
 
       try {
-        updateLoadingStatus('正在搜索招股书...');
+        // Simulate progress stages based on timing
+        const progressTimer = startProgressSimulation();
 
-        const response = await fetch(`${API_BASE}/api/score/${code}`);
+        const response = await fetch(`${API_BASE}/api/score/${code}`, {
+          signal: currentAbortController.signal,
+        });
+
+        clearInterval(progressTimer);
+        clearTimeout(timeoutId);
+
+        // Handle non-JSON responses (e.g. HTML error pages, proxy timeouts)
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const text = await response.text();
+          // Check if it's an HTML error page
+          if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+            throw new Error('服务器返回异常响应，可能因请求超时或服务暂时不可用，请稍后重试');
+          }
+          // Try to parse as JSON anyway (some servers don't set content-type)
+          try {
+            const data = JSON.parse(text);
+            if (!data.success) throw new Error(data.error || '评分失败');
+            setProgress(4, '生成评分完成', '分析完成！', 100);
+            displayResult(data);
+            return;
+          } catch (parseErr) {
+            throw new Error('服务器响应格式异常，请稍后重试');
+          }
+        }
+
         const data = await response.json();
 
         if (!data.success) {
           throw new Error(data.error || '评分失败');
         }
 
+        setProgress(4, '评分完成!', '分析完成！', 100);
+        await new Promise(r => setTimeout(r, 300)); // Brief pause for UX
         displayResult(data);
       } catch (error) {
-        showError(error.message);
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          showError('请求超时，招股书分析需要较长时间。请确认股票代码正确后重试，或稍后再试');
+        } else {
+          showError(error.message);
+        }
       } finally {
+        currentAbortController = null;
         hideLoading();
       }
+    }
+
+    // Simulate progress stages based on time elapsed
+    function startProgressSimulation() {
+      return setInterval(() => {
+        if (!loadingStartTime) return;
+        const elapsed = (Date.now() - loadingStartTime) / 1000;
+
+        if (elapsed < 5) {
+          setProgress(1, '搜索招股书中...', '正在连接港交所披露易...', 15);
+        } else if (elapsed < 15) {
+          setProgress(1, '搜索招股书中...', '正在检索新股上市信息...', 25);
+        } else if (elapsed < 30) {
+          setProgress(2, '下载招股书PDF...', '找到目标PDF，正在下载（可能需要1-2分钟）...', 40);
+        } else if (elapsed < 60) {
+          setProgress(2, '下载招股书PDF...', `PDF下载中，请耐心等候... (${Math.round(elapsed)}s)`, 55);
+        } else if (elapsed < 90) {
+          setProgress(3, '解析招股书内容...', `解析PDF文本内容中... (${Math.round(elapsed)}s)`, 70);
+        } else if (elapsed < 120) {
+          setProgress(3, '解析招股书内容...', `深度分析中，大型招股书需要更长时间... (${Math.round(elapsed)}s)`, 80);
+        } else {
+          setProgress(3, '分析中...', `仍在处理中，请耐心等候... (${Math.round(elapsed)}s)`, 85);
+        }
+      }, 1000);
     }
 
     // Display result
@@ -2268,15 +2488,59 @@
       return map[rating] || 'rating-caution';
     }
 
+    // Progress bar control
+    function setProgress(step, title, subtitle, percent) {
+      const bar = document.getElementById('progressBar');
+      const text = document.getElementById('loadingText');
+      const sub = document.getElementById('loadingStatus');
+
+      if (bar) bar.style.width = percent + '%';
+      if (text) text.textContent = title;
+      if (sub) sub.textContent = subtitle;
+
+      // Update step indicators
+      for (let i = 1; i <= 4; i++) {
+        const stepEl = document.getElementById('step' + i);
+        if (!stepEl) continue;
+        stepEl.classList.remove('active', 'done');
+        if (i < step) stepEl.classList.add('done');
+        else if (i === step) stepEl.classList.add('active');
+      }
+    }
+
     // UI control functions
     function showLoading() {
       document.getElementById('loading').classList.add('active');
       document.getElementById('searchBtn').disabled = true;
+      document.getElementById('progressBar').style.width = '0%';
+
+      // Reset step states
+      for (let i = 1; i <= 4; i++) {
+        const el = document.getElementById('step' + i);
+        if (el) el.classList.remove('active', 'done');
+      }
+
+      // Start timer
+      loadingStartTime = Date.now();
+      updateTimer();
+      loadingTimerInterval = setInterval(updateTimer, 1000);
     }
 
     function hideLoading() {
       document.getElementById('loading').classList.remove('active');
       document.getElementById('searchBtn').disabled = false;
+      if (loadingTimerInterval) {
+        clearInterval(loadingTimerInterval);
+        loadingTimerInterval = null;
+      }
+      loadingStartTime = null;
+    }
+
+    function updateTimer() {
+      if (!loadingStartTime) return;
+      const elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
+      const timerEl = document.getElementById('loadingTimer');
+      if (timerEl) timerEl.textContent = `已用时 ${elapsed} 秒`;
     }
 
     function updateLoadingStatus(text) {
@@ -2293,12 +2557,48 @@
 
     function showError(message) {
       const el = document.getElementById('errorMessage');
-      document.getElementById('errorMessageInner').textContent = '❌ ' + message;
+      const iconEl = document.getElementById('errorIcon');
+      const titleEl = document.getElementById('errorTitle');
+      const detailEl = document.getElementById('errorDetail');
+
+      // Categorize error for better UX
+      let icon = '⚠️';
+      let title = '分析失败';
+      let detail = message;
+
+      if (message.includes('超时') || message.includes('timeout') || message.includes('AbortError')) {
+        icon = '⏱️';
+        title = '请求超时';
+        detail = '招股书分析需要较长时间，服务器可能正在处理大型PDF文件。请确认股票代码正确后重试。';
+      } else if (message.includes('<!DOCTYPE') || message.includes('格式异常') || message.includes('not valid JSON')) {
+        icon = '🔌';
+        title = '连接异常';
+        detail = '服务器响应异常，可能因为网络问题或服务暂时不可用。请稍后重试。';
+      } else if (message.includes('未找到招股书')) {
+        icon = '🔍';
+        title = '未找到招股书';
+        detail = '请确认股票代码正确且该股票已经上市。部分较早上市的股票可能暂无在线招股书。';
+      } else if (message.includes('验证失败')) {
+        icon = '📄';
+        title = 'PDF验证失败';
+        detail = message;
+      }
+
+      if (iconEl) iconEl.textContent = icon;
+      if (titleEl) titleEl.textContent = title;
+      if (detailEl) detailEl.textContent = detail;
       el.classList.add('active');
     }
 
     function hideError() {
       document.getElementById('errorMessage').classList.remove('active');
+    }
+
+    function retryLastSearch() {
+      const code = document.getElementById('stockCode').value.trim();
+      if (code) {
+        handleSearch(new Event('submit'));
+      }
     }
 
     // Enter key submit

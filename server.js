@@ -1220,9 +1220,10 @@ async function searchProspectus(stockCode) {
                 // 方法3: 直接探测可能的招股书URL（并行探测，加速搜索）
                 console.log('[搜索] 尝试直接探测招股书URL...');
 
-                // 生成上市前5-35天的日期列表（覆盖更大范围）
+                // 生成上市前5-28天的日期列表
                 const probeUrls = [];
-                for (let d = 5; d <= 35; d++) {
+                const probeStartTime = Date.now();
+                for (let d = 5; d <= 28; d++) {
                   const probeDate = new Date(ipoDate);
                   probeDate.setDate(probeDate.getDate() - d);
                   const year = probeDate.getFullYear();
@@ -1230,20 +1231,21 @@ async function searchProspectus(stockCode) {
                   const day = String(probeDate.getDate()).padStart(2, '0');
                   const mmdd = `${month}${day}`;
 
-                  // 每天尝试序号 001-050（招股书序号可能较大）
-                  for (let seq = 1; seq <= 50; seq++) {
+                  // 每天尝试序号 001-020（减少探测范围加速搜索）
+                  for (let seq = 1; seq <= 20; seq++) {
                     const seqStr = String(seq).padStart(3, '0');
                     // 使用www域名（更稳定）
                     probeUrls.push(`https://www.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/ltn${year}${mmdd}${seqStr}_c.pdf`);
                   }
                 }
+                console.log(`[搜索] 生成 ${probeUrls.length} 个探测URL`);
 
-                // 使用curl探测文件大小
+                // 使用curl探测文件大小（降低超时加速探测）
                 const checkUrl = (url) => {
                   try {
                     const result = execSync(
-                      `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 5 --max-time 10`,
-                      { encoding: 'utf8', timeout: 15000 }
+                      `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 3 --max-time 5`,
+                      { encoding: 'utf8', timeout: 8000 }
                     );
                     const rangeMatch = result.match(/content-range:\s*bytes\s*\d+-\d+\/(\d+)/i);
                     if (rangeMatch) {
@@ -1376,7 +1378,14 @@ async function searchProspectus(stockCode) {
                 // 收集候选PDF（大于3MB的）
                 const candidateUrls = [];
                 const batchSize = 20;
-                for (let i = 0; i < probeUrls.length && candidateUrls.length < 30; i += batchSize) {
+                const PROBE_TIMEOUT_MS = 60000; // 探测阶段最多60秒
+                for (let i = 0; i < probeUrls.length && candidateUrls.length < 15; i += batchSize) {
+                  // 超时保护：如果探测超过60秒则中断
+                  if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
+                    console.log(`[搜索] URL探测超时(${PROBE_TIMEOUT_MS/1000}s)，已探测 ${i}/${probeUrls.length} 个URL，找到 ${candidateUrls.length} 个候选`);
+                    break;
+                  }
+
                   const batch = probeUrls.slice(i, i + batchSize);
 
                   for (const url of batch) {
@@ -3199,6 +3208,15 @@ app.get('/api/cache/clear/:code', (req, res) => {
   });
 });
 
+// 带超时的Promise包装器
+function withTimeout(promise, ms, message = '操作超时') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // 主评分API
 app.get('/api/score/:code', async (req, res) => {
   const { code } = req.params;
@@ -3216,8 +3234,12 @@ app.get('/api/score/:code', async (req, res) => {
     if (pdfText) {
       console.log(`[API] 使用缓存文本`);
     } else {
-      // 搜索招股书
-      const searchResults = await searchProspectus(code);
+      // 搜索招股书（带120秒超时保护）
+      const searchResults = await withTimeout(
+        searchProspectus(code),
+        120000,
+        '搜索招股书超时，该股票可能暂无招股书或港交所响应缓慢，请稍后重试'
+      );
 
       if (searchResults.length === 0) {
         return res.json({
