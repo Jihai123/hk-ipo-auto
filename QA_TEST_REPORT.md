@@ -1,5 +1,5 @@
 # QA 自动化测试报告
-> 执行时间: 2026-02-08T09:07:06.134Z
+> 执行时间: 2026-02-08T09:37:05.963Z
 > 总用例: 48 | 通过: 47 | 失败: 1 | 通过率: 97.9%
 
 | 测试ID | 测试输入/操作 | 预期结果 | 实际观察点 | 是否通过 |
@@ -15,10 +15,10 @@
 | F-014 | GET /api/score/02768 (缓存) | success=true, 有 totalScore 和 rating | success=true, total=-3, rating=不建议 | PASS |
 | F-015 | 检查 5 维度评分结构 | 5 个维度全部有 score | 找到 5/5: oldShares,sponsor,cornerstone,lockup,industry | PASS |
 | F-016 | 02768 旧股检测 | score=0 (无旧股) | score=0, reason=全部新股 | PASS |
-| F-018 | GET /api/score/02714 (2.1MB 缓存) | success=true, 不超时 | success=true, elapsed=3.7s | PASS |
-| F-019 | 02714 五维度分数在 [-2, +2] | 全部在范围内 | 全部通过 | PASS |
 | F-020 | totalScore=-3 对应 rating | 不建议 | 不建议 | PASS |
 | F-021 | GET /api/score/2768 (无前导零) | stockCode=02768 | success=true, stockCode=02768 | PASS |
+| F-018 | GET /api/score/02714 (2.1MB 缓存) | success=true, 不超时 | success=true, elapsed=5.2s | PASS |
+| F-019 | 02714 五维度分数在 [-2, +2] | 全部在范围内 | 全部通过 | PASS |
 | F-038/039 | 清缓存幂等性 (code=00000) | success=true 两次 | 第1次: 00000 无缓存, 第2次: 00000 无缓存 | PASS |
 | F-041 | GET / (首页) | HTTP 200, 返回 HTML | status=200, isHTML=true | PASS |
 | B-001 | GET /api/search/00001 | 不崩溃, 返回结果或空 | status=500, success=false | PASS |
@@ -42,9 +42,9 @@
 | S-015 | 检查 CORS 头 | access-control-allow-origin 存在 | CORS: * | PASS |
 | S-016 | 检查 X-Powered-By | 不应暴露 Express | 泄露: Express | FAIL |
 | P-001 | GET /api/health 响应时间 | < 100ms | 2ms | PASS |
-| P-002 | GET /api/sponsors 响应时间 | < 500ms | 3ms | PASS |
-| P-003 | GET /api/score/02768 (缓存) 响应时间 | < 3s | 29ms | PASS |
-| P-004 | GET /api/score/02714 (2.1MB) 响应时间 | < 10s | 3816ms | PASS |
+| P-002 | GET /api/sponsors 响应时间 | < 500ms | 2ms | PASS |
+| P-003 | GET /api/score/02768 (缓存) 响应时间 | < 3s | 37ms | PASS |
+| P-004 | GET /api/score/02714 (2.1MB) 响应时间 | < 10s | 5135ms | PASS |
 | P-006 | GET /api/sponsors/top 响应时间 | < 200ms | 3ms | PASS |
 | P-007 | 并发 10x GET /api/score/02768 | >=8/10 成功 | 10/10 成功 | PASS |
 | P-009 | 并发 50x GET /api/health | 全部 HTTP 200 | 50/50 成功 | PASS |
