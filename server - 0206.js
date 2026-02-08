@@ -124,240 +124,123 @@ function getSponsorsByStockCode(stockCode) {
  * 数据来源：AAStocks、港交所披露易、公开财报等
  */
 const FALLBACK_SPONSORS = {
-  // ========== 主要保荐人（完整名称 - 繁体，匹配招股书）==========
-  // 按总项目数降序排列
-  
-  // TOP 20 大型保荐人
-  '中國國際金融香港證券有限公司': { rate: 25.0, count: 238, winRate: 48.74, upCount: 116, downCount: null },
-  '摩根士丹利亞洲有限公司': { rate: 45.0, count: 141, winRate: 64.54, upCount: 91, downCount: null },
-  '高盛(亞洲)有限責任公司': { rate: 35.0, count: 114, winRate: 50.88, upCount: 58, downCount: null },
-  '海通國際資本有限公司': { rate: 55.0, count: 93, winRate: 63.44, upCount: 59, downCount: null },
-  '建銀國際金融有限公司': { rate: 30.0, count: 80, winRate: 48.75, upCount: 39, downCount: null },
-  '國泰君安融資有限公司': { rate: 50.0, count: 79, winRate: 64.56, upCount: 51, downCount: null },
-  '華泰金融控股(香港)有限公司': { rate: 35.0, count: 73, winRate: 50.68, upCount: 37, downCount: null },
-  '花旗環球金融亞洲有限公司': { rate: 32.0, count: 70, winRate: 48.57, upCount: 34, downCount: null },
-  '瑞銀證券香港有限公司': { rate: 25.0, count: 64, winRate: 40.63, upCount: 26, downCount: null },
-  '中信里昂證券資本市場有限公司': { rate: 30.0, count: 59, winRate: 47.46, upCount: 28, downCount: null },
-  '招銀國際融資有限公司': { rate: 50.0, count: 56, winRate: 60.71, upCount: 34, downCount: null },
-  '摩根大通證券(遠東)有限公司': { rate: 28.0, count: 53, winRate: 41.51, upCount: 22, downCount: null },
-  '中信證券(香港)有限公司': { rate: 60.0, count: 50, winRate: 76.00, upCount: 38, downCount: null },
-  '美林遠東有限公司': { rate: 50.0, count: 48, winRate: 62.50, upCount: 30, downCount: null },
-  '中信建投(國際)融資有限公司': { rate: 45.0, count: 47, winRate: 55.32, upCount: 26, downCount: null },
-  '農銀國際融資有限公司': { rate: 42.0, count: 46, winRate: 52.17, upCount: 24, downCount: null },
-  '中銀國際亞洲有限公司': { rate: 40.0, count: 45, winRate: 51.11, upCount: 23, downCount: null },
-  '招商證券(香港)有限公司': { rate: 50.0, count: 41, winRate: 63.41, upCount: 26, downCount: null },
-  '豐盛融資有限公司': { rate: 70.0, count: 41, winRate: 82.93, upCount: 34, downCount: null },
-  '瑞士信貸(香港)有限公司': { rate: 50.0, count: 41, winRate: 60.98, upCount: 25, downCount: null },
-  
-  // 21-40名
-  '中國光大融資有限公司': { rate: 50.0, count: 40, winRate: 62.50, upCount: 25, downCount: null },
-  '交銀國際(亞洲)有限公司': { rate: 40.0, count: 39, winRate: 51.28, upCount: 20, downCount: null },
-  '法國巴黎證券(亞洲)有限公司': { rate: 22.0, count: 34, winRate: 38.24, upCount: 13, downCount: null },
-  '創升融資有限公司': { rate: 55.0, count: 33, winRate: 69.70, upCount: 23, downCount: null },
-  '匯富融資有限公司': { rate: 55.0, count: 30, winRate: 70.00, upCount: 21, downCount: null },
-  '香港上海滙豐銀行有限公司': { rate: 25.0, count: 28, winRate: 39.29, upCount: 11, downCount: null },
-  '麥格理資本股份有限公司': { rate: 30.0, count: 26, winRate: 46.15, upCount: 12, downCount: null },
-  '工銀國際融資有限公司': { rate: 50.0, count: 24, winRate: 62.50, upCount: 15, downCount: null },
-  '信達國際融資有限公司': { rate: 45.0, count: 24, winRate: 58.33, upCount: 14, downCount: null },
-  '力高企業融資有限公司': { rate: 50.0, count: 24, winRate: 62.50, upCount: 15, downCount: null },
-  '大有融資有限公司': { rate: 75.0, count: 24, winRate: 87.50, upCount: 21, downCount: null },
-  '德健融資有限公司': { rate: 65.0, count: 24, winRate: 79.17, upCount: 19, downCount: null },
-  '申萬宏源融資(香港)有限公司': { rate: 50.0, count: 22, winRate: 63.64, upCount: 14, downCount: null },
-  '德意志證券亞洲有限公司': { rate: 40.0, count: 21, winRate: 52.38, upCount: 11, downCount: null },
-  '同人融資有限公司': { rate: 65.0, count: 21, winRate: 76.19, upCount: 16, downCount: null },
-  '瑞士銀行香港分行': { rate: 30.0, count: 21, winRate: 47.62, upCount: 10, downCount: null },
-  '廣發融資(香港)有限公司': { rate: 60.0, count: 19, winRate: 73.68, upCount: 14, downCount: null },
-  '美林(亞太)有限公司': { rate: 22.0, count: 18, winRate: 38.89, upCount: 7, downCount: null },
-  '摩根大通證券(亞太)有限公司': { rate: 35.0, count: 18, winRate: 50.00, upCount: 9, downCount: null },
-  '派杰亞洲有限公司': { rate: 48.0, count: 18, winRate: 61.11, upCount: 11, downCount: null },
-  
-  // 41-60名
-  '富比資本有限公司': { rate: 55.0, count: 16, winRate: 68.75, upCount: 11, downCount: null },
-  '浩德融資有限公司': { rate: 60.0, count: 16, winRate: 75.00, upCount: 12, downCount: null },
-  '巧益融資有限公司': { rate: 28.0, count: 16, winRate: 43.75, upCount: 7, downCount: null },
-  '民銀資本有限公司': { rate: 50.0, count: 16, winRate: 62.50, upCount: 10, downCount: null },
-  '德意志銀行香港分行': { rate: 42.0, count: 16, winRate: 56.25, upCount: 9, downCount: null },
-  '富通金融資本有限公司': { rate: 42.0, count: 16, winRate: 56.25, upCount: 9, downCount: null },
-  '中國銀河國際證券(香港)有限公司': { rate: 75.0, count: 15, winRate: 86.67, upCount: 13, downCount: null },
-  '星展亞洲融資有限公司': { rate: 32.0, count: 15, winRate: 46.67, upCount: 7, downCount: null },
-  '西證(香港)融資有限公司': { rate: 55.0, count: 13, winRate: 69.23, upCount: 9, downCount: null },
-  '鎧盛資本有限公司': { rate: 45.0, count: 13, winRate: 61.54, upCount: 8, downCount: null },
-  '創升國際有限公司': { rate: 55.0, count: 13, winRate: 69.23, upCount: 9, downCount: null },
-  '中信證券融資(香港)有限公司': { rate: 45.0, count: 13, winRate: 61.54, upCount: 8, downCount: null },
-  '富瑞金融集團香港有限公司': { rate: 28.0, count: 12, winRate: 41.67, upCount: 5, downCount: null },
-  '華富嘉洛企業融資有限公司': { rate: 80.0, count: 12, winRate: 91.67, upCount: 11, downCount: null },
-  '東興證券(香港)有限公司': { rate: 42.0, count: 12, winRate: 58.33, upCount: 7, downCount: null },
-  '天財資本國際有限公司': { rate: 70.0, count: 12, winRate: 83.33, upCount: 10, downCount: null },
-  '中泰國際融資有限公司': { rate: 22.0, count: 11, winRate: 36.36, upCount: 4, downCount: null },
-  '第一上海融資有限公司': { rate: 38.0, count: 11, winRate: 54.55, upCount: 6, downCount: null },
-  '南華融資有限公司': { rate: 65.0, count: 10, winRate: 80.00, upCount: 8, downCount: null },
-  '安信融資(香港)有限公司': { rate: 18.0, count: 10, winRate: 30.00, upCount: 3, downCount: null },
-  
-  // 61-80名
-  '中國平安資本(香港)有限公司': { rate: 55.0, count: 9, winRate: 66.67, upCount: 6, downCount: null },
-  '浦銀國際融資有限公司': { rate: 32.0, count: 9, winRate: 44.44, upCount: 4, downCount: null },
-  '紅杉資本有限公司': { rate: 15.0, count: 9, winRate: 22.22, upCount: 2, downCount: null },
-  '建泉融資有限公司': { rate: 32.0, count: 9, winRate: 44.44, upCount: 4, downCount: null },
-  '智富融資有限公司': { rate: 40.0, count: 9, winRate: 55.56, upCount: 5, downCount: null },
-  '六福金融(香港)有限公司': { rate: 50.0, count: 9, winRate: 62.50, upCount: 5, downCount: null },
-  '誠高融資有限公司': { rate: 35.0, count: 8, winRate: 50.00, upCount: 4, downCount: null },
-  '六證國際融資有限公司': { rate: 35.0, count: 8, winRate: 50.00, upCount: 4, downCount: null },
-  '百銀萬國融資(香港)有限公司': { rate: 60.0, count: 8, winRate: 75.00, upCount: 6, downCount: null },
-  '興業金融融資有限公司': { rate: 42.0, count: 7, winRate: 57.14, upCount: 4, downCount: null },
-  '終經資本有限公司': { rate: 70.0, count: 7, winRate: 85.71, upCount: 6, downCount: null },
-  '八五金融有限公司': { rate: 70.0, count: 7, winRate: 85.71, upCount: 6, downCount: null },
-  '凱基金融亞洲有限公司': { rate: 70.0, count: 7, winRate: 85.71, upCount: 6, downCount: null },
-  '國金證券(香港)有限公司': { rate: 30.0, count: 7, winRate: 42.86, upCount: 3, downCount: null },
-  '華高和升財務顧問有限公司': { rate: 30.0, count: 7, winRate: 42.86, upCount: 3, downCount: null },
-  '野村國際(香港)有限公司': { rate: 10.0, count: 6, winRate: 16.67, upCount: 1, downCount: null },
-  '聯昌證券有限公司': { rate: 55.0, count: 6, winRate: 66.67, upCount: 4, downCount: null },
-  '力泰金融服務有限公司': { rate: 70.0, count: 6, winRate: 83.33, upCount: 5, downCount: null },
-  '中匯資本有限公司': { rate: 65.0, count: 5, winRate: 80.00, upCount: 4, downCount: null },
-  '光銀國際資本有限公司': { rate: 45.0, count: 5, winRate: 60.00, upCount: 3, downCount: null },
-  
-  // 81-100名
-  '上銀國際有限公司': { rate: 65.0, count: 5, winRate: 80.00, upCount: 4, downCount: null },
-  '長江證券融資(香港)有限公司': { rate: 45.0, count: 5, winRate: 60.00, upCount: 3, downCount: null },
-  '金利豐財務顧問有限公司': { rate: 85.0, count: 4, winRate: 100.00, upCount: 4, downCount: null },
-  '里昂證券資本市場有限公司': { rate: 55.0, count: 4, winRate: 75.00, upCount: 3, downCount: null },
-  '鼎佩證券有限公司': { rate: 35.0, count: 4, winRate: 50.00, upCount: 2, downCount: null },
-  '耀盛資本有限公司': { rate: 85.0, count: 4, winRate: 100.00, upCount: 4, downCount: null },
-  '國元融資(香港)有限公司': { rate: 55.0, count: 4, winRate: 75.00, upCount: 3, downCount: null },
-  '大唐融資有限公司': { rate: 85.0, count: 4, winRate: 100.00, upCount: 4, downCount: null },
-  '冶和證券(香港)有限公司': { rate: 15.0, count: 4, winRate: 25.00, upCount: 1, downCount: null },
-  '華匯證券(香港)有限公司': { rate: 35.0, count: 4, winRate: 50.00, upCount: 2, downCount: null },
-  '有銀證券(香港)有限公司': { rate: 85.0, count: 4, winRate: 100.00, upCount: 4, downCount: null },
-  '方富財務有限公司': { rate: 85.0, count: 4, winRate: 100.00, upCount: 4, downCount: null },
-  '時富融資有限公司': { rate: 55.0, count: 4, winRate: 75.00, upCount: 3, downCount: null },
-  '博匯融資有限公司': { rate: 15.0, count: 4, winRate: 25.00, upCount: 1, downCount: null },
-  '新利融資有限公司': { rate: 85.0, count: 3, winRate: 100.00, upCount: 3, downCount: null },
-  '匯盈證券有限公司': { rate: 22.0, count: 3, winRate: 33.33, upCount: 1, downCount: null },
-  '東亞亞洲有限公司': { rate: 55.0, count: 3, winRate: 66.67, upCount: 2, downCount: null },
-  '中國海通企業融資有限公司': { rate: 85.0, count: 3, winRate: 100.00, upCount: 3, downCount: null },
-  '聯旺有限公司': { rate: 55.0, count: 3, winRate: 66.67, upCount: 2, downCount: null },
-  '大新融資(香港)有限公司': { rate: 28.0, count: 3, winRate: 33.33, upCount: 1, downCount: null },
-  
-  // 101-116名
-  '新輝資本有限公司': { rate: 85.0, count: 3, winRate: 100.00, upCount: 3, downCount: null },
-  '懷生有限公司': { rate: 0.0, count: 2, winRate: 0.00, upCount: 0, downCount: null },
-  '麥格理證券股份有限公司': { rate: 35.0, count: 2, winRate: 50.00, upCount: 1, downCount: null },
-  '花旗融資有限公司': { rate: 35.0, count: 2, winRate: 50.00, upCount: 1, downCount: null },
-  '中信證券融資有限公司': { rate: 35.0, count: 2, winRate: 50.00, upCount: 1, downCount: null },
-  '建銀環球金融有限公司': { rate: 35.0, count: 2, winRate: 50.00, upCount: 1, downCount: null },
-  '招商證券有限公司': { rate: 0.0, count: 2, winRate: 0.00, upCount: 0, downCount: null },
-  '創銀證券有限公司': { rate: 35.0, count: 2, winRate: 50.00, upCount: 1, downCount: null },
-  '古川國際融資有限公司': { rate: 0.0, count: 2, winRate: 0.00, upCount: 0, downCount: null },
-  '白鯨企業有限公司': { rate: 85.0, count: 2, winRate: 100.00, upCount: 2, downCount: null },
-  '青企企業融資有限公司': { rate: 0.0, count: 2, winRate: 0.00, upCount: 0, downCount: null },
+  // ========== 主要保荐人（完整名称）==========
+  // 中资券商
+  '中國國際金融香港證券有限公司': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中信證券(香港)有限公司': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信里昂證券有限公司': { rate: 35.50, count: 38, winRate: 78.95 },
+  '華泰金融控股(香港)有限公司': { rate: 6.86, count: 33, winRate: 57.58 },
+  '海通國際資本有限公司': { rate: 31.22, count: 28, winRate: 75.00 },
+  '國泰君安融資有限公司': { rate: 23.18, count: 25, winRate: 76.00 },
+  '招商證券(香港)有限公司': { rate: 18.50, count: 22, winRate: 68.18 },
+  '招銀國際融資有限公司': { rate: 25.56, count: 18, winRate: 72.22 },
+  '建銀國際金融有限公司': { rate: 11.38, count: 18, winRate: 72.22 },
+  '廣發融資（香港）有限公司': { rate: 22.30, count: 15, winRate: 73.33 },
+  '交銀國際證券有限公司': { rate: 19.20, count: 14, winRate: 71.43 },
+  '工銀國際融資有限公司': { rate: 12.50, count: 12, winRate: 66.67 },
+  '農銀國際融資有限公司': { rate: 15.80, count: 10, winRate: 70.00 },
+  '申萬宏源融資(香港)有限公司': { rate: 28.30, count: 12, winRate: 75.00 },
+  '中銀國際亞洲有限公司': { rate: 14.60, count: 15, winRate: 66.67 },
+  '光大融資有限公司': { rate: 17.80, count: 8, winRate: 62.50 },
+  '民銀資本有限公司': { rate: -5.20, count: 12, winRate: 41.67 },
+  '中信建投(國際)融資有限公司': { rate: 15.20, count: 10, winRate: 70.00 },
+  '東方證券(香港)有限公司': { rate: 12.80, count: 8, winRate: 62.50 },
+  '興證國際融資有限公司': { rate: 8.50, count: 9, winRate: 55.56 },
+  '國信證券(香港)融資有限公司': { rate: 10.20, count: 8, winRate: 62.50 },
+  '長江證券(香港)有限公司': { rate: 6.80, count: 6, winRate: 50.00 },
+  '方正證券(香港)融資有限公司': { rate: 5.50, count: 5, winRate: 40.00 },
+
+  // 外资投行
+  '摩根士丹利亞洲有限公司': { rate: 21.91, count: 35, winRate: 77.14 },
+  '高盛(亞洲)有限責任公司': { rate: 15.58, count: 30, winRate: 73.33 },
+  '瑞銀證券香港有限公司': { rate: 16.22, count: 25, winRate: 72.00 },
+  '花旗環球金融亞洲有限公司': { rate: 18.50, count: 20, winRate: 75.00 },
+  'J.P. Morgan Securities (Far East) Limited': { rate: 19.80, count: 28, winRate: 75.00 },
+  '摩根大通證券(遠東)有限公司': { rate: 19.80, count: 28, winRate: 75.00 },
+  '美銀證券': { rate: 14.20, count: 18, winRate: 66.67 },
+  'BofA Securities': { rate: 14.20, count: 18, winRate: 66.67 },
+  '德意志銀行': { rate: 8.50, count: 12, winRate: 58.33 },
+  '巴克萊': { rate: 10.20, count: 10, winRate: 60.00 },
+  '法國巴黎銀行': { rate: 12.50, count: 8, winRate: 62.50 },
+  '匯豐': { rate: 11.80, count: 15, winRate: 66.67 },
+  '渣打': { rate: 9.50, count: 10, winRate: 60.00 },
+
+  // 本地券商
+  '大華繼顯(香港)有限公司': { rate: 5.20, count: 15, winRate: 53.33 },
+  '力高企業融資有限公司': { rate: 3.80, count: 12, winRate: 50.00 },
+  '艾德證券': { rate: 6.50, count: 8, winRate: 50.00 },
+  '寶新金融': { rate: 4.20, count: 6, winRate: 50.00 },
+  '第一上海': { rate: 7.80, count: 10, winRate: 60.00 },
 
   // ========== 简称映射（繁体）==========
-  '中金': { rate: 25.0, count: 238, winRate: 48.74 },
-  '中金公司': { rate: 25.0, count: 238, winRate: 48.74 },
-  '中國國際金融': { rate: 25.0, count: 238, winRate: 48.74 },
-  'CICC': { rate: 25.0, count: 238, winRate: 48.74 },
-  '中信': { rate: 60.0, count: 50, winRate: 76.00 },
-  '中信證券': { rate: 60.0, count: 50, winRate: 76.00 },
-  '中信里昂': { rate: 30.0, count: 59, winRate: 47.46 },
-  '華泰': { rate: 35.0, count: 73, winRate: 50.68 },
-  '華泰金融': { rate: 35.0, count: 73, winRate: 50.68 },
-  '高盛': { rate: 35.0, count: 114, winRate: 50.88 },
-  'Goldman': { rate: 35.0, count: 114, winRate: 50.88 },
-  '摩根士丹利': { rate: 45.0, count: 141, winRate: 64.54 },
-  'Morgan Stanley': { rate: 45.0, count: 141, winRate: 64.54 },
-  '大摩': { rate: 45.0, count: 141, winRate: 64.54 },
-  '海通': { rate: 55.0, count: 93, winRate: 63.44 },
-  '海通國際': { rate: 55.0, count: 93, winRate: 63.44 },
-  '瑞銀': { rate: 25.0, count: 64, winRate: 40.63 },
-  'UBS': { rate: 25.0, count: 64, winRate: 40.63 },
-  '國泰君安': { rate: 50.0, count: 79, winRate: 64.56 },
-  '建銀國際': { rate: 30.0, count: 80, winRate: 48.75 },
-  '招銀國際': { rate: 50.0, count: 56, winRate: 60.71 },
-  '招商證券': { rate: 50.0, count: 41, winRate: 63.41 },
-  '招商': { rate: 50.0, count: 41, winRate: 63.41 },
-  '花旗': { rate: 32.0, count: 70, winRate: 48.57 },
-  'Citi': { rate: 32.0, count: 70, winRate: 48.57 },
-  '廣發': { rate: 60.0, count: 19, winRate: 73.68 },
-  '農銀國際': { rate: 42.0, count: 46, winRate: 52.17 },
-  '交銀國際': { rate: 40.0, count: 39, winRate: 51.28 },
-  '工銀國際': { rate: 50.0, count: 24, winRate: 62.50 },
-  '申萬宏源': { rate: 50.0, count: 22, winRate: 63.64 },
-  '中銀國際': { rate: 40.0, count: 45, winRate: 51.11 },
-  '光大': { rate: 50.0, count: 40, winRate: 62.50 },
-  '摩根大通': { rate: 28.0, count: 53, winRate: 41.51 },
-  'J.P. Morgan': { rate: 28.0, count: 53, winRate: 41.51 },
-  'JPMorgan': { rate: 28.0, count: 53, winRate: 41.51 },
-  '小摩': { rate: 28.0, count: 53, winRate: 41.51 },
-  '中信建投': { rate: 45.0, count: 47, winRate: 55.32 },
-  '東方證券': { rate: 42.0, count: 12, winRate: 58.33 },
-  '興證國際': { rate: 42.0, count: 12, winRate: 58.33 },
-  '國信證券': { rate: 45.0, count: 13, winRate: 61.54 },
-  '長江證券': { rate: 45.0, count: 5, winRate: 60.00 },
-  '方正證券': { rate: 35.0, count: 4, winRate: 50.00 },
-  '豐盛': { rate: 70.0, count: 41, winRate: 82.93 },
-  '創升': { rate: 55.0, count: 33, winRate: 69.70 },
-  '大有': { rate: 75.0, count: 24, winRate: 87.50 },
-  '德健': { rate: 65.0, count: 24, winRate: 79.17 },
-  '同人': { rate: 65.0, count: 21, winRate: 76.19 },
-  '派杰': { rate: 48.0, count: 18, winRate: 61.11 },
-  '浩德': { rate: 60.0, count: 16, winRate: 75.00 },
-  '華富嘉洛': { rate: 80.0, count: 12, winRate: 91.67 },
-  '天財資本': { rate: 70.0, count: 12, winRate: 83.33 },
-  '南華': { rate: 65.0, count: 10, winRate: 80.00 },
-  '中國銀河': { rate: 75.0, count: 15, winRate: 86.67 },
-  '星展': { rate: 32.0, count: 15, winRate: 46.67 },
-  '西證': { rate: 55.0, count: 13, winRate: 69.23 },
-  '鎧盛': { rate: 45.0, count: 13, winRate: 61.54 },
-  '終經': { rate: 70.0, count: 7, winRate: 85.71 },
-  '八五金融': { rate: 70.0, count: 7, winRate: 85.71 },
-  '凱基': { rate: 70.0, count: 7, winRate: 85.71 },
-  '野村': { rate: 10.0, count: 6, winRate: 16.67 },
-  '聯昌': { rate: 55.0, count: 6, winRate: 66.67 },
-  '力泰': { rate: 70.0, count: 6, winRate: 83.33 },
-  '金利豐': { rate: 85.0, count: 4, winRate: 100.00 },
-  '耀盛': { rate: 85.0, count: 4, winRate: 100.00 },
-  '大唐': { rate: 85.0, count: 4, winRate: 100.00 },
-  '新利': { rate: 85.0, count: 3, winRate: 100.00 },
-  '新輝': { rate: 85.0, count: 3, winRate: 100.00 },
-  '白鯨': { rate: 85.0, count: 2, winRate: 100.00 },
+  '中金': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中金公司': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中國國際金融': { rate: 27.96, count: 64, winRate: 68.75 },
+  'CICC': { rate: 27.96, count: 64, winRate: 68.75 },
+  '中信': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信證券': { rate: 41.62, count: 42, winRate: 83.33 },
+  '中信里昂': { rate: 35.50, count: 38, winRate: 78.95 },
+  '華泰': { rate: 6.86, count: 33, winRate: 57.58 },
+  '華泰金融': { rate: 6.86, count: 33, winRate: 57.58 },
+  '高盛': { rate: 15.58, count: 30, winRate: 73.33 },
+  'Goldman': { rate: 15.58, count: 30, winRate: 73.33 },
+  '摩根士丹利': { rate: 21.91, count: 35, winRate: 77.14 },
+  'Morgan Stanley': { rate: 21.91, count: 35, winRate: 77.14 },
+  '海通': { rate: 31.22, count: 28, winRate: 75.00 },
+  '海通國際': { rate: 31.22, count: 28, winRate: 75.00 },
+  '瑞銀': { rate: 16.22, count: 25, winRate: 72.00 },
+  'UBS': { rate: 16.22, count: 25, winRate: 72.00 },
+  '國泰君安': { rate: 23.18, count: 25, winRate: 76.00 },
+  '建銀國際': { rate: 11.38, count: 18, winRate: 72.22 },
+  '招銀國際': { rate: 25.56, count: 18, winRate: 72.22 },
+  '招商證券': { rate: 18.50, count: 22, winRate: 68.18 },
+  '招商': { rate: 18.50, count: 22, winRate: 68.18 },
+  '花旗': { rate: 18.50, count: 20, winRate: 75.00 },
+  'Citi': { rate: 18.50, count: 20, winRate: 75.00 },
+  '廣發': { rate: 22.30, count: 15, winRate: 73.33 },
+  '農銀國際': { rate: 15.80, count: 10, winRate: 70.00 },
+  '交銀國際': { rate: 19.20, count: 14, winRate: 71.43 },
+  '工銀國際': { rate: 12.50, count: 12, winRate: 66.67 },
+  '申萬宏源': { rate: 28.30, count: 12, winRate: 75.00 },
+  '中銀國際': { rate: 14.60, count: 15, winRate: 66.67 },
+  '光大': { rate: 17.80, count: 8, winRate: 62.50 },
+  '民銀資本': { rate: -5.20, count: 12, winRate: 41.67 },
+  '摩根大通': { rate: 19.80, count: 28, winRate: 75.00 },
+  'J.P. Morgan': { rate: 19.80, count: 28, winRate: 75.00 },
+  'JPMorgan': { rate: 19.80, count: 28, winRate: 75.00 },
+  '中信建投': { rate: 15.20, count: 10, winRate: 70.00 },
+  '東方證券': { rate: 12.80, count: 8, winRate: 62.50 },
+  '興證國際': { rate: 8.50, count: 9, winRate: 55.56 },
+  '國信證券': { rate: 10.20, count: 8, winRate: 62.50 },
+  '長江證券': { rate: 6.80, count: 6, winRate: 50.00 },
+  '方正證券': { rate: 5.50, count: 5, winRate: 40.00 },
+  '大華繼顯': { rate: 5.20, count: 15, winRate: 53.33 },
+  '力高': { rate: 3.80, count: 12, winRate: 50.00 },
 
   // ========== 简称映射（简体）==========
-  '中信证券': { rate: 60.0, count: 50, winRate: 76.00 },
-  '华泰': { rate: 35.0, count: 73, winRate: 50.68 },
-  '海通国际': { rate: 55.0, count: 93, winRate: 63.44 },
-  '瑞银': { rate: 25.0, count: 64, winRate: 40.63 },
-  '国泰君安': { rate: 50.0, count: 79, winRate: 64.56 },
-  '建银国际': { rate: 30.0, count: 80, winRate: 48.75 },
-  '招银国际': { rate: 50.0, count: 56, winRate: 60.71 },
-  '招商证券': { rate: 50.0, count: 41, winRate: 63.41 },
-  '广发': { rate: 60.0, count: 19, winRate: 73.68 },
-  '农银国际': { rate: 42.0, count: 46, winRate: 52.17 },
-  '交银国际': { rate: 40.0, count: 39, winRate: 51.28 },
-  '工银国际': { rate: 50.0, count: 24, winRate: 62.50 },
-  '申万宏源': { rate: 50.0, count: 22, winRate: 63.64 },
-  '中银国际': { rate: 40.0, count: 45, winRate: 51.11 },
-  '民银资本': { rate: 50.0, count: 16, winRate: 62.50 },
-  '摩根大通': { rate: 28.0, count: 53, winRate: 41.51 },
-  '中信建投': { rate: 45.0, count: 47, winRate: 55.32 },
-  '东方证券': { rate: 42.0, count: 12, winRate: 58.33 },
-  '兴证国际': { rate: 42.0, count: 12, winRate: 58.33 },
-  '国信证券': { rate: 45.0, count: 13, winRate: 61.54 },
-  '长江证券': { rate: 45.0, count: 5, winRate: 60.00 },
-  '方正证券': { rate: 35.0, count: 4, winRate: 50.00 },
-  '丰盛': { rate: 70.0, count: 41, winRate: 82.93 },
-  '创升': { rate: 55.0, count: 33, winRate: 69.70 },
-  '德健': { rate: 65.0, count: 24, winRate: 79.17 },
-  '南华': { rate: 65.0, count: 10, winRate: 80.00 },
-  '中国银河': { rate: 75.0, count: 15, winRate: 86.67 },
-  '西证': { rate: 55.0, count: 13, winRate: 69.23 },
-  '终经': { rate: 70.0, count: 7, winRate: 85.71 },
-  '凯基': { rate: 70.0, count: 7, winRate: 85.71 },
-  '野村': { rate: 10.0, count: 6, winRate: 16.67 },
-  '联昌': { rate: 55.0, count: 6, winRate: 66.67 },
-  '力泰': { rate: 70.0, count: 6, winRate: 83.33 },
-  '金利丰': { rate: 85.0, count: 4, winRate: 100.00 },
-  '耀盛': { rate: 85.0, count: 4, winRate: 100.00 },
-  '新辉': { rate: 85.0, count: 3, winRate: 100.00 },
-  '白鲸': { rate: 85.0, count: 2, winRate: 100.00 },
+  '中信证券': { rate: 41.62, count: 42, winRate: 83.33 },
+  '华泰': { rate: 6.86, count: 33, winRate: 57.58 },
+  '海通国际': { rate: 31.22, count: 28, winRate: 75.00 },
+  '瑞银': { rate: 16.22, count: 25, winRate: 72.00 },
+  '国泰君安': { rate: 23.18, count: 25, winRate: 76.00 },
+  '建银国际': { rate: 11.38, count: 18, winRate: 72.22 },
+  '招银国际': { rate: 25.56, count: 18, winRate: 72.22 },
+  '招商证券': { rate: 18.50, count: 22, winRate: 68.18 },
+  '广发': { rate: 22.30, count: 15, winRate: 73.33 },
+  '农银国际': { rate: 15.80, count: 10, winRate: 70.00 },
+  '交银国际': { rate: 19.20, count: 14, winRate: 71.43 },
+  '工银国际': { rate: 12.50, count: 12, winRate: 66.67 },
+  '申万宏源': { rate: 28.30, count: 12, winRate: 75.00 },
+  '中银国际': { rate: 14.60, count: 15, winRate: 66.67 },
+  '民银资本': { rate: -5.20, count: 12, winRate: 41.67 },
+  '摩根大通': { rate: 19.80, count: 28, winRate: 75.00 },
+  '中信建投': { rate: 15.20, count: 10, winRate: 70.00 },
+  '东方证券': { rate: 12.80, count: 8, winRate: 62.50 },
+  '兴证国际': { rate: 8.50, count: 9, winRate: 55.56 },
+  '国信证券': { rate: 10.20, count: 8, winRate: 62.50 },
+  '长江证券': { rate: 6.80, count: 6, winRate: 50.00 },
+  '方正证券': { rate: 5.50, count: 5, winRate: 40.00 },
+  '大华继显': { rate: 5.20, count: 15, winRate: 53.33 },
 };
 
 /**
@@ -1932,208 +1815,89 @@ function scoreProspectus(rawText, stockCode) {
     console.log(`[保荐人] ✓ 找到章节，前300字: ${partiesSection.slice(0, 300)}`);
 
     // 从章节中提取保荐人名称
-    // 策略：找到保薦人标题作为START，找到"協調人"/"保薦人兼"作为END
-    // 校验START→END之间内容≥50字，不足则跳过继续找下一个END（防止合并标题内部误截断）
-    // 兼容有换行（PDF正常解析）和无换行（PDF文本被压平）两种格式
-    // 兜底：提取公司时遇到重复公司名即停止
+    // 格式：聯席保薦人 XXX有限公司\n地址\nYYY有限公司\n地址\n...整體協調人
+    // 策略：找到"聯席保薦人"或"獨家保薦人"，提取到"整體協調人"之间的所有"XXX有限公司"
 
-    // ===== 步骤1：定位保荐人区块 =====
-
-    // 1a. 匹配保荐人标题（START）
-    const sponsorTitleRegex = new RegExp(
-      `(?:` +
-        // 合并标题优先匹配（防止被短模式截断）
-        `聯\\s*席\\s*保\\s*薦\\s*人\\s*及\\s*保\\s*薦\\s*人\\s*兼\\s*整\\s*體\\s*協\\s*調\\s*人` +
-        `|聯\\s*席\\s*保\\s*薦\\s*人\\s*兼\\s*整\\s*體\\s*協\\s*調\\s*人` +
-        `|聯\\s*席\\s*保\\s*薦\\s*人` +
-        `|獨\\s*家\\s*保\\s*薦\\s*人` +
-        // 简体支持
-        `|联\\s*席\\s*保\\s*荐\\s*人\\s*及\\s*保\\s*荐\\s*人\\s*兼\\s*整\\s*体\\s*协\\s*调\\s*人` +
-        `|联\\s*席\\s*保\\s*荐\\s*人` +
-        `|独\\s*家\\s*保\\s*荐\\s*人` +
-      `)`,
-      'i'
+    // 步骤1：定位保荐人区块
+    const sponsorBlockMatch = sponsorSection.match(
+      /(?:聯席保薦人|獨家保薦人|联席保荐人|独家保荐人)([\s\S]*?)(?=整體協調人|整体协调人|聯席全球協調人|联席全球协调人|聯席賬簿管理人|$)/i
     );
 
-    const titleMatch = sponsorSection.match(sponsorTitleRegex);
-
-    if (!titleMatch) {
-      console.warn('[Sponsor] 未匹配到保荐人标题');
-      return [];
-    }
-
-    const titleStart = titleMatch.index;
-    const titleEnd = titleMatch.index + titleMatch[0].length;
-
-    console.log(`[保荐人] 标题: "${titleMatch[0].trim()}", 位置: ${titleStart}-${titleEnd}`);
-
-    // 1b. 判断数据格式：有换行 vs 无换行（PDF解析后可能无换行）
-    const afterTitle = sponsorSection.slice(titleEnd);
-    const nonEmptyLines = afterTitle.split('\n').filter(l => l.trim()).length;
-    const isMultiLine = afterTitle.includes('\n') && nonEmptyLines > 3;
-
-    console.log(`[保荐人] 数据格式: ${isMultiLine ? '有换行' : '无换行'}, 非空行数: ${nonEmptyLines}`);
-
-    // 1c. 查找END位置
-    const endKeywords = [
-      `保\\s*薦\\s*人\\s*兼`,
-      `整\\s*體\\s*協\\s*調\\s*人`,
-      `協\\s*調\\s*人`,
-      `包\\s*銷\\s*商`,
-      // 简体
-      `保\\s*荐\\s*人\\s*兼`,
-      `整\\s*体\\s*协\\s*调\\s*人`,
-      `协\\s*调\\s*人`,
-      `包\\s*销\\s*商`,
-    ];
-
-    let endPos = -1;
-    const MIN_BLOCK_LENGTH = 50; // START→END之间最少字符数（一个公司名+地址约30-40字）
-
-    if (isMultiLine) {
-      // 有换行：只用换行锚定END（更精确，不会被行内内容干扰）
-      const endRegex = new RegExp(`\\n[ \\t]*(?:${endKeywords.join('|')})`, 'gi');
-      let candidateMatch;
-      while ((candidateMatch = endRegex.exec(afterTitle)) !== null) {
-        if (candidateMatch.index >= MIN_BLOCK_LENGTH) {
-          endPos = titleEnd + candidateMatch.index;
-          console.log(`[保荐人] 找到有效END(换行锚定), 位置: ${endPos}, 区块长度: ${candidateMatch.index}`);
-          break;
-        } else {
-          console.log(`[保荐人] 跳过候选END(${candidateMatch.index}字): "${candidateMatch[0].trim()}"`);
-        }
-      }
-      // 有换行但没找到合格END → 取到末尾（由重复公司名检测兜底，如分行角色格式）
-      if (endPos < 0) {
-        console.log(`[保荐人] 有换行模式-未找到合格END，取到章节末尾`);
-      }
-    } else {
-      // 无换行：直接匹配关键词
-      const endRegex = new RegExp(`(?:${endKeywords.join('|')})`, 'gi');
-      let candidateMatch;
-      while ((candidateMatch = endRegex.exec(afterTitle)) !== null) {
-        if (candidateMatch.index >= MIN_BLOCK_LENGTH) {
-          endPos = titleEnd + candidateMatch.index;
-          console.log(`[保荐人] 找到有效END(无换行), 位置: ${endPos}, 区块长度: ${candidateMatch.index}`);
-          break;
-        } else {
-          console.log(`[保荐人] 跳过候选END(${candidateMatch.index}字): "${candidateMatch[0]}"`);
-        }
-      }
-      if (endPos < 0) {
-        console.log(`[保荐人] 无换行模式-未找到合格END，取到章节末尾`);
-      }
-    }
-
-    let sponsorBlock;
-    if (endPos > 0) {
-      sponsorBlock = sponsorSection.slice(titleStart, endPos);
-    } else {
-      sponsorBlock = sponsorSection.slice(titleStart);
-    }
-
-    console.log('✅ Sponsor区块匹配成功');
-    console.log('[保荐人] 区块长度:', sponsorBlock.length);
-    console.log('[保荐人] 前200字:', sponsorBlock.slice(0, 200));
-
-    // 后面所有 sponsorBlock 处理逻辑全部基于这个 sponsorBlock
-
-    if (sponsorBlock) {
+    if (sponsorBlockMatch) {
+      const sponsorBlock = sponsorBlockMatch[1];
       console.log(`[保荐人] 保荐人区块长度: ${sponsorBlock.length}, 前200字: ${sponsorBlock.slice(0, 200)}`);
 
-      // ===== 步骤2：提取公司名 =====
-      // 兜底保护：遇到重复公司名即停止（防止取到末尾时多提取下一角色的公司）
-
-      // 角色标题清理正则（去掉行内的角色前缀）
-      const roleTitleCleanPattern = /(?:聯\s*席\s*保\s*薦\s*人\s*及\s*保\s*薦\s*人\s*兼\s*整\s*體\s*協\s*調\s*人|聯\s*席\s*保\s*薦\s*人|獨\s*家\s*保\s*薦\s*人|保\s*薦\s*人\s*兼\s*整\s*體\s*協\s*調\s*人|整\s*體\s*協\s*調\s*人|聯\s*席\s*全\s*球\s*協\s*調\s*人|聯\s*席\s*賬\s*簿\s*管\s*理\s*人|聯\s*席\s*牽\s*頭\s*經\s*辦\s*人|資\s*本\s*市\s*場\s*中\s*介\s*人|按英文首字母排序)/g;
-
-      let hitDuplicate = false;
-
-      if (isMultiLine) {
-        // ---- 有换行：逐行提取（每行独立匹配，避免跨行粘连） ----
-        const lines = sponsorBlock.split('\n');
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || hitDuplicate) continue;
-
-          // 步骤2a：英文公司名（以Limited结尾）
-          const enMatch = trimmed.match(/([A-Z][A-Za-z0-9.()&',\-\s]+Limited)/);
-          if (enMatch) {
-            let companyName = enMatch[1].trim();
-            const isLikelyAddress = /^(Floor|Room|Suite|Level|Unit)/i.test(companyName);
-            if (companyName.length >= 15 && companyName.length <= 80 && !isLikelyAddress) {
-              if (extractedSponsors.includes(companyName)) {
-                hitDuplicate = true;
-                console.log(`[保荐人] 重复公司名停止: ${companyName}`);
-              } else {
-                extractedSponsors.push(companyName);
-                console.log(`[保荐人] 提取(英文): ${companyName}`);
-              }
-            }
-            continue;
-          }
-
-          // 步骤2b：中文公司名（以有限公司/有限責任公司结尾）
-          const cnMatch = trimmed.match(/([\u4e00-\u9fa5（）()\s]+有\s*限\s*(?:責\s*任\s*)?公\s*司)/);
-          if (cnMatch) {
-            let companyName = cnMatch[1];
-            companyName = companyName.replace(roleTitleCleanPattern, '');
-            companyName = companyName.replace(/^[\s,、，及兼]+/, '');
-            companyName = companyName.replace(/\s+/g, '');
-            if (companyName.length < 6 || companyName.length > 50) continue;
-            if (!/有限(責任)?公司$/.test(companyName)) continue;
-            if (/^(香港|九龍|新界|中環)/.test(companyName)) continue;
-
-            if (extractedSponsors.includes(companyName)) {
-              hitDuplicate = true;
-              console.log(`[保荐人] 重复公司名停止: ${companyName}`);
-            } else {
-              extractedSponsors.push(companyName);
-              console.log(`[保荐人] 提取: ${companyName}`);
-            }
-          }
-        }
-      } else {
-        // ---- 无换行：全局正则提取（适配PDF文本被压平的情况） ----
-        console.log(`[保荐人] 使用无换行全局提取模式`);
-
-        // 英文公司（支持无空格如 J.P.MorganSecurities(FarEast)Limited）
-        const enRegex = /([A-Z][A-Za-z0-9.()&',\-\s]*?Limited)/g;
-        let enMatch;
-        while ((enMatch = enRegex.exec(sponsorBlock)) !== null) {
-          let companyName = enMatch[1].trim();
+      // 步骤2a：先提取英文公司名（以Limited结尾）
+      // 模式：以大写字母开头，包含字母、数字、点号、括号，以Limited结尾
+      // 注意：PDF解析后空格可能被移除，所以不强制要求空格
+      const englishCompanyMatches = sponsorBlock.match(/[A-Z][A-Za-z0-9.()&',\-\s]+Limited/g);
+      if (englishCompanyMatches) {
+        for (const match of englishCompanyMatches) {
+          // 清理公司名
+          let companyName = match.trim();
+          // 验证长度合理（至少15个字符，最多80个字符）且不是纯地址
+          // 排除包含香港地址特征的误匹配
           const isLikelyAddress = /^(Floor|Room|Suite|Level|Unit)/i.test(companyName);
-          if (companyName.length >= 10 && companyName.length <= 80 && !isLikelyAddress) {
-            if (extractedSponsors.includes(companyName)) {
-              hitDuplicate = true;
-              console.log(`[保荐人] 重复公司名停止: ${companyName}`);
-              break;
-            } else {
+          if (companyName.length >= 15 && companyName.length <= 80 && !isLikelyAddress) {
+            if (!extractedSponsors.includes(companyName)) {
               extractedSponsors.push(companyName);
               console.log(`[保荐人] 提取(英文): ${companyName}`);
             }
           }
         }
+      }
 
-        // 中文公司（无换行格式，全局匹配）
-        const cnRegex = /([\u4e00-\u9fa5（）()]+有限(?:責任)?公司)/g;
-        let cnMatch;
-        while ((cnMatch = cnRegex.exec(sponsorBlock)) !== null && !hitDuplicate) {
-          let companyName = cnMatch[1];
-          companyName = companyName.replace(roleTitleCleanPattern, '');
-          companyName = companyName.replace(/^[,、，及兼]+/, '');
-          // 去掉地址尾巴粘连（如"29樓中信建投..." → 开头的"樓"/"號"/"室"/"座"）
-          companyName = companyName.replace(/^[樓號室座層]+/, '');
-          companyName = companyName.replace(/\s+/g, '');
+      // 步骤2b：按"有限公司"分割，提取中文公司名
+      // 文本格式：XXX有限公司地址YYY有限公司地址...
+      const parts = sponsorBlock.split(/有限公司/);
 
-          if (companyName.length < 6 || companyName.length > 50) continue;
-          if (!/有限(責任)?公司$/.test(companyName)) continue;
-          if (/^(香港|九龍|新界|中環)/.test(companyName)) continue;
+      // 地址关键词（用于从后往前找公司名开始位置）
+      // 注意：不包含"香港"，因为可能是公司名的一部分如"中國國際金融香港證券"
+      const addressKeywords = ['九龍', '新界', '中環', '金鐘', '灣仔', '銅鑼灣', '尖沙咀',
+        '上環', '西環', '北角', '鰂魚涌', '觀塘', '荃灣', '沙田', '大埔',
+        '樓', '層', '室', '號', '街', '道', '路', '廣場', '大廈', '大樓'];
 
-          if (extractedSponsors.includes(companyName)) {
-            hitDuplicate = true;
-            console.log(`[保荐人] 重复公司名停止: ${companyName}`);
-          } else {
+      for (let i = 0; i < parts.length - 1; i++) { // 最后一个part是"有限公司"之后的内容，跳过
+        let part = parts[i];
+
+        // 第一个part特殊处理：直接作为完整公司名（前面没有地址）
+        if (i === 0) {
+          let companyName = part.trim() + '有限公司';
+          if (companyName.length >= 8 && companyName.length <= 35) {
+            extractedSponsors.push(companyName);
+            console.log(`[保荐人] 提取(首个): ${companyName}`);
+          }
+          continue;
+        }
+
+        // 从后往前找公司名开始位置（跳过地址词）
+        let companyStart = 0;
+        for (let j = part.length - 1; j >= 0; j--) {
+          const remaining = part.slice(j);
+          // 检查是否以地址关键词开头
+          const isAddressStart = addressKeywords.some(kw => remaining.startsWith(kw));
+          // 检查是否是数字（门牌号）
+          const isNumber = /^[0-9]/.test(remaining);
+          // 检查是否是"香港"后面紧跟地址特征
+          const isHongKongAddress = remaining.startsWith('香港') &&
+            (remaining.length <= 2 || addressKeywords.some(kw => remaining.slice(2).startsWith(kw)) || /^香港[0-9]/.test(remaining));
+
+          if (isAddressStart || isNumber || isHongKongAddress) {
+            companyStart = j + (isHongKongAddress ? 2 : 0) + 1;
+            break;
+          }
+        }
+
+        // 提取公司名
+        let companyName = part.slice(companyStart) + '有限公司';
+        companyName = companyName.trim();
+
+        // 验证是否是有效的公司名称
+        if (companyName.length >= 8 &&
+            companyName.length <= 35 &&
+            !companyName.startsWith('有限公司') &&
+            !/^[0-9]/.test(companyName)) {
+          if (!extractedSponsors.includes(companyName)) {
             extractedSponsors.push(companyName);
             console.log(`[保荐人] 提取: ${companyName}`);
           }
@@ -2155,7 +1919,6 @@ function scoreProspectus(rawText, stockCode) {
       }
     }
   }
-
 
   // -------- 策略2: 在釋義章节查找定义格式 --------
   if (extractedSponsors.length === 0) {
