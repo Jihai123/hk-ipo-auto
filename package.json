@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "crawl": "node scripts/crawl-sponsors.js",
-    "test": "echo \"No tests yet\""
+    "test": "node scripts/run-qa-tests.js"
   },
   "dependencies": {
     "express": "^4.18.2",
