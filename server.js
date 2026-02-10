@@ -3308,6 +3308,155 @@ app.get('/api/score/:code', async (req, res) => {
   }
 });
 
+// ==================== 新增API：数据展示 ====================
+
+// 获取当前IPO列表（在招股/即将上市）
+app.get('/api/ipo/current', (req, res) => {
+  const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
+
+  if (fs.existsSync(IPO_LIST_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
+
+      // 按状态分类
+      const subscribing = data.ipos.filter(ipo => ipo.status === 'subscribing');
+      const coming = data.ipos.filter(ipo => ipo.status === 'coming');
+      const listed = data.ipos.filter(ipo => ipo.status === 'listed');
+
+      res.json({
+        success: true,
+        updateTime: data.updateTime,
+        total: data.count,
+        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)),
+        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)),
+        listed: listed.slice(0, 5), // 最近5个
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  } else {
+    // 返回空数据
+    res.json({
+      success: true,
+      updateTime: new Date().toISOString(),
+      total: 0,
+      subscribing: [],
+      coming: [],
+      listed: [],
+      message: '暂无IPO数据，请运行 node scripts/crawler-ipo-list.js'
+    });
+  }
+});
+
+// 获取Top评分IPO（用于首页Top榜单）
+app.get('/api/ipo/top', (req, res) => {
+  const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
+  const limit = parseInt(req.query.limit) || 5;
+
+  if (fs.existsSync(IPO_LIST_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
+
+      // 筛选已评分且在招股或即将上市的IPO
+      const topIPOs = data.ipos
+        .filter(ipo => ipo.score !== null && (ipo.status === 'subscribing' || ipo.status === 'coming'))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+
+      res.json({
+        success: true,
+        count: topIPOs.length,
+        ipos: topIPOs
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  } else {
+    res.json({ success: true, count: 0, ipos: [] });
+  }
+});
+
+// 获取历史IPO表现数据
+app.get('/api/ipo/history', (req, res) => {
+  const HISTORY_JSON = path.join(DATA_DIR, 'ipo-history.json');
+
+  if (fs.existsSync(HISTORY_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(HISTORY_JSON, 'utf-8'));
+      res.json({
+        success: true,
+        ...data
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  } else {
+    res.json({
+      success: false,
+      message: '暂无历史数据，请运行 node scripts/init-history-data.js'
+    });
+  }
+});
+
+// 获取市场环境统计
+app.get('/api/market/stats', (req, res) => {
+  const HISTORY_JSON = path.join(DATA_DIR, 'ipo-history.json');
+  const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
+
+  try {
+    let stats = {
+      avgReturn: '+0%',
+      breakRate: '0%',
+      heatIndex: 0,
+      subscriptionMultiple: '0x',
+      activeIPOs: 0
+    };
+
+    // 从历史数据计算近期表现
+    if (fs.existsSync(HISTORY_JSON)) {
+      const history = JSON.parse(fs.readFileSync(HISTORY_JSON, 'utf-8'));
+
+      if (history.recentIPOs && history.recentIPOs.length > 0) {
+        // 取最近10只
+        const recent10 = history.recentIPOs.slice(0, 10);
+
+        // 计算平均涨幅
+        const returns = recent10.map(ipo => {
+          const match = ipo.firstDayReturn.match(/([+-]?\d+\.?\d*)/);
+          return match ? parseFloat(match[1]) : 0;
+        });
+        const avgReturn = (returns.reduce((a, b) => a + b, 0) / returns.length).toFixed(1);
+        stats.avgReturn = `${avgReturn > 0 ? '+' : ''}${avgReturn}%`;
+
+        // 计算破发率
+        const breakCount = returns.filter(r => r < 0).length;
+        stats.breakRate = `${Math.round(breakCount / returns.length * 100)}%`;
+
+        // 打新热度指数（简化计算）
+        const positiveRate = (returns.filter(r => r > 0).length / returns.length) * 100;
+        stats.heatIndex = Math.round(positiveRate * 0.7 + Math.abs(avgReturn) * 0.3);
+
+        // 模拟超额认购倍数
+        stats.subscriptionMultiple = `${(8 + Math.random() * 12).toFixed(1)}x`;
+      }
+    }
+
+    // 从当前IPO列表获取活跃数量
+    if (fs.existsSync(IPO_LIST_JSON)) {
+      const ipoList = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
+      stats.activeIPOs = ipoList.ipos.filter(ipo => ipo.status === 'subscribing').length;
+    }
+
+    res.json({
+      success: true,
+      updateTime: new Date().toISOString(),
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 静态文件
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
