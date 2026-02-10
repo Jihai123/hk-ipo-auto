@@ -1,5 +1,5 @@
 {
-  "updateTime": "2026-02-10T12:34:31.857Z",
+  "updateTime": "2026-02-10T12:40:00.000Z",
   "count": 5,
   "ipos": [
     {
@@ -12,8 +12,9 @@
       "listingDate": "2026-02-18",
       "offerPrice": "10-12",
       "currency": "HKD",
-      "score": null,
-      "lastUpdate": "2026-02-10T12:34:23.501Z"
+      "score": 82,
+      "rating": "强烈推荐",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
     },
     {
       "code": "02768",
@@ -25,8 +26,9 @@
       "listingDate": "2026-02-16",
       "offerPrice": "8-10",
       "currency": "HKD",
-      "score": null,
-      "lastUpdate": "2026-02-10T12:34:23.502Z"
+      "score": 78,
+      "rating": "建议申购",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
     },
     {
       "code": "01234",
@@ -38,8 +40,9 @@
       "listingDate": "2026-02-28",
       "offerPrice": "15-18",
       "currency": "HKD",
-      "score": null,
-      "lastUpdate": "2026-02-10T12:34:23.502Z"
+      "score": 74,
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
     },
     {
       "code": "05678",
@@ -51,8 +54,9 @@
       "listingDate": "2026-03-02",
       "offerPrice": "20-25",
       "currency": "HKD",
-      "score": null,
-      "lastUpdate": "2026-02-10T12:34:23.502Z"
+      "score": 71,
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
     },
     {
       "code": "09876",
@@ -62,7 +66,8 @@
       "listingDate": "2026-02-05",
       "firstDayReturn": "+12.3%",
       "score": 68,
-      "lastUpdate": "2026-02-10T12:34:23.502Z"
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
     }
   ]
 }
