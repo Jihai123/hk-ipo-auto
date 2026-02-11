@@ -1220,10 +1220,10 @@ async function searchProspectus(stockCode) {
                 // 方法3: 直接探测可能的招股书URL（并行探测，加速搜索）
                 console.log('[搜索] 尝试直接探测招股书URL...');
 
-                // 生成上市前5-28天的日期列表
+                // 生成上市前5-14天的日期列表（优化：减少探测范围）
                 const probeUrls = [];
                 const probeStartTime = Date.now();
-                for (let d = 5; d <= 28; d++) {
+                for (let d = 5; d <= 14; d++) {
                   const probeDate = new Date(ipoDate);
                   probeDate.setDate(probeDate.getDate() - d);
                   const year = probeDate.getFullYear();
@@ -1231,8 +1231,8 @@ async function searchProspectus(stockCode) {
                   const day = String(probeDate.getDate()).padStart(2, '0');
                   const mmdd = `${month}${day}`;
 
-                  // 每天尝试序号 001-020（减少探测范围加速搜索）
-                  for (let seq = 1; seq <= 20; seq++) {
+                  // 每天尝试序号 001-010（优化：减少序号范围加速搜索）
+                  for (let seq = 1; seq <= 10; seq++) {
                     const seqStr = String(seq).padStart(3, '0');
                     // 使用www域名（更稳定）
                     probeUrls.push(`https://www.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/ltn${year}${mmdd}${seqStr}_c.pdf`);
@@ -1378,8 +1378,8 @@ async function searchProspectus(stockCode) {
                 // 收集候选PDF（大于3MB的）
                 const candidateUrls = [];
                 const batchSize = 20;
-                const PROBE_TIMEOUT_MS = 60000; // 探测阶段最多60秒
-                for (let i = 0; i < probeUrls.length && candidateUrls.length < 15; i += batchSize) {
+                const PROBE_TIMEOUT_MS = 30000; // 探测阶段最多30秒（优化）
+                for (let i = 0; i < probeUrls.length && candidateUrls.length < 5; i += batchSize) {
                   // 超时保护：如果探测超过60秒则中断
                   if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
                     console.log(`[搜索] URL探测超时(${PROBE_TIMEOUT_MS/1000}s)，已探测 ${i}/${probeUrls.length} 个URL，找到 ${candidateUrls.length} 个候选`);
