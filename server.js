@@ -952,16 +952,20 @@ async function searchProspectus(stockCode) {
 
   console.log(`[搜索] 股票代码: ${formattedCode}`);
 
+  let results = [];
+  let $ = null;
+  let response = null;
+
   try {
-    // 先搜索主板
+    // 方法1: 先搜索主板新上市列表
+    console.log('[搜索] 方法1: 尝试主板新上市列表...');
     const mainBoardUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/Main-Board?sc_lang=zh-HK';
-    let response = await axios.get(mainBoardUrl, {
+    response = await axios.get(mainBoardUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       timeout: 30000,
     });
 
-    let $ = cheerio.load(response.data);
-    let results = [];
+    $ = cheerio.load(response.data);
 
     // 解析表格 - 收集所有候选PDF，优先级排序
     $('table tr').each((i, row) => {
@@ -1011,7 +1015,7 @@ async function searchProspectus(stockCode) {
     
     // 如果主板没找到，搜索创业板
     if (results.length === 0) {
-      console.log('[搜索] 主板未找到，搜索创业板...');
+      console.log('[搜索] 方法1: 主板未找到，尝试创业板...');
 
       const gemUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/GEM?sc_lang=zh-HK';
       response = await axios.get(gemUrl, {
@@ -1068,12 +1072,20 @@ async function searchProspectus(stockCode) {
       });
     }
 
+    if (results.length > 0) {
+      console.log(`[搜索] 方法1成功: 找到 ${results.length} 个结果`);
+    }
+  } catch (method1Error) {
+    console.log(`[搜索] 方法1失败: ${method1Error.message}，继续尝试其他方法...`);
+  }
+
+  try {
     // 如果新上市列表都没找到，尝试获取股票上市日期并搜索历史招股书
     if (results.length === 0) {
-      console.log('[搜索] 新上市列表未找到，尝试获取上市日期...');
+      console.log('[搜索] 方法2: 尝试获取上市日期并搜索历史招股书...');
 
       try {
-        // 方法1: 从Yahoo Finance获取首个交易日期
+        // 从Yahoo Finance获取首个交易日期
         const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${codeNum}.HK?interval=1mo&range=max`;
         const yahooResponse = await axios.get(yahooUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
@@ -1231,11 +1243,11 @@ async function searchProspectus(stockCode) {
                   const day = String(probeDate.getDate()).padStart(2, '0');
                   const mmdd = `${month}${day}`;
 
-                  // 每天尝试序号 001-010（优化：减少序号范围加速搜索）
-                  for (let seq = 1; seq <= 10; seq++) {
-                    const seqStr = String(seq).padStart(3, '0');
-                    // 使用www域名（更稳定）
-                    probeUrls.push(`https://www.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/ltn${year}${mmdd}${seqStr}_c.pdf`);
+                  // 每天尝试序号 00001-00050（使用正确的5位序号格式，不含ltn前缀和_c后缀）
+                  for (let seq = 1; seq <= 50; seq++) {
+                    const seqStr = String(seq).padStart(5, '0');
+                    // 使用www1域名，正确的招股书URL格式
+                    probeUrls.push(`https://www1.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/${year}${mmdd}${seqStr}.pdf`);
                   }
                 }
                 console.log(`[搜索] 生成 ${probeUrls.length} 个探测URL`);
@@ -1444,14 +1456,12 @@ async function searchProspectus(stockCode) {
         console.log('[搜索] Yahoo Finance查询失败:', yahooErr.message);
       }
     }
-
-    console.log(`[搜索] 找到 ${results.length} 个结果`);
-    return results;
-    
-  } catch (error) {
-    console.error('[搜索] 失败:', error.message);
-    throw new Error(`搜索招股书失败: ${error.message}`);
+  } catch (method2Error) {
+    console.log(`[搜索] 方法2失败: ${method2Error.message}`);
   }
+
+  console.log(`[搜索] 最终找到 ${results.length} 个结果`);
+  return results;
 }
 
 // ==================== PDF下载与解析 ====================
