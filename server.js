@@ -3217,6 +3217,76 @@ function withTimeout(promise, ms, message = '操作超时') {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// 自动保存评分记录到IPO列表（用户评分即数据）
+function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
+  try {
+    const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
+
+    // 读取现有数据
+    let data = {
+      updateTime: new Date().toISOString(),
+      count: 0,
+      source: 'user-scored',
+      ipos: []
+    };
+
+    if (fs.existsSync(IPO_LIST_JSON)) {
+      try {
+        data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
+      } catch (e) {
+        console.log('[保存] IPO列表读取失败，创建新列表');
+      }
+    }
+
+    // 检查是否已存在（去重）
+    let existingIPO = data.ipos.find(ipo => ipo.code === stockCode);
+
+    if (existingIPO) {
+      // 更新现有记录
+      existingIPO.score = scoreResult.totalScore;
+      existingIPO.rating = scoreResult.rating;
+      existingIPO.scoreDetails = scoreResult.scores;
+      existingIPO.lastUpdate = new Date().toISOString();
+      if (prospectusInfo) {
+        existingIPO.name = prospectusInfo.name || existingIPO.name;
+      }
+      console.log(`[保存] 更新现有记录: ${stockCode} - ${scoreResult.totalScore}分`);
+    } else {
+      // 添加新记录
+      const newIPO = {
+        code: stockCode,
+        name: prospectusInfo?.name || `股票${stockCode}`,
+        industry: '待分类',
+        status: 'scored', // 标记为已评分
+        score: scoreResult.totalScore,
+        rating: scoreResult.rating,
+        scoreDetails: scoreResult.scores,
+        lastUpdate: new Date().toISOString(),
+        prospectus: prospectusInfo ? {
+          title: prospectusInfo.title,
+          link: prospectusInfo.link
+        } : null
+      };
+
+      data.ipos.unshift(newIPO); // 添加到开头
+      console.log(`[保存] 新增记录: ${stockCode} - ${scoreResult.totalScore}分`);
+    }
+
+    // 更新元数据
+    data.count = data.ipos.length;
+    data.updateTime = new Date().toISOString();
+    data.source = 'user-scored';
+
+    // 保存到文件
+    fs.writeFileSync(IPO_LIST_JSON, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`[保存] ✓ 已保存到 ipo-list.json，共 ${data.count} 条记录`);
+
+  } catch (error) {
+    console.error(`[保存] 保存评分记录失败:`, error.message);
+    // 不中断主流程，仅记录错误
+  }
+}
+
 // 主评分API
 app.get('/api/score/:code', async (req, res) => {
   const { code } = req.params;
@@ -3297,6 +3367,9 @@ app.get('/api/score/:code', async (req, res) => {
       };
     }
 
+    // 🎯 自动保存评分记录（用户评分即数据）
+    saveScoreToIPOList(code, scoreResult, prospectusInfo);
+
     res.json(response);
 
   } catch (error) {
@@ -3349,6 +3422,7 @@ app.get('/api/ipo/current', (req, res) => {
 });
 
 // 获取Top评分IPO（用于首页Top榜单）
+// 🎯 改进：显示所有用户评分过的股票，不限制状态
 app.get('/api/ipo/top', (req, res) => {
   const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
   const limit = parseInt(req.query.limit) || 5;
@@ -3357,22 +3431,23 @@ app.get('/api/ipo/top', (req, res) => {
     try {
       const data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
 
-      // 筛选已评分且在招股或即将上市的IPO
+      // 筛选所有已评分的IPO，按评分降序排列
       const topIPOs = data.ipos
-        .filter(ipo => ipo.score !== null && (ipo.status === 'subscribing' || ipo.status === 'coming'))
+        .filter(ipo => ipo.score !== null && ipo.score !== undefined)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);
 
       res.json({
         success: true,
         count: topIPOs.length,
+        total: data.ipos.length,
         ipos: topIPOs
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
   } else {
-    res.json({ success: true, count: 0, ipos: [] });
+    res.json({ success: true, count: 0, total: 0, ipos: [] });
   }
 });
 
