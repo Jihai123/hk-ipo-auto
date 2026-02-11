@@ -2059,7 +2059,7 @@
 // 加载Top IPO榜单
 async function loadTopIPOs() {
   try {
-    const response = await fetch('/api/ipo/top?limit=5');
+    const response = await fetch('./api/ipo/top?limit=5');
     const data = await response.json();
 
     const container = document.getElementById('topIPOList');
@@ -2108,7 +2108,7 @@ async function loadTopIPOs() {
 // 加载市场统计
 async function loadMarketStats() {
   try {
-    const response = await fetch('/api/market/stats');
+    const response = await fetch('./api/market/stats');
     const data = await response.json();
 
     if (data.success) {
@@ -2147,7 +2147,7 @@ async function loadMarketStats() {
 // 加载历史表现
 async function loadHistoryPerformance() {
   try {
-    const response = await fetch('/api/ipo/history');
+    const response = await fetch('./api/ipo/history');
     const data = await response.json();
 
     if (data.success && data.summary) {
