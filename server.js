@@ -1229,8 +1229,28 @@ async function searchProspectus(stockCode) {
               if (stockInfo) {
                 console.log(`[搜索] 找到股票信息: ${stockInfo.n} (${stockInfo.c})`);
 
-                // 方法3: 直接探测可能的招股书URL（并行探测，加速搜索）
-                console.log('[搜索] 尝试直接探测招股书URL...');
+                // 方法3A: 先尝试Application Proof路径（适用于新上市/H股二次上市）
+                console.log('[搜索] 方法3A: 尝试Application Proof路径...');
+                const apUrls = [];
+
+                // Application Proof通常在上市前1-3周发布
+                for (let d = 7; d <= 21; d++) {
+                  const apDate = new Date(ipoDate);
+                  apDate.setDate(apDate.getDate() - d);
+                  const year = apDate.getFullYear();
+                  const month = String(apDate.getMonth() + 1).padStart(2, '0');
+                  const day = String(apDate.getDate()).padStart(2, '0');
+                  const mmdd = `${month}${day}`;
+
+                  // Application Proof格式: /app/sehk/YYYY/MMDD/STOCKCODE.pdf
+                  apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${formattedCode}.pdf`);
+                  apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${codeNum}.pdf`);
+                }
+
+                console.log(`[搜索] 生成 ${apUrls.length} 个AP探测URL`);
+
+                // 方法3B: 探测listconews路径（常规上市公告）
+                console.log('[搜索] 方法3B: 尝试直接探测招股书URL...');
 
                 // 生成上市前5-14天的日期列表（优化：减少探测范围）
                 const probeUrls = [];
@@ -1250,7 +1270,10 @@ async function searchProspectus(stockCode) {
                     probeUrls.push(`https://www1.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/${year}${mmdd}${seqStr}.pdf`);
                   }
                 }
-                console.log(`[搜索] 生成 ${probeUrls.length} 个探测URL`);
+
+                // 合并AP URLs和listconews URLs（AP优先）
+                const allProbeUrls = [...apUrls, ...probeUrls];
+                console.log(`[搜索] 总共生成 ${allProbeUrls.length} 个探测URL (${apUrls.length} AP + ${allProbeUrls.length} listconews)`);
 
                 // 使用curl探测文件大小（降低超时加速探测）
                 const checkUrl = (url) => {
@@ -1391,14 +1414,14 @@ async function searchProspectus(stockCode) {
                 const candidateUrls = [];
                 const batchSize = 20;
                 const PROBE_TIMEOUT_MS = 30000; // 探测阶段最多30秒（优化）
-                for (let i = 0; i < probeUrls.length && candidateUrls.length < 5; i += batchSize) {
+                for (let i = 0; i < allProbeUrls.length && candidateUrls.length < 5; i += batchSize) {
                   // 超时保护：如果探测超过60秒则中断
                   if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
-                    console.log(`[搜索] URL探测超时(${PROBE_TIMEOUT_MS/1000}s)，已探测 ${i}/${probeUrls.length} 个URL，找到 ${candidateUrls.length} 个候选`);
+                    console.log(`[搜索] URL探测超时(${PROBE_TIMEOUT_MS/1000}s)，已探测 ${i}/${allProbeUrls.length} 个URL，找到 ${candidateUrls.length} 个候选`);
                     break;
                   }
 
-                  const batch = probeUrls.slice(i, i + batchSize);
+                  const batch = allProbeUrls.slice(i, i + batchSize);
 
                   for (const url of batch) {
                     const fileSize = checkUrl(url);
