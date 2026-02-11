@@ -1,0 +1,40 @@
+{
+  "updateTime": "2026-02-11T00:00:00.000Z",
+  "count": 0,
+  "source": "manual",
+  "ipos": [
+    {
+      "_comment": "示例：真实IPO数据模板",
+      "code": "00000",
+      "name": "公司名称",
+      "industry": "科技/医疗/金融/消费/其他",
+      "status": "subscribing",
+      "subscriptionStart": "2026-02-10",
+      "subscriptionEnd": "2026-02-15",
+      "listingDate": "2026-02-18",
+      "offerPrice": "10-12",
+      "currency": "HKD",
+      "score": null,
+      "rating": null,
+      "lastUpdate": "2026-02-11T00:00:00.000Z"
+    }
+  ],
+  "_instructions": {
+    "如何使用": [
+      "1. 访问港交所新股上市页面查找真实IPO",
+      "2. 复制上面的模板，填入真实数据",
+      "3. 删除 _comment 和 _instructions 字段",
+      "4. 运行 npm run score 自动评分"
+    ],
+    "status说明": {
+      "subscribing": "正在招股中",
+      "coming": "即将招股",
+      "listed": "已上市"
+    },
+    "数据来源": [
+      "港交所: https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities",
+      "披露易: https://www.hkexnews.hk/",
+      "AAStocks: http://www.aastocks.com/tc/stocks/market/ipo/"
+    ]
+  }
+}

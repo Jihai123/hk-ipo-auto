@@ -1,21 +1,6 @@
 {
-  "updateTime": "2026-02-11T03:22:33.950Z",
-  "count": 1,
-  "source": "auto-crawled",
-  "ipos": [
-    {
-      "code": "09988",
-      "name": "阿里巴巴-SW",
-      "industry": "待分类",
-      "status": "listed",
-      "subscriptionStart": null,
-      "subscriptionEnd": null,
-      "listingDate": "2026-02-11",
-      "offerPrice": null,
-      "currency": "HKD",
-      "score": null,
-      "rating": null,
-      "lastUpdate": "2026-02-11T03:22:33.950Z"
-    }
-  ]
+  "updateTime": "2026-02-11T00:00:00.000Z",
+  "count": 0,
+  "source": "manual",
+  "ipos": []
 }
