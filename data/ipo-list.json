@@ -1,0 +1,73 @@
+{
+  "updateTime": "2026-02-10T12:40:00.000Z",
+  "count": 5,
+  "ipos": [
+    {
+      "code": "09660",
+      "name": "新氧",
+      "industry": "医疗健康",
+      "status": "subscribing",
+      "subscriptionStart": "2026-02-10",
+      "subscriptionEnd": "2026-02-15",
+      "listingDate": "2026-02-18",
+      "offerPrice": "10-12",
+      "currency": "HKD",
+      "score": 82,
+      "rating": "强烈推荐",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
+    },
+    {
+      "code": "02768",
+      "name": "佳源国际",
+      "industry": "金融服务",
+      "status": "subscribing",
+      "subscriptionStart": "2026-02-08",
+      "subscriptionEnd": "2026-02-13",
+      "listingDate": "2026-02-16",
+      "offerPrice": "8-10",
+      "currency": "HKD",
+      "score": 78,
+      "rating": "建议申购",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
+    },
+    {
+      "code": "01234",
+      "name": "科技创新集团",
+      "industry": "科技",
+      "status": "coming",
+      "subscriptionStart": "2026-02-20",
+      "subscriptionEnd": "2026-02-25",
+      "listingDate": "2026-02-28",
+      "offerPrice": "15-18",
+      "currency": "HKD",
+      "score": 74,
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
+    },
+    {
+      "code": "05678",
+      "name": "生物医药",
+      "industry": "医疗健康",
+      "status": "coming",
+      "subscriptionStart": "2026-02-22",
+      "subscriptionEnd": "2026-02-27",
+      "listingDate": "2026-03-02",
+      "offerPrice": "20-25",
+      "currency": "HKD",
+      "score": 71,
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
+    },
+    {
+      "code": "09876",
+      "name": "消费服务",
+      "industry": "消费",
+      "status": "listed",
+      "listingDate": "2026-02-05",
+      "firstDayReturn": "+12.3%",
+      "score": 68,
+      "rating": "可以考虑",
+      "lastUpdate": "2026-02-10T12:40:00.000Z"
+    }
+  ]
+}
