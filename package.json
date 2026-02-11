@@ -7,6 +7,10 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "crawl": "node scripts/crawl-sponsors.js",
+    "update": "node scripts/auto-crawler.js",
+    "update:score": "node scripts/auto-crawler.js --score",
+    "score": "node scripts/auto-crawler.js --only-score",
+    "init": "node scripts/init-history-data.js",
     "test": "node scripts/run-qa-tests.js"
   },
   "dependencies": {
