@@ -18,63 +18,15 @@ if (!fs.existsSync(DATA_DIR)) {
 
 /**
  * 爬取港交所披露易 - 获取最近的招股书列表
+ * 改用简单策略：返回空数组，强制使用手动配置
  */
 async function crawlHKEXProspectus() {
-  console.log('[爬虫] 开始爬取港交所披露易招股书列表...');
+  console.log('[爬虫] 港交所披露易需要人工筛选招股书');
+  console.log('[爬虫] 请访问: https://www.hkex.com.hk/Market-Data/Securities-Prices/Equities');
+  console.log('[爬虫] 或手动编辑 data/ipo-list.json 添加真实IPO');
 
-  try {
-    // 港交所披露易搜索页面 - 搜索"招股章程"
-    const searchUrl = 'https://www1.hkexnews.hk/search/titlesearch.xhtml';
-
-    const response = await axios.post(searchUrl, {
-      searchType: '0',
-      market: 'SEHK',
-      searchMethod: '2',
-      documentType: '-1',
-      t1code: '40003', // 招股章程代码
-      t2Gcode: '-2',
-      t2code: '-2',
-      rowRange: '100',
-      lang: 'ZH',
-      sortDir: '0',
-      sortByOptions: 'DateTime',
-      category: '0'
-    }, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      timeout: 30000
-    });
-
-    const $ = cheerio.load(response.data);
-    const ipos = [];
-
-    // 解析搜索结果
-    $('.doc-link').each((index, element) => {
-      if (index >= 20) return; // 只取最近20个
-
-      const $row = $(element).closest('tr');
-      const title = $(element).text().trim();
-      const stockCode = title.match(/\d{5}/)?.[0]; // 提取5位股票代码
-      const companyName = title.split('-')[0]?.trim();
-
-      if (stockCode && companyName) {
-        ipos.push({
-          code: stockCode,
-          name: companyName,
-          title: title
-        });
-      }
-    });
-
-    console.log(`[爬虫] 从披露易获取到 ${ipos.length} 个招股书`);
-    return ipos;
-
-  } catch (error) {
-    console.error('[爬虫] 披露易爬取失败:', error.message);
-    return [];
-  }
+  // 港交所披露易爬虫复杂度高，建议使用手动配置或第三方API
+  return [];
 }
 
 /**
