@@ -948,7 +948,8 @@ function isFinalProspectus(text) {
  */
 async function searchProspectus(stockCode) {
   const formattedCode = formatStockCode(stockCode);
-  const codeNum = parseInt(stockCode, 10).toString();
+  // 使用已清理后的纯数字代码（formatStockCode已去除字母前缀如AI/GEM等）
+  const codeNum = parseInt(formattedCode, 10).toString();
 
   console.log(`[搜索] 股票代码: ${formattedCode}`);
 
@@ -2321,43 +2322,62 @@ function scoreProspectus(rawText, stockCode) {
   };
 
   if (foundSponsors.length > 0) {
-    // 取经验最丰富的保荐人作为主保荐人
-    const mainSponsor = foundSponsors.sort((a, b) => b.count - a.count)[0];
-    const sponsorName = (mainSponsor.name || '未知保荐人').substring(0, 20);
-    const sponsorRate = mainSponsor.rate || 0;
-    const sponsorCount = mainSponsor.count || 0;
+    // 使用加权平均涨幅（按承销案例数量加权），更准确反映联席保荐人整体质量
+    const sponsorsWithData = foundSponsors.filter(s => s.rate !== null && s.count && s.count >= 8);
+    const allSponsorsSorted = foundSponsors.slice().sort((a, b) => (b.count || 0) - (a.count || 0));
 
-    if (sponsorCount < 8) {
+    let weightedRate = 0;
+    let totalCount = 0;
+    let sponsorRate = 0;
+    let sponsorCount = 0;
+
+    if (sponsorsWithData.length > 0) {
+      // 加权平均：每个保荐人的权重为其历史案例数
+      totalCount = sponsorsWithData.reduce((sum, s) => sum + s.count, 0);
+      weightedRate = sponsorsWithData.reduce((sum, s) => sum + s.rate * s.count, 0) / totalCount;
+      sponsorRate = weightedRate;
+      sponsorCount = totalCount;
+    } else {
+      // 所有保荐人数据不足，使用案例数最多的那个
+      const mainSponsor = allSponsorsSorted[0];
+      sponsorRate = mainSponsor.rate || 0;
+      sponsorCount = mainSponsor.count || 0;
+    }
+
+    const sponsorNamesStr = allSponsorsSorted.slice(0, 2).map(s => (s.name || '未知').substring(0, 12)).join('、');
+    const rateStr = `加权平均 ${sponsorRate >= 0 ? '+' : ''}${sponsorRate.toFixed(1)}%`;
+
+    if (sponsorsWithData.length === 0 && sponsorCount < 8) {
       scores.sponsor = {
         score: 0,
         reason: '数据不足',
-        details: `${sponsorName} (仅${sponsorCount}单，需≥8单)`,
-        sponsors: foundSponsors.slice(0, 3),
-        evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
+        details: `${sponsorNamesStr} (数据不足，需≥8单)`,
+        sponsors: allSponsorsSorted.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分', weightedRate: null },
       };
     } else if (sponsorRate >= 70) {
       scores.sponsor = {
         score: 2,
-        reason: '优质保荐人',
-        details: `${sponsorName} 历史涨幅+${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
-        sponsors: foundSponsors.slice(0, 3),
-        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
+        reason: '优质保荐团队',
+        details: `${sponsorNamesStr} ${rateStr}`,
+        sponsors: allSponsorsSorted.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅≥70%，+2分', weightedRate: sponsorRate.toFixed(1) },
       };
     } else if (sponsorRate >= 40) {
       scores.sponsor = {
         score: 0,
-        reason: '中等保荐人',
-        details: `${sponsorName} 历史涨幅+${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
-        sponsors: foundSponsors.slice(0, 3),
-        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
+        reason: '中等保荐团队',
+        details: `${sponsorNamesStr} ${rateStr}`,
+        sponsors: allSponsorsSorted.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅40-70%，0分', weightedRate: sponsorRate.toFixed(1) },
       };
     } else {
       scores.sponsor = {
         score: -2,
-        reason: '低质保荐人',
-        details: `${sponsorName} 历史涨幅${sponsorRate >= 0 ? '+' : ''}${sponsorRate.toFixed(1)}%, ${sponsorCount}单`,
-        sponsors: foundSponsors.slice(0, 3),
-        evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
+        reason: '低质保荐团队',
+        details: `${sponsorNamesStr} ${rateStr}`,
+        sponsors: allSponsorsSorted.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅<40%，-2分', weightedRate: sponsorRate.toFixed(1) },
       };
     }
   } else {
@@ -2394,10 +2414,23 @@ function scoreProspectus(rawText, stockCode) {
       }
 
       if (fallbackFoundSponsors.length > 0) {
-        const mainSponsor = fallbackFoundSponsors.sort((a, b) => (b.count || 0) - (a.count || 0))[0];
-        const fallbackName = (mainSponsor.name || '未知保荐人').substring(0, 20);
-        const rate = mainSponsor.rate || 0;
-        const count = mainSponsor.count || 0;
+        const fallbackSorted = fallbackFoundSponsors.slice().sort((a, b) => (b.count || 0) - (a.count || 0));
+        const fbWithData = fallbackFoundSponsors.filter(s => s.rate !== null && s.count && s.count >= 8);
+
+        let rate = 0;
+        let count = 0;
+        if (fbWithData.length > 0) {
+          const totalCnt = fbWithData.reduce((sum, s) => sum + s.count, 0);
+          rate = fbWithData.reduce((sum, s) => sum + s.rate * s.count, 0) / totalCnt;
+          count = totalCnt;
+        } else {
+          const mainSponsor = fallbackSorted[0];
+          rate = mainSponsor.rate || 0;
+          count = mainSponsor.count || 0;
+        }
+
+        const fallbackName = fallbackSorted.slice(0, 2).map(s => (s.name || '未知').substring(0, 12)).join('、');
+        const rateStr = `加权平均 ${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%`;
 
         sponsorEvidence.source = 'IPO映射表（备用方案）';
         sponsorEvidence.stockCode = stockCodeFromText;
@@ -2409,37 +2442,37 @@ function scoreProspectus(rawText, stockCode) {
           winRate: s.winRate,
         }));
 
-        if (count < 8) {
+        if (fbWithData.length === 0 && count < 8) {
           scores.sponsor = {
             score: 0,
             reason: '数据不足',
-            details: `${fallbackName} (仅${count}单，需≥8单) [备用]`,
-            sponsors: fallbackFoundSponsors.slice(0, 3),
+            details: `${fallbackName} (数据不足，需≥8单) [备用]`,
+            sponsors: fallbackSorted.slice(0, 3),
             evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分' },
           };
         } else if (rate >= 70) {
           scores.sponsor = {
             score: 2,
-            reason: '优质保荐人',
-            details: `${fallbackName} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
-            sponsors: fallbackFoundSponsors.slice(0, 3),
-            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅≥70%，+2分' },
+            reason: '优质保荐团队',
+            details: `${fallbackName} ${rateStr} [备用]`,
+            sponsors: fallbackSorted.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅≥70%，+2分', weightedRate: rate.toFixed(1) },
           };
         } else if (rate >= 40) {
           scores.sponsor = {
             score: 0,
-            reason: '中等保荐人',
-            details: `${fallbackName} 历史涨幅+${rate.toFixed(1)}%, ${count}单 [备用]`,
-            sponsors: fallbackFoundSponsors.slice(0, 3),
-            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅40-70%，0分' },
+            reason: '中等保荐团队',
+            details: `${fallbackName} ${rateStr} [备用]`,
+            sponsors: fallbackSorted.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅40-70%，0分', weightedRate: rate.toFixed(1) },
           };
         } else {
           scores.sponsor = {
             score: -2,
-            reason: '低质保荐人',
-            details: `${fallbackName} 历史涨幅${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%, ${count}单 [备用]`,
-            sponsors: fallbackFoundSponsors.slice(0, 3),
-            evidence: { ...sponsorEvidence, scoreRule: '历史平均涨幅<40%，-2分' },
+            reason: '低质保荐团队',
+            details: `${fallbackName} ${rateStr} [备用]`,
+            sponsors: fallbackSorted.slice(0, 3),
+            evidence: { ...sponsorEvidence, scoreRule: '加权平均涨幅<40%，-2分', weightedRate: rate.toFixed(1) },
           };
         }
       } else {
@@ -2798,16 +2831,28 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       preIPOSectionTitle = '首次公開發售前投資的主要條款';
       hasPreIPOInvestment = true;
 
-      // 在这个子章节中查找禁售期
-      const lockupMatch = preIPOSection.match(/禁售期.{0,200}(?:六個月|六个月|12個月|十二個月|一年|兩年)/i);
+      // 在这个子章节中查找禁售期（扩展时长模式，涵盖常见锁定期表述）
+      const LOCKUP_PERIOD_PATTERN = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
+      const lockupMatch = preIPOSection.match(new RegExp(`(?:禁售期|鎖定期|锁定期|lock.up).{0,300}(?:${LOCKUP_PERIOD_PATTERN.source})`, 'i'));
       if (lockupMatch) {
         hasLockup = true;
         lockupContext = lockupMatch[0];
         console.log(`[禁售期] ✓ 发现禁售期: ${lockupContext.slice(0, 100)}`);
         // 提取禁售期时长
-        const periodMatch = lockupContext.match(/六個月|六个月|12個月|十二個月|一年|兩年/);
+        const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN);
         if (periodMatch) {
           lockupPeriod = periodMatch[0];
+        }
+      } else {
+        // 也搜索整个子章节中的禁售期关键词（不要求时长）
+        const lockupKwMatch = preIPOSection.match(/禁售期|鎖定期|锁定期|lock.up/i);
+        if (lockupKwMatch) {
+          hasLockup = true;
+          const kwIdx = lockupKwMatch.index;
+          lockupContext = preIPOSection.slice(Math.max(0, kwIdx - 30), Math.min(preIPOSection.length, kwIdx + 200));
+          console.log(`[禁售期] ✓ 发现禁售期关键词: ${lockupContext.slice(0, 100)}`);
+          const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN);
+          if (periodMatch) lockupPeriod = periodMatch[0];
         }
       }
       break;
@@ -2851,19 +2896,20 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           preIPOContext = historySection.slice(Math.max(0, idx - 30), Math.min(historySection.length, idx + 200));
           console.log(`[禁售期] ✓ 发现Pre-IPO: ${kw}`);
 
-          // 在Pre-IPO关键词附近搜索禁售期
-          const nearbyText = historySection.slice(Math.max(0, idx - 100), Math.min(historySection.length, idx + 1000));
-          const lockupKeywords = ['禁售期', '鎖定期', '锁定期', 'lock-up', 'lockup', '不得出售', '不得轉讓'];
+          // 在Pre-IPO关键词附近搜索禁售期（扩大到3000字符）
+          const nearbyText = historySection.slice(Math.max(0, idx - 200), Math.min(historySection.length, idx + 3000));
+          const lockupKeywords = ['禁售期', '鎖定期', '锁定期', 'lock-up', 'lockup', '不得出售', '不得轉讓', '不得转让'];
+          const LOCKUP_PERIOD_PATTERN2 = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
 
           for (const lkw of lockupKeywords) {
             const lidx = nearbyText.indexOf(lkw);
             if (lidx !== -1) {
               hasLockup = true;
-              lockupContext = nearbyText.slice(Math.max(0, lidx - 30), Math.min(nearbyText.length, lidx + 150));
+              lockupContext = nearbyText.slice(Math.max(0, lidx - 30), Math.min(nearbyText.length, lidx + 200));
               console.log(`[禁售期] ✓ 发现禁售期: ${lkw}`);
 
               // 提取禁售期时长
-              const periodMatch = lockupContext.match(/六個月|六个月|12個月|十二個月|一年|兩年/);
+              const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN2);
               if (periodMatch) {
                 lockupPeriod = periodMatch[0];
               }
@@ -2890,13 +2936,16 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         preIPOSectionTitle = '招股书中间部分（兜底）';
         console.log(`[禁售期] ✓ 兜底发现Pre-IPO: ${kw}`);
 
-        // 搜索禁售期
-        const nearbyText = midSection.slice(Math.max(0, idx - 100), Math.min(midSection.length, idx + 1000));
-        if (/禁售期|鎖定期|锁定期|lockup/i.test(nearbyText)) {
+        // 搜索禁售期（扩大到3000字符）
+        const LOCKUP_PERIOD_PATTERN3 = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
+        const nearbyText = midSection.slice(Math.max(0, idx - 200), Math.min(midSection.length, idx + 3000));
+        if (/禁售期|鎖定期|锁定期|lock.up/i.test(nearbyText)) {
           hasLockup = true;
-          const lockupMatch = nearbyText.match(/禁售期.{0,100}|鎖定期.{0,100}/i);
+          const lockupMatch = nearbyText.match(/(?:禁售期|鎖定期|锁定期|lock.up).{0,200}/i);
           if (lockupMatch) {
             lockupContext = lockupMatch[0];
+            const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN3);
+            if (periodMatch) lockupPeriod = periodMatch[0];
           }
         }
         break;
