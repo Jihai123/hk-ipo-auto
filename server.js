@@ -402,6 +402,8 @@ const HOT_TRACKS = [
   '高速互連','高速互联','互連芯片','互联芯片','DDR5','PCIe','CXL','SerDes',
   '存儲芯片','存储芯片','內存芯片','内存芯片','NAND','DRAM','HDD','SSD',
   '模擬芯片','模拟芯片','射頻芯片','射频芯片','FPGA','MCU','SoC',
+  '微控制器','微控制單元','微控制单元','集成電路','集成电路','IC設計','IC设计',
+  '晶圓','晶圆','封裝測試','封装测试','Fabless','IDM','功率半導體','功率半导体',
   // 创新药相关
   '創新藥','创新药','ADC','CAR-T','mRNA','雙抗','双抗','PROTAC','RNAi',
   // 低空经济/航天
@@ -415,7 +417,9 @@ const GROWTH_TRACKS = [
   '醫療器械','医疗器械','醫療設備','医疗设备','診斷','诊断','CXO','CDMO',
   '新能源','儲能','储能','光伏','風電','风电','充電樁','充电桩',
   'SaaS','企業服務','企业服务','工業軟件','工业软件','網絡安全','网络安全',
-  '數據中心','数据中心','雲計算','云计算',
+  '軟件服務','软件服务','信息技術服務','信息技术服务','IT服務','IT服务',
+  '企業軟件','企业软件','數字化轉型','数字化转型','大數據','大数据',
+  '數據中心','数据中心','雲計算','云计算','雲服務','云服务','雲端','云端',
   '新茶飲','新茶饮','咖啡連鎖','咖啡连锁','零食連鎖'
 ];
 
@@ -3050,26 +3054,27 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   // 检查是否是釋義缩写词列表格式或流程图内容（避免误匹配）
   // 特征：
-  // 1. 上下文中有多个连续的短英文缩写（如"3D 5G AI AIGC AiP"）
-  // 2. 上下文中有大量纯大写字母数字组成的词
-  // 3. 上下文包含em-dash(–)或箭头(→)等流程图符号
-  // 4. 上下文是"中文+缩写"交替的模式（如"設計 GA 發貨 LDCP"）
+  // 1. 上下文中有方向性箭头（→←↓↑），是流程图的可靠信号
+  // 2. 上下文中有大量纯大写字母数字组成的词（釋義列表）
+  // 3. 上下文包含多个括号缩写（如"(RTL)(DAC)"）
+  // 注意：em-dash(–)不作为流程图信号，因为PDF页码标记(–79–)同样包含em-dash，
+  //       会对正文中紧跟页码的关键词（如半導體、MCU）产生误判。
   const isDefinitionList = (keyword) => {
     const ctx = getContext(keyword);
     if (!ctx) return false;
 
-    // 特征1：包含流程图符号（em-dash、箭头、页码标记等）
-    const flowchartSymbols = ['–', '→', '←', '↓', '↑', '- -'];
-    const hasFlowchartSymbol = flowchartSymbols.some(s => ctx.includes(s));
+    // 先去除页码标记（–79– / –80– 等），避免页码中的em-dash误触发
+    const ctxClean = ctx.replace(/[–—-]\s*\d+\s*[–—-]/g, '');
 
-    // 特征2：包含页码标记（如"– 196 –"）
-    const hasPageMarker = /–\s*\d+\s*–/.test(ctx);
+    // 特征1：包含方向箭头（流程图可靠信号，正文中极少出现）
+    const arrowSymbols = ['→', '←', '↓', '↑'];
+    const hasArrow = arrowSymbols.some(s => ctxClean.includes(s));
 
-    // 特征3：包含括号中的缩写（如"(RTL)"）- 通常是图表中的标注
-    const bracketedAbbrevCount = (ctx.match(/\([A-Z]{2,}\)/g) || []).length;
+    // 特征2：包含括号中的缩写（如"(RTL)"）- 通常是图表中的标注
+    const bracketedAbbrevCount = (ctxClean.match(/\([A-Z]{2,}\)/g) || []).length;
 
-    // 特征4：检查上下文是否包含多个连续的技术缩写词
-    const words = ctx.split(/[\s\-–]+/);
+    // 特征3：检查上下文（去除页码后）是否包含大量技术缩写词
+    const words = ctxClean.split(/[\s\-–]+/);
     let techWordCount = 0;
     let allUpperCount = 0;
     for (const w of words) {
@@ -3084,15 +3089,16 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
 
     // 判断逻辑：
-    // - 如果有流程图符号+页码标记，很可能是图表内容
-    // - 如果有多个括号内缩写，很可能是图表标注
-    // - 如果超过50%都是技术词/缩写，或者超过40%是全大写词，认为是釋義列表
-    if (hasFlowchartSymbol && hasPageMarker) {
+    // - 有方向箭头（流程图/框架图）→ 大概率是图表内容
+    // - 有多个括号内缩写 → 图表标注
+    // - 缩写词密度超高 → 釋義列表
+    if (hasArrow && bracketedAbbrevCount >= 1) {
       return true;
     }
     if (bracketedAbbrevCount >= 2) {
       return true;
     }
+    // 仅在去除页码标记后的词数 > 5 时才做密度判断（避免短context误判）
     return words.length > 5 && (techWordCount / words.length > 0.5 || allUpperCount / words.length > 0.4);
   };
 
