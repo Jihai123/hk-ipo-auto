@@ -3106,111 +3106,41 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return words.length > 5 && (techWordCount / words.length > 0.5 || allUpperCount / words.length > 0.4);
   };
 
-  // 检查热门赛道 (+2)
-  console.log(`[行业] 检查热门赛道...`);
-  for (const track of HOT_TRACKS) {
-    if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-      // 检查是否是釋義缩写词列表，如果是则跳过
-      if (isDefinitionList(track)) {
-        console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-        continue;
-      }
-      industryScore = 2;
-      industryReason = '🔥 热门赛道';
-      industryDetails = `情绪驱动型: ${track}`;
-      trackType = 'hot';
-      matchedKeyword = track;
-      matchedContext = getContext(track);
-      console.log(`[行业] ✓ 匹配热门: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-      break;
-    }
-  }
+  // ===== 行业赛道评分（三阶段策略）=====
+  //
+  // 背景：简单关键词匹配无法区分"核心业务"与"客户市场/附带业务"。
+  //       例如半导体MCU公司的招股书可能在后段提到"房地产"作为智能门锁的应用市场，
+  //       但该公司并非房地产公司，不应触发回避评分。
+  //
+  // 三阶段逻辑：
+  // Phase 1 - 核心区域回避检查（前5000字）
+  //   真正的回避行业（房地产/物管/教培等）必然在行业概览开篇即提及。
+  //   若前5000字出现回避关键词 → 直接判定为回避行业（-2），不再检查正面赛道。
+  //
+  // Phase 2 - 全文正面赛道检查（热门→成长→低弹性）
+  //   仅在Phase1未触发时执行。在全文中寻找正面赛道信号。
+  //
+  // Phase 3 - 全文回避兜底（仅在无正面匹配时，且高频出现）
+  //   若Phase2全无正面匹配（中性），在全文检查回避。
+  //   但需在前8000字出现3次以上才触发，避免偶发提及误判。
 
-  // 检查成长赛道 (+1)
-  if (industryScore === 0) {
-    console.log(`[行业] 检查成长赛道...`);
-    for (const track of GROWTH_TRACKS) {
-      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-        if (isDefinitionList(track)) {
-          console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-          continue;
-        }
-        industryScore = 1;
-        industryReason = '📈 成长赛道';
-        industryDetails = `成长叙事型: ${track}`;
-        trackType = 'growth';
-        matchedKeyword = track;
-        matchedContext = getContext(track);
-        console.log(`[行业] ✓ 匹配成长: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-        break;
-      }
-    }
-  }
+  const CORE_ZONE_SIZE = 5000;      // 核心行业区域：前5000字
+  const EXTENDED_ZONE_SIZE = 8000;  // 高频检测区域：前8000字
+  const AVOID_FREQ_THRESHOLD = 3;   // Phase3触发阈值：需出现3次以上
 
-  // 检查低弹性赛道 (-1)
-  if (industryScore === 0) {
-    console.log(`[行业] 检查低弹性赛道...`);
-    for (const track of LOW_ELASTICITY_TRACKS) {
-      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-        if (isDefinitionList(track)) {
-          console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-          continue;
-        }
-        industryScore = -1;
-        industryReason = '📉 低弹性赛道';
-        industryDetails = `缺乏想象空间: ${track}`;
-        trackType = 'low';
-        matchedKeyword = track;
-        matchedContext = getContext(track);
-        console.log(`[行业] ✓ 匹配低弹性: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-        break;
-      }
-    }
-  }
+  const coreZoneText = industrySearchText.slice(0, CORE_ZONE_SIZE);
+  const normalizedCoreZone = normalizeText(coreZoneText);
+  const extendedZoneText = industrySearchText.slice(0, EXTENDED_ZONE_SIZE);
 
-  // 检查回避赛道 (-2)
-  // 逻辑：仅当回避关键词出现在"主要业务"语境中才触发；
-  //       若所有出现都在"其他产品/服务"或"客户/供应商描述"等次要语境中，则跳过。
-  //       这样可以避免半导体公司因附带房地产租赁业务而被误判为回避赛道。
-  console.log(`[行业] 检查回避赛道...`);
+  const escapeForRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // 检查关键词是否仅出现在次要业务上下文（前300字符内含次要业务标记）
-  const isAllInSecondaryContext = (keyword) => {
-    const positions = [];
-    let from = 0;
-    while (true) {
-      const idx = industrySearchText.indexOf(keyword, from);
-      if (idx === -1) break;
-      positions.push(idx);
-      from = idx + keyword.length;
-    }
-    if (positions.length === 0) return false;
-    // 次要业务标记词（在回避关键词前300字出现，说明是附带业务而非核心业务）
-    const secondaryMarkers = [
-      '其他產品及服務', '其他产品及服务', '其他業務', '其他业务',
-      '其他產品', '其他产品', '其他服務', '其他服务',
-      '客戶', '客户', '供應商', '供应商',
-      '我們的客戶', '我们的客户',
-    ];
-    let primaryCount = 0;
-    for (const idx of positions) {
-      const preceding = industrySearchText.slice(Math.max(0, idx - 300), idx);
-      if (!secondaryMarkers.some(m => preceding.includes(m))) {
-        primaryCount++;
-      }
-    }
-    return primaryCount === 0; // 所有出现均在次要语境中 → 不触发回避
-  };
-
+  // ── Phase 1：核心区域回避检查 ──
+  console.log(`[行业] Phase1: 检查核心区域回避赛道(前${CORE_ZONE_SIZE}字)...`);
+  let phase1Matched = false;
   for (const track of AVOID_TRACKS) {
-    if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+    if (coreZoneText.includes(track) || normalizedCoreZone.includes(normalizeText(track))) {
       if (isDefinitionList(track)) {
         console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-        continue;
-      }
-      // 次要业务过滤：关键词仅在"其他产品/服务"或"客户描述"等次要语境出现 → 不计入回避
-      if (isAllInSecondaryContext(track)) {
-        console.log(`[行业] ✗ 跳过回避赛道（仅出现在次要业务语境中）: ${track}`);
         continue;
       }
       industryScore = -2;
@@ -3219,8 +3149,99 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       trackType = 'avoid';
       matchedKeyword = track;
       matchedContext = getContext(track);
-      console.log(`[行业] ✓ 匹配回避: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
+      phase1Matched = true;
+      console.log(`[行业] ✓ Phase1匹配回避: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
       break;
+    }
+  }
+
+  if (!phase1Matched) {
+    // ── Phase 2：全文正面赛道检查 ──
+    console.log(`[行业] Phase2: 检查热门赛道...`);
+    for (const track of HOT_TRACKS) {
+      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
+        if (isDefinitionList(track)) {
+          console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
+          continue;
+        }
+        industryScore = 2;
+        industryReason = '🔥 热门赛道';
+        industryDetails = `情绪驱动型: ${track}`;
+        trackType = 'hot';
+        matchedKeyword = track;
+        matchedContext = getContext(track);
+        console.log(`[行业] ✓ 匹配热门: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
+        break;
+      }
+    }
+
+    if (industryScore === 0) {
+      console.log(`[行业] Phase2: 检查成长赛道...`);
+      for (const track of GROWTH_TRACKS) {
+        if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
+          if (isDefinitionList(track)) {
+            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
+            continue;
+          }
+          industryScore = 1;
+          industryReason = '📈 成长赛道';
+          industryDetails = `成长叙事型: ${track}`;
+          trackType = 'growth';
+          matchedKeyword = track;
+          matchedContext = getContext(track);
+          console.log(`[行业] ✓ 匹配成长: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
+          break;
+        }
+      }
+    }
+
+    if (industryScore === 0) {
+      console.log(`[行业] Phase2: 检查低弹性赛道...`);
+      for (const track of LOW_ELASTICITY_TRACKS) {
+        if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
+          if (isDefinitionList(track)) {
+            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
+            continue;
+          }
+          industryScore = -1;
+          industryReason = '📉 低弹性赛道';
+          industryDetails = `缺乏想象空间: ${track}`;
+          trackType = 'low';
+          matchedKeyword = track;
+          matchedContext = getContext(track);
+          console.log(`[行业] ✓ 匹配低弹性: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
+          break;
+        }
+      }
+    }
+
+    // ── Phase 3：无正面匹配时，全文高频回避兜底 ──
+    if (industryScore === 0) {
+      console.log(`[行业] Phase3: 无正面匹配，检查全文高频回避赛道(阈值${AVOID_FREQ_THRESHOLD}次/前${EXTENDED_ZONE_SIZE}字)...`);
+      for (const track of AVOID_TRACKS) {
+        if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
+          if (isDefinitionList(track)) {
+            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
+            continue;
+          }
+          // 在前8000字中统计出现次数，需高频才触发（避免偶发提及误判）
+          const freq = (extendedZoneText.match(new RegExp(escapeForRegex(track), 'g')) || []).length;
+          const freqNorm = (normalizeText(extendedZoneText).match(new RegExp(escapeForRegex(normalizeText(track)), 'g')) || []).length;
+          const maxFreq = Math.max(freq, freqNorm);
+          if (maxFreq >= AVOID_FREQ_THRESHOLD) {
+            industryScore = -2;
+            industryReason = '❌ 资金回避';
+            industryDetails = `高破发风险: ${track}`;
+            trackType = 'avoid';
+            matchedKeyword = track;
+            matchedContext = getContext(track);
+            console.log(`[行业] ✓ Phase3匹配回避(高频${maxFreq}次): ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
+            break;
+          } else {
+            console.log(`[行业] ✗ 回避赛道频次不足(${maxFreq}/${AVOID_FREQ_THRESHOLD}次/前${EXTENDED_ZONE_SIZE}字): ${track}`);
+          }
+        }
+      }
     }
   }
 
