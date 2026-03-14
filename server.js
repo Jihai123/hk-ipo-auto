@@ -702,7 +702,11 @@ function extractSection(text, startPatterns, endPatterns, maxLength = 50000, ski
         const afterStart = text.slice(start + match[0].length);
         const endMatch = afterStart.match(endRegex);
         if (endMatch) {
-          end = Math.min(end, start + match[0].length + endMatch.index);
+          const candidateEnd = start + match[0].length + endMatch.index;
+          // 确保至少有1000字符，避免结束标记紧跟章节标题（如页眉连续出现）
+          if (candidateEnd > start + 1000) {
+            end = Math.min(end, candidateEnd);
+          }
         }
       }
 
@@ -3016,7 +3020,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   console.log(`[行业] 行業概覽章节长度: ${industrySection?.length || 0}`);
 
-  const industrySearchText = industrySection || textNoSpaceForIndustry.slice(0, 250000);
+  const industrySearchText = (industrySection && industrySection.length > 500) ? industrySection : textNoSpaceForIndustry.slice(0, 250000);
   const normalizedIndustryText = normalizeText(industrySearchText);
 
   let industryScore = 0;
