@@ -380,7 +380,7 @@ function getAllSponsors() {
   return merged;
 }
 
-// ==================== 行业评分体系 v2（基于炒作逻辑）====================
+// ==================== 行业识别引擎 v3（标题权重 + 关键词密度）====================
 /**
  * 行业评分规则:
  * +2 情绪驱动型热门赛道：强题材、资金愿意炒、FOMO情绪
@@ -388,67 +388,218 @@ function getAllSponsors() {
  *  0 中性赛道：无明显偏好
  * -1 低弹性赛道：缺乏想象空间
  * -2 资金回避型赛道：破发率高、监管风险
+ *
+ * 识别算法（五步骤）：
+ * Step 1  从章节标题提取行业名（正则匹配"XXX行业/市场/产业"）→ 每次命中 ×5
+ * Step 2  统计全文各类别关键词出现总频次 → 每次出现 ×1
+ * Step 3  关键词归一化到标准行业类别（MCU→半导体, SaaS→软件服务 等）
+ * Step 4  多行业并存时按置信度得分（titleMatches×5 + kwCount×1）竞争
+ * Step 5  得分最高者为主导行业，映射到赛道评分（-2 ~ +2）
+ *
+ * 每个定义包含:
+ *   name          标准行业名称
+ *   trackScore    赛道得分（-2/-1/0/+1/+2）
+ *   trackType     赛道类型（hot/growth/neutral/low/avoid）
+ *   trackReason   展示原因
+ *   trackDetails  展示详情
+ *   priority      同分时优先级（数字越大越优先）
+ *   keywords      关键词列表（含简繁体双版本）—— 均贡献到本类别得分
  */
-
-// +2 情绪驱动型热门赛道（2024-2026市场主线）
-const HOT_TRACKS = [
-  '人工智能','人工智慧','大模型','大語言模型','LLM','GPT','AIGC',
-  '算力','算力租賃','智算中心','液冷','光模塊','光模块','CPO','HBM',
-  '機器學習','机器学习','深度學習','深度学习','AI應用','AI应用','AI芯片','AI晶片',
-  '機器人','机器人','人形機器人','人形机器人','具身智能','機器人關節','機器人減速器',
-  '自動駕駛','自动驾驶','智能駕駛','智能驾驶','車聯網','车联网','Robotaxi',
-  // 半导体/芯片相关
-  '半導體','半导体','芯片','晶片','GPU','ASIC','EDA','先進封裝','先进封装','國產替代','国产替代',
-  '高速互連','高速互联','互連芯片','互联芯片','DDR5','PCIe','CXL','SerDes',
-  '存儲芯片','存储芯片','內存芯片','内存芯片','NAND','DRAM','HDD','SSD',
-  '模擬芯片','模拟芯片','射頻芯片','射频芯片','FPGA','MCU','SoC',
-  '微控制器','微控制單元','微控制单元','集成電路','集成电路','IC設計','IC设计',
-  '晶圓','晶圆','封裝測試','封装测试','Fabless','IDM','功率半導體','功率半导体',
-  // 创新药相关
-  '創新藥','创新药','ADC','CAR-T','mRNA','雙抗','双抗','PROTAC','RNAi',
-  // 低空经济/航天
-  '低空經濟','低空经济','eVTOL','飛行汽車','无人机','UAV',
-  '衛星互聯網','商业航天'
-];
-
-
-// +1 成长叙事型赛道
-const GROWTH_TRACKS = [
-  '醫療器械','医疗器械','醫療設備','医疗设备','診斷','诊断','CXO','CDMO',
-  '新能源','儲能','储能','光伏','風電','风电','充電樁','充电桩',
-  'SaaS','企業服務','企业服务','工業軟件','工业软件','網絡安全','网络安全',
-  '軟件服務','软件服务','信息技術服務','信息技术服务','IT服務','IT服务',
-  '企業軟件','企业软件','數字化轉型','数字化转型','大數據','大数据',
-  '數據中心','数据中心','雲計算','云计算','雲服務','云服务','雲端','云端',
-  '新茶飲','新茶饮','咖啡連鎖','咖啡连锁','零食連鎖'
-];
-
-
-// -1 低弹性赛道
-const LOW_ELASTICITY_TRACKS = [
-  // 食品饮料
-  '食品','食品加工','飲料','饮料','调味品','乳制品','酒类','零食','糖果','烘焙',
-  '餐飲','餐饮','快餐','團餐','团餐','預製菜','预制菜',
-  // 传统制造
-  '機械製造','工业设备','包装','印刷','造紙','造纸',
-  // 公用事业
-  '水务','燃气','电力','环保','污水處理','污水处理','垃圾處理',
-  // 建材
-  '建材','水泥','玻璃','钢铁','铝业','陶瓷',
-  // 物流运输
-  '物流','航运','港口','机场','货运','快遞','快递'
-];
-
-
-// -2 资金回避型赛道（历史破发率高/监管风险）
-const AVOID_TRACKS = [
-  '物業管理','物业管理','物管',
-  '房地產','房地产','内房','地产开发','商业地产',
-  '小额贷款','消费金融','融资租赁','P2P','网贷',
-  '纺织','服装制造','制衣','鞋履制造',
-  '教育培训','K12','学科培训','职业教育',
-  '博彩','赌场',
-  '殯葬','墓园'
+const INDUSTRY_DEFS = [
+  // ───── +2 热门赛道 ─────
+  {
+    name: '半导体/芯片',
+    trackScore: 2, trackType: 'hot',
+    trackReason: '🔥 热门赛道', trackDetails: '情绪驱动型: 半导体/芯片',
+    priority: 100,
+    keywords: [
+      // MCU/SoC/GPU类
+      'MCU','SoC','ASIC','GPU','FPGA','EDA',
+      // 芯片/晶圆
+      '芯片','晶片','晶圓','晶圆','半導體','半导体',
+      // 集成电路/IC
+      '集成電路','集成电路','IC設計','IC设计',
+      // MCU别名
+      '微控制器','微控制單元','微控制单元',
+      // 制造模式
+      'Fabless','IDM',
+      // 封装
+      '封裝測試','封装测试','先進封裝','先进封装',
+      // 功率/模拟/射频
+      '功率半導體','功率半导体','模擬芯片','模拟芯片','射頻芯片','射频芯片',
+      // 存储
+      '存儲芯片','存储芯片','內存芯片','内存芯片','NAND','DRAM','SRAM','HBM',
+      // 接口/互联
+      'DDR5','PCIe','CXL','SerDes','CPO',
+      'AI芯片','AI晶片',
+      '高速互連','高速互联','互連芯片','互联芯片',
+      '國產替代','国产替代',
+    ],
+  },
+  {
+    name: 'AI/人工智能',
+    trackScore: 2, trackType: 'hot',
+    trackReason: '🔥 热门赛道', trackDetails: '情绪驱动型: AI/人工智能',
+    priority: 90,
+    keywords: [
+      '人工智能','人工智慧','大模型','大語言模型','大语言模型',
+      'LLM','GPT','AIGC',
+      '算力','算力租賃','算力租赁','智算中心','液冷',
+      '光模塊','光模块',
+      '機器學習','机器学习','深度學習','深度学习',
+      'AI應用','AI应用',
+    ],
+  },
+  {
+    name: '机器人/自动驾驶',
+    trackScore: 2, trackType: 'hot',
+    trackReason: '🔥 热门赛道', trackDetails: '情绪驱动型: 机器人/自动驾驶',
+    priority: 85,
+    keywords: [
+      '機器人','机器人','人形機器人','人形机器人','具身智能',
+      '機器人關節','機器人減速器',
+      '自動駕駛','自动驾驶','智能駕駛','智能驾驶',
+      '車聯網','车联网','Robotaxi',
+    ],
+  },
+  {
+    name: '低空经济/航天',
+    trackScore: 2, trackType: 'hot',
+    trackReason: '🔥 热门赛道', trackDetails: '情绪驱动型: 低空经济/航天',
+    priority: 80,
+    keywords: [
+      '低空經濟','低空经济','eVTOL','飛行汽車','飞行汽车',
+      '无人机','UAV',
+      '衛星互聯網','卫星互联网','商业航天',
+    ],
+  },
+  {
+    name: '创新药/生物医药',
+    trackScore: 2, trackType: 'hot',
+    trackReason: '🔥 热门赛道', trackDetails: '情绪驱动型: 创新药/生物医药',
+    priority: 75,
+    keywords: [
+      '創新藥','创新药','ADC','CAR-T','mRNA','雙抗','双抗','PROTAC','RNAi',
+    ],
+  },
+  // ───── +1 成长赛道 ─────
+  {
+    name: '软件服务/SaaS',
+    trackScore: 1, trackType: 'growth',
+    trackReason: '📈 成长赛道', trackDetails: '成长叙事型: 软件服务/SaaS',
+    priority: 70,
+    keywords: [
+      'SaaS',
+      '企業服務','企业服务','工業軟件','工业软件',
+      '網絡安全','网络安全',
+      '軟件服務','软件服务',
+      '信息技術服務','信息技术服务','IT服務','IT服务',
+      '企業軟件','企业软件',
+      '數字化轉型','数字化转型',
+      '大數據','大数据',
+      '數據中心','数据中心',
+      '雲計算','云计算','雲服務','云服务','雲端','云端',
+    ],
+  },
+  {
+    name: '医疗器械/CXO',
+    trackScore: 1, trackType: 'growth',
+    trackReason: '📈 成长赛道', trackDetails: '成长叙事型: 医疗器械/CXO',
+    priority: 65,
+    keywords: [
+      '醫療器械','医疗器械','醫療設備','医疗设备','診斷','诊断',
+      'CXO','CDMO',
+    ],
+  },
+  {
+    name: '新能源',
+    trackScore: 1, trackType: 'growth',
+    trackReason: '📈 成长赛道', trackDetails: '成长叙事型: 新能源',
+    priority: 60,
+    keywords: [
+      '新能源','儲能','储能','光伏','風電','风电','充電樁','充电桩',
+    ],
+  },
+  {
+    name: '新消费',
+    trackScore: 1, trackType: 'growth',
+    trackReason: '📈 成长赛道', trackDetails: '成长叙事型: 新消费品牌',
+    priority: 45,
+    keywords: [
+      '新茶飲','新茶饮','咖啡連鎖','咖啡连锁','零食連鎖','零食连锁',
+    ],
+  },
+  // ───── -1 低弹性赛道 ─────
+  {
+    name: '传统消费/食品',
+    trackScore: -1, trackType: 'low',
+    trackReason: '📉 低弹性赛道', trackDetails: '缺乏想象空间: 传统消费/食品',
+    priority: 20,
+    keywords: [
+      '食品','食品加工','飲料','饮料','调味品','乳制品','酒类','零食','糖果','烘焙',
+      '餐飲','餐饮','快餐','團餐','团餐','預製菜','预制菜',
+    ],
+  },
+  {
+    name: '传统制造/建材',
+    trackScore: -1, trackType: 'low',
+    trackReason: '📉 低弹性赛道', trackDetails: '缺乏想象空间: 传统制造/建材',
+    priority: 15,
+    keywords: [
+      '機械製造','机械制造','工业设备','包装','印刷','造紙','造纸',
+      '建材','水泥','玻璃','钢铁','铝业','陶瓷',
+    ],
+  },
+  {
+    name: '公用事业/物流',
+    trackScore: -1, trackType: 'low',
+    trackReason: '📉 低弹性赛道', trackDetails: '缺乏想象空间: 公用事业/物流',
+    priority: 12,
+    keywords: [
+      '水务','燃气','电力','环保','污水處理','污水处理','垃圾處理','垃圾处理',
+      '物流','航运','港口','机场','货运','快遞','快递',
+    ],
+  },
+  // ───── -2 回避赛道 ─────
+  {
+    name: '房地产/物管',
+    trackScore: -2, trackType: 'avoid',
+    trackReason: '❌ 资金回避', trackDetails: '高破发风险: 房地产/物管',
+    priority: 10,
+    keywords: [
+      '物業管理','物业管理','物管',
+      '房地產','房地产','内房','地产开发','商業地產','商业地产',
+    ],
+  },
+  {
+    name: '小贷/消费金融',
+    trackScore: -2, trackType: 'avoid',
+    trackReason: '❌ 资金回避', trackDetails: '高破发风险: 小贷/消费金融',
+    priority: 10,
+    keywords: [
+      '小额贷款','消费金融','融资租赁','P2P','网贷',
+    ],
+  },
+  {
+    name: '教育培训',
+    trackScore: -2, trackType: 'avoid',
+    trackReason: '❌ 资金回避', trackDetails: '高破发风险: 教育培训',
+    priority: 10,
+    keywords: [
+      '教育培训','教育培訓','K12','学科培训','職業教育','职业教育',
+    ],
+  },
+  {
+    name: '其他回避',
+    trackScore: -2, trackType: 'avoid',
+    trackReason: '❌ 资金回避', trackDetails: '高破发风险',
+    priority: 10,
+    keywords: [
+      '纺织','服装制造','制衣','鞋履制造',
+      '博彩','赌场',
+      '殯葬','殡葬','墓园',
+    ],
+  },
 ];
 
 // ==================== 明星基石投资者名单 ====================
@@ -3039,229 +3190,144 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return '';
   };
 
-  // 检查关键词是否是完整词匹配（防止L3匹配到L330TOPSPCB）
-  // 对于短的英文/数字关键词，检查前后是否是词边界
-  const isWordBoundaryMatch = (text, keyword) => {
-    // 纯中文关键词不需要词边界检查
-    if (/^[\u4e00-\u9fa5]+$/.test(keyword)) {
-      return text.includes(keyword);
-    }
-    // 短的英文/数字关键词（<=4字符）需要严格的词边界检查
-    if (/^[A-Za-z0-9]+$/.test(keyword) && keyword.length <= 4) {
-      // 使用词边界正则匹配
-      const regex = new RegExp(`(?:^|[^A-Za-z0-9])${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^A-Za-z0-9])`, 'i');
-      return regex.test(text);
-    }
-    // 其他关键词用普通的includes
-    return text.includes(keyword);
-  };
-
-  // 检查是否是釋義缩写词列表格式或流程图内容（避免误匹配）
-  // 特征：
-  // 1. 上下文中有方向性箭头（→←↓↑），是流程图的可靠信号
-  // 2. 上下文中有大量纯大写字母数字组成的词（釋義列表）
-  // 3. 上下文包含多个括号缩写（如"(RTL)(DAC)"）
-  // 注意：em-dash(–)不作为流程图信号，因为PDF页码标记(–79–)同样包含em-dash，
-  //       会对正文中紧跟页码的关键词（如半導體、MCU）产生误判。
-  const isDefinitionList = (keyword) => {
-    const ctx = getContext(keyword);
-    if (!ctx) return false;
-
-    // 先去除页码标记（–79– / –80– 等），避免页码中的em-dash误触发
-    const ctxClean = ctx.replace(/[–—-]\s*\d+\s*[–—-]/g, '');
-
-    // 特征1：包含方向箭头（流程图可靠信号，正文中极少出现）
-    const arrowSymbols = ['→', '←', '↓', '↑'];
-    const hasArrow = arrowSymbols.some(s => ctxClean.includes(s));
-
-    // 特征2：包含括号中的缩写（如"(RTL)"）- 通常是图表中的标注
-    const bracketedAbbrevCount = (ctxClean.match(/\([A-Z]{2,}\)/g) || []).length;
-
-    // 特征3：检查上下文（去除页码后）是否包含大量技术缩写词
-    const words = ctxClean.split(/[\s\-–]+/);
-    let techWordCount = 0;
-    let allUpperCount = 0;
-    for (const w of words) {
-      // 技术缩写词：1-15个字符的字母数字组合
-      if (/^[A-Z0-9a-z]{1,15}$/.test(w)) {
-        techWordCount++;
-      }
-      // 全大写的词（可能是缩写连接在一起）
-      if (/^[A-Z0-9]{2,}$/.test(w)) {
-        allUpperCount++;
-      }
-    }
-
-    // 判断逻辑：
-    // - 有方向箭头（流程图/框架图）→ 大概率是图表内容
-    // - 有多个括号内缩写 → 图表标注
-    // - 缩写词密度超高 → 釋義列表
-    if (hasArrow && bracketedAbbrevCount >= 1) {
-      return true;
-    }
-    if (bracketedAbbrevCount >= 2) {
-      return true;
-    }
-    // 仅在去除页码标记后的词数 > 5 时才做密度判断（避免短context误判）
-    return words.length > 5 && (techWordCount / words.length > 0.5 || allUpperCount / words.length > 0.4);
-  };
-
-  // ===== 行业赛道评分（三阶段策略）=====
+  // ===== 行业识别引擎 v3（标题权重 + 关键词密度竞争）=====
   //
-  // 背景：简单关键词匹配无法区分"核心业务"与"客户市场/附带业务"。
-  //       例如半导体MCU公司的招股书可能在后段提到"房地产"作为智能门锁的应用市场，
-  //       但该公司并非房地产公司，不应触发回避评分。
+  // 为什么用竞争式评分而非"回避覆盖一切"：
+  //   半导体MCU公司招股书后段会提到"房地産"作为智能门锁的应用市场，
+  //   但该公司的MCU关键词出现次数远超"房地産"，竞争评分天然过滤此类噪声。
+  //   真正的房地产公司，其"房地産"/"物業管理"在行业概览开头高密度出现，
+  //   得分会远超任何正面赛道关键词，自然胜出。
   //
-  // 三阶段逻辑：
-  // Phase 1 - 核心区域回避检查（前5000字）
-  //   真正的回避行业（房地产/物管/教培等）必然在行业概览开篇即提及。
-  //   若前5000字出现回避关键词 → 直接判定为回避行业（-2），不再检查正面赛道。
-  //
-  // Phase 2 - 全文正面赛道检查（热门→成长→低弹性）
-  //   仅在Phase1未触发时执行。在全文中寻找正面赛道信号。
-  //
-  // Phase 3 - 全文回避兜底（仅在无正面匹配时，且高频出现）
-  //   若Phase2全无正面匹配（中性），在全文检查回避。
-  //   但需在前8000字出现3次以上才触发，避免偶发提及误判。
-
-  const CORE_ZONE_SIZE = 5000;      // 核心行业区域：前5000字
-  const EXTENDED_ZONE_SIZE = 8000;  // 高频检测区域：前8000字
-  const AVOID_FREQ_THRESHOLD = 3;   // Phase3触发阈值：需出现3次以上
-
-  const coreZoneText = industrySearchText.slice(0, CORE_ZONE_SIZE);
-  const normalizedCoreZone = normalizeText(coreZoneText);
-  const extendedZoneText = industrySearchText.slice(0, EXTENDED_ZONE_SIZE);
+  // 算法：
+  //   1. 从章节标题提取行业名（"XXX行业/市场/产业"）→ 每次命中 ×5
+  //   2. 统计全文各类别关键词总频次 → 每次出现 ×1
+  //   3. 综合得分 = titleScore + kwScore，取最高分类别为主导行业
 
   const escapeForRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // ── Phase 1：核心区域回避检查 ──
-  console.log(`[行业] Phase1: 检查核心区域回避赛道(前${CORE_ZONE_SIZE}字)...`);
-  let phase1Matched = false;
-  for (const track of AVOID_TRACKS) {
-    if (coreZoneText.includes(track) || normalizedCoreZone.includes(normalizeText(track))) {
-      if (isDefinitionList(track)) {
-        console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-        continue;
-      }
-      industryScore = -2;
-      industryReason = '❌ 资金回避';
-      industryDetails = `高破发风险: ${track}`;
-      trackType = 'avoid';
-      matchedKeyword = track;
-      matchedContext = getContext(track);
-      phase1Matched = true;
-      console.log(`[行业] ✓ Phase1匹配回避: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-      break;
+  // 计算关键词在文本中的出现次数（短英文词使用词边界匹配）
+  const countKw = (text, kw) => {
+    const escaped = escapeForRegex(kw);
+    if (/^[A-Za-z0-9]+$/.test(kw) && kw.length <= 5) {
+      // 短英文词：词边界匹配，避免"MCUS"误匹配"MCU"
+      const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`, 'gi');
+      return (text.match(re) || []).length;
     }
+    const re = new RegExp(escaped, 'g');
+    return (text.match(re) || []).length;
+  };
+
+  // Step 1: 从标题提取行业名（匹配"XXX行业/行業/产业/產業/市场/市場"前缀词）
+  const TITLE_SUFFIX_RE = /([A-Za-z0-9\u4e00-\u9fa5]{2,20}?)(行業|行业|產業|产业|市場|市场)/g;
+  const extractedTitles = [];
+  let tm;
+  while ((tm = TITLE_SUFFIX_RE.exec(industrySearchText)) !== null) {
+    extractedTitles.push(tm[1]);
   }
+  const uniqueTitles = [...new Set(extractedTitles)];
+  console.log(`[行业] 标题词(${uniqueTitles.length}个): ${uniqueTitles.slice(0, 8).join(' / ') || '无'}`);
 
-  if (!phase1Matched) {
-    // ── Phase 2：全文正面赛道检查 ──
-    console.log(`[行业] Phase2: 检查热门赛道...`);
-    for (const track of HOT_TRACKS) {
-      if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-        if (isDefinitionList(track)) {
-          console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-          continue;
-        }
-        industryScore = 2;
-        industryReason = '🔥 热门赛道';
-        industryDetails = `情绪驱动型: ${track}`;
-        trackType = 'hot';
-        matchedKeyword = track;
-        matchedContext = getContext(track);
-        console.log(`[行业] ✓ 匹配热门: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-        break;
+  // Step 2+3: 对每个行业类别计算综合得分
+  const industryRankings = INDUSTRY_DEFS.map(def => {
+    // 关键词频次统计（在原始文本 + 归一化文本中各查一遍，取最大值避免重复计算）
+    let kwCount = 0;
+    const matchedKws = [];
+    for (const kw of def.keywords) {
+      const cnt = Math.max(
+        countKw(industrySearchText, kw),
+        countKw(normalizedIndustryText, normalizeText(kw))
+      );
+      if (cnt > 0) {
+        kwCount += cnt;
+        matchedKws.push(`${kw}(${cnt})`);
       }
     }
 
-    if (industryScore === 0) {
-      console.log(`[行业] Phase2: 检查成长赛道...`);
-      for (const track of GROWTH_TRACKS) {
-        if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-          if (isDefinitionList(track)) {
-            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-            continue;
-          }
-          industryScore = 1;
-          industryReason = '📈 成长赛道';
-          industryDetails = `成长叙事型: ${track}`;
-          trackType = 'growth';
-          matchedKeyword = track;
-          matchedContext = getContext(track);
-          console.log(`[行业] ✓ 匹配成长: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-          break;
-        }
-      }
+    // 标题匹配：提取的标题词中是否包含本类别的关键词
+    let titleCount = 0;
+    for (const titleWord of extractedTitles) {
+      const matched = def.keywords.some(kw =>
+        titleWord.includes(kw) ||
+        kw.includes(titleWord) ||
+        normalizeText(titleWord).includes(normalizeText(kw)) ||
+        normalizeText(kw).includes(normalizeText(titleWord))
+      );
+      if (matched) titleCount++;
     }
 
-    if (industryScore === 0) {
-      console.log(`[行业] Phase2: 检查低弹性赛道...`);
-      for (const track of LOW_ELASTICITY_TRACKS) {
-        if (isWordBoundaryMatch(industrySearchText, track) || isWordBoundaryMatch(normalizedIndustryText, normalizeText(track))) {
-          if (isDefinitionList(track)) {
-            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-            continue;
-          }
-          industryScore = -1;
-          industryReason = '📉 低弹性赛道';
-          industryDetails = `缺乏想象空间: ${track}`;
-          trackType = 'low';
-          matchedKeyword = track;
-          matchedContext = getContext(track);
-          console.log(`[行业] ✓ 匹配低弹性: ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-          break;
-        }
-      }
-    }
+    const totalScore = titleCount * 5 + kwCount;
+    return { def, titleCount, kwCount, matchedKws, totalScore };
+  });
 
-    // ── Phase 3：无正面匹配时，全文高频回避兜底 ──
-    if (industryScore === 0) {
-      console.log(`[行业] Phase3: 无正面匹配，检查全文高频回避赛道(阈值${AVOID_FREQ_THRESHOLD}次/前${EXTENDED_ZONE_SIZE}字)...`);
-      for (const track of AVOID_TRACKS) {
-        if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
-          if (isDefinitionList(track)) {
-            console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
-            continue;
-          }
-          // 在前8000字中统计出现次数，需高频才触发（避免偶发提及误判）
-          const freq = (extendedZoneText.match(new RegExp(escapeForRegex(track), 'g')) || []).length;
-          const freqNorm = (normalizeText(extendedZoneText).match(new RegExp(escapeForRegex(normalizeText(track)), 'g')) || []).length;
-          const maxFreq = Math.max(freq, freqNorm);
-          if (maxFreq >= AVOID_FREQ_THRESHOLD) {
-            industryScore = -2;
-            industryReason = '❌ 资金回避';
-            industryDetails = `高破发风险: ${track}`;
-            trackType = 'avoid';
-            matchedKeyword = track;
-            matchedContext = getContext(track);
-            console.log(`[行业] ✓ Phase3匹配回避(高频${maxFreq}次): ${track}, 上下文: ${matchedContext.slice(0, 80)}`);
-            break;
-          } else {
-            console.log(`[行业] ✗ 回避赛道频次不足(${maxFreq}/${AVOID_FREQ_THRESHOLD}次/前${EXTENDED_ZONE_SIZE}字): ${track}`);
-          }
-        }
-      }
-    }
+  // 过滤零分，按综合得分降序，同分按priority降序
+  const ranked = industryRankings
+    .filter(r => r.totalScore > 0)
+    .sort((a, b) =>
+      b.totalScore !== a.totalScore
+        ? b.totalScore - a.totalScore
+        : b.def.priority - a.def.priority
+    );
+
+  // 日志：打印前5名
+  console.log(`[行业] 行业得分排名(前5):`);
+  ranked.slice(0, 5).forEach((r, i) => {
+    console.log(`  #${i + 1} ${r.def.name}: 总分=${r.totalScore}(标题×5=${r.titleCount * 5}, 关键词=${r.kwCount}), 匹配=[${r.matchedKws.slice(0, 4).join(', ')}]`);
+  });
+
+  // Step 4: 选出主导行业，写入评分变量
+  const winner = ranked.length > 0 ? ranked[0] : null;
+  if (winner) {
+    const d = winner.def;
+    industryScore = d.trackScore;
+    industryReason = d.trackReason;
+    industryDetails = d.trackDetails;
+    trackType = d.trackType;
+    // 取频次最高的关键词作为代表词
+    const topKwEntry = winner.matchedKws[0] || '';
+    matchedKeyword = topKwEntry.replace(/\(\d+\)$/, '');
+    matchedContext = getContext(matchedKeyword);
+    console.log(`[行业] ✓ 主导行业: ${d.name}, 总分=${winner.totalScore}, 赛道=${d.trackType}(${d.trackScore}分)`);
+  } else {
+    console.log(`[行业] ✗ 未识别出明确行业，中性评分(0分)`);
   }
 
   console.log(`[行业] 结果: score=${industryScore}, track=${trackType}, keyword=${matchedKeyword || '无'}`);
 
+  // 构造结构化证据（供前端展示与调试）
+  const industryCategory = winner ? winner.def.name : '未识别';
+  const matchedKeywords = winner ? winner.matchedKws : [];
+  const confidenceScore = winner ? winner.totalScore : 0;
+  const titleMatchCount = winner ? winner.titleCount : 0;
+
   const industryEvidence = {
     section: industrySection ? '行業概覽/業務章节' : '招股书前250000字',
     sectionLength: industrySearchText.length,
+    // v3新增字段
+    industryCategory,           // 归一化后的标准行业名称
+    matchedKeywords,            // 贡献得分的关键词列表（格式："词(次数)"）
+    confidenceScore,            // 综合置信度得分（titleMatches×5 + kwCount×1）
+    titleMatchCount,            // 标题命中次数
+    // 兼容旧字段
     matchedKeyword,
     matchedContext,
     trackCategories: {
       hot: 'AI/机器人/自动驾驶/半导体/创新药/低空经济（+2分）',
-      growth: '医疗器械/新能源/SaaS/软件（+1分）',
+      growth: '医疗器械/新能源/SaaS/软件服务/新消费（+1分）',
       neutral: '无明显偏好（0分）',
-      low: '传统消费/制造/公用事业/建材（-1分）',
-      avoid: '物管/房地产/小贷/纺织/教培（-2分）',
+      low: '传统消费/制造/公用事业/物流（-1分）',
+      avoid: '物管/房地产/小贷/教培/纺织/博彩（-2分）',
     },
-    scoreRule: trackType === 'neutral'
-      ? '未匹配到特定行业关键词'
-      : `匹配到"${matchedKeyword}"，属于${trackType}赛道`,
+    scoreRule: winner
+      ? `主导行业"${industryCategory}"，置信度=${confidenceScore}（标题命中×5=${titleMatchCount * 5}，关键词总频次=${winner.kwCount}）`
+      : '未匹配到任何行业关键词',
+    // 全行业排名（调试用，前5名）
+    industryRankTop5: ranked.slice(0, 5).map(r => ({
+      name: r.def.name,
+      score: r.totalScore,
+      titleScore: r.titleCount * 5,
+      kwScore: r.kwCount,
+      topKeywords: r.matchedKws.slice(0, 3),
+    })),
   };
 
   scores.industry = {
