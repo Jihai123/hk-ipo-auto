@@ -3168,12 +3168,49 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
   }
 
-  // 检查回避赛道 (-2) - 即使匹配了其他档位，回避赛道优先
+  // 检查回避赛道 (-2)
+  // 逻辑：仅当回避关键词出现在"主要业务"语境中才触发；
+  //       若所有出现都在"其他产品/服务"或"客户/供应商描述"等次要语境中，则跳过。
+  //       这样可以避免半导体公司因附带房地产租赁业务而被误判为回避赛道。
   console.log(`[行业] 检查回避赛道...`);
+
+  // 检查关键词是否仅出现在次要业务上下文（前300字符内含次要业务标记）
+  const isAllInSecondaryContext = (keyword) => {
+    const positions = [];
+    let from = 0;
+    while (true) {
+      const idx = industrySearchText.indexOf(keyword, from);
+      if (idx === -1) break;
+      positions.push(idx);
+      from = idx + keyword.length;
+    }
+    if (positions.length === 0) return false;
+    // 次要业务标记词（在回避关键词前300字出现，说明是附带业务而非核心业务）
+    const secondaryMarkers = [
+      '其他產品及服務', '其他产品及服务', '其他業務', '其他业务',
+      '其他產品', '其他产品', '其他服務', '其他服务',
+      '客戶', '客户', '供應商', '供应商',
+      '我們的客戶', '我们的客户',
+    ];
+    let primaryCount = 0;
+    for (const idx of positions) {
+      const preceding = industrySearchText.slice(Math.max(0, idx - 300), idx);
+      if (!secondaryMarkers.some(m => preceding.includes(m))) {
+        primaryCount++;
+      }
+    }
+    return primaryCount === 0; // 所有出现均在次要语境中 → 不触发回避
+  };
+
   for (const track of AVOID_TRACKS) {
     if (industrySearchText.includes(track) || normalizedIndustryText.includes(normalizeText(track))) {
       if (isDefinitionList(track)) {
         console.log(`[行业] ✗ 跳过(图表/缩写列表): ${track}`);
+        continue;
+      }
+      // 次要业务过滤：关键词仅在"其他产品/服务"或"客户描述"等次要语境出现 → 不计入回避
+      if (isAllInSecondaryContext(track)) {
+        console.log(`[行业] ✗ 跳过回避赛道（仅出现在次要业务语境中）: ${track}`);
         continue;
       }
       industryScore = -2;
