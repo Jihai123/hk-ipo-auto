@@ -2953,210 +2953,222 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     };
   }
   
-  // ========== 4. Pre-IPO禁售期（优化版：精准定位"首次公開發售前投資的主要條款"）==========
+  // ========== 4. Pre-IPO禁售期（语义规则识别 v2）==========
   console.log(`\n[禁售期] ========== 开始 ==========`);
 
-  // 核心判断逻辑：
-  // - 在"歷史、重組及公司架構"章节中查找"首次公開發售前投資的主要條款"
-  // - 在该子章节中查找"禁售期"关键词
-  // - 输出：是否有禁售期、禁售期时长、原文证据
-
-  let preIPOSection = '';
-  let preIPOSectionTitle = '';
-  let hasPreIPOInvestment = false;
-  let hasLockup = false;
-  let lockupPeriod = '';
-  let lockupContext = '';
-  let preIPOContext = '';
-
-  // 用去空格版本搜索
-  const textNoSpaceForLockup = text.replace(/\s+/g, '');
-
-  // -------- 策略1: 查找"首次公開發售前投資的主要條款"子章节 --------
-  const preIPOTermsPatterns = [
-    /首次公開發售前投資的主要條款/i,
-    /首次公开发售前投资的主要条款/i,
-    /Pre-IPO.*?Investment/i,
+  // ── 常量定义 ──────────────────────────────────────────────────────────────
+  // Step 1: Pre-IPO存在识别关键词
+  const PREIPO_EXISTENCE_KW = [
+    '首次公開發售前投資',
+    '首次公开发售前投资',
+    'Pre-IPO',
+    'PreIPO',
+    '上市前投資',
+    '上市前投资',
+    '戰略投資',
+    '战略投资',
   ];
 
-  console.log(`[禁售期] 搜索Pre-IPO条款...`);
-  for (const pattern of preIPOTermsPatterns) {
-    const match = textNoSpaceForLockup.match(pattern);
-    if (match) {
-      console.log(`[禁售期] ✓ 策略1匹配: ${match[0].slice(0, 50)}...`);
-      // 提取匹配位置后5000字符
-      const matchIndex = match.index;
-      preIPOSection = textNoSpaceForLockup.slice(matchIndex, matchIndex + 5000);
-      preIPOSectionTitle = '首次公開發售前投資的主要條款';
-      hasPreIPOInvestment = true;
+  // Step 3: 禁售语义关键词（扩展版）
+  const LOCKUP_SEMANTIC_KW = [
+    '禁售', '鎖定', '锁定',
+    'lock-up', 'lockup',
+    '不得出售', '不得轉讓', '不得转让',
+    '不得處置', '不得处置',
+    '不得減持', '不得减持',
+    '轉讓限制', '转让限制',
+    '出售限制',
+    '處置限制', '处置限制',
+  ];
 
-      // 在这个子章节中查找禁售期（扩展时长模式，涵盖常见锁定期表述）
-      const LOCKUP_PERIOD_PATTERN = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
-      const lockupMatch = preIPOSection.match(new RegExp(`(?:禁售期|鎖定期|锁定期|lock.up).{0,300}(?:${LOCKUP_PERIOD_PATTERN.source})`, 'i'));
-      if (lockupMatch) {
-        hasLockup = true;
-        lockupContext = lockupMatch[0];
-        console.log(`[禁售期] ✓ 发现禁售期: ${lockupContext.slice(0, 100)}`);
-        // 提取禁售期时长
-        const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN);
-        if (periodMatch) {
-          lockupPeriod = periodMatch[0];
+  // Step 4: 禁售时长正则（支持"上市后X个月"等前置语境）
+  const LOCKUP_DURATION_RE = /(?:上市後|自上市日期?起(?:計)?|上市日期?起計)?(?:三年|3年|36個月|36个月|兩年|两年|2年|24個月|24个月|十二個月|十二个月|12個月|12个月|一年|1年|六個月|六个月|6個月|6个月|180[天日]|三個月|三个月|3個月|3个月|90[天日])/;
+
+  // Step 5: 区分投资者禁售 vs 创始人禁售的标记词
+  // 禁售条文附近（±300字）必须含以下任一词，才认定为Pre-IPO投资者禁售
+  const INVESTOR_MARKERS = [
+    '投資者', '投资者',
+    'Pre-IPO', 'PreIPO',
+    '首次公開發售前', '首次公开发售前',
+    '上市前投資', '上市前投资',
+  ];
+
+  // 将时长表达式转换为月数（用于判断是否 >= 6 个月）
+  const parseDurationMonths = (expr) => {
+    if (!expr) return null;
+    if (/三年|3年|36個月|36个月/.test(expr)) return 36;
+    if (/兩年|两年|2年|24個月|24个月/.test(expr)) return 24;
+    if (/十二個月|十二个月|12個月|12个月|一年|1年/.test(expr)) return 12;
+    if (/六個月|六个月|6個月|6个月|180/.test(expr)) return 6;
+    if (/三個月|三个月|3個月|3个月|90/.test(expr)) return 3;
+    return null;
+  };
+
+  // ── 工作变量 ──────────────────────────────────────────────────────────────
+  let hasPreIPOInvestment = false;
+  let hasLockup = false;
+  let lockupPeriod = '';        // 原文时长表达式
+  let lockupMonths = null;      // 数字月数（用于评分）
+  let lockupContext = '';
+  let preIPOContext = '';
+  let preIPOSectionTitle = '';
+  let lockupConfidence = 0;     // 0-100 置信度
+
+  const textNoSpaceForLockup = text.replace(/\s+/g, '');
+
+  // ── Step 2: 提取Pre-IPO条款区块（按优先级三级策略）─────────────────────
+
+  // 辅助：在候选区块中搜索禁售（含投资者语境过滤）
+  const findLockupInBlock = (block) => {
+    for (const lkw of LOCKUP_SEMANTIC_KW) {
+      let from = 0;
+      while (from < block.length) {
+        const idx = block.indexOf(lkw, from);
+        if (idx === -1) break;
+        from = idx + lkw.length;
+
+        // Step 5: 检查附近300字是否含"投资者/Pre-IPO"等标记（排除创始人禁售）
+        const sentence = block.slice(Math.max(0, idx - 300), Math.min(block.length, idx + 300));
+        const isInvestorContext = INVESTOR_MARKERS.some(m => sentence.includes(m));
+        if (!isInvestorContext) {
+          console.log(`[禁售期] ✗ 跳过（创始人/控股股东禁售，非Pre-IPO投资者）: "${lkw}"`);
+          continue;
         }
-      } else {
-        // 也搜索整个子章节中的禁售期关键词（不要求时长）
-        const lockupKwMatch = preIPOSection.match(/禁售期|鎖定期|锁定期|lock.up/i);
-        if (lockupKwMatch) {
+
+        // Step 4: 在禁售关键词前后500字内提取时长
+        const nearby = block.slice(Math.max(0, idx - 100), Math.min(block.length, idx + 500));
+        const durationMatch = nearby.match(LOCKUP_DURATION_RE);
+        const period = durationMatch ? durationMatch[0] : '';
+        const months = parseDurationMonths(period);
+
+        // 保存找到的最长禁售期（优先保留时长更长的）
+        if (!hasLockup || (months !== null && (lockupMonths === null || months > lockupMonths))) {
           hasLockup = true;
-          const kwIdx = lockupKwMatch.index;
-          lockupContext = preIPOSection.slice(Math.max(0, kwIdx - 30), Math.min(preIPOSection.length, kwIdx + 200));
-          console.log(`[禁售期] ✓ 发现禁售期关键词: ${lockupContext.slice(0, 100)}`);
-          const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN);
-          if (periodMatch) lockupPeriod = periodMatch[0];
+          lockupPeriod = period;
+          lockupMonths = months;
+          lockupContext = nearby.slice(0, 250);
+          console.log(`[禁售期] ✓ 发现投资者禁售: "${lkw}", 时长="${period || '未明确'}", 月数=${months ?? '未知'}`);
         }
       }
-      break;
     }
+  };
+
+  // 策略 A: 优先匹配"首次公開發售前投資的主要條款"专属子章节（置信度最高）
+  console.log(`[禁售期] 策略A: 查找"首次公開發售前投資的主要條款"...`);
+  const TERMS_SECTION_RE = /首次公開發售前投資的主要條款|首次公开发售前投资的主要条款|Pre-IPOInvestment.*?Terms/i;
+  const termsSectionMatch = textNoSpaceForLockup.match(TERMS_SECTION_RE);
+  if (termsSectionMatch) {
+    const matchIdx = termsSectionMatch.index;
+    // 提取匹配位置 ±8000 字符
+    const block = textNoSpaceForLockup.slice(Math.max(0, matchIdx - 500), Math.min(textNoSpaceForLockup.length, matchIdx + 8000));
+    preIPOSectionTitle = '首次公開發售前投資的主要條款';
+    hasPreIPOInvestment = true;
+    preIPOContext = block.slice(0, 200);
+    lockupConfidence += 60;
+    console.log(`[禁售期] ✓ 策略A命中，区块长度=${block.length}，开始识别禁售...`);
+    findLockupInBlock(block);
   }
 
-  // -------- 策略2: 在"歷史、重組及公司架構"章节扩大搜索 --------
-  if (!preIPOSection) {
-    console.log(`[禁售期] 策略1未匹配，尝试策略2...`);
+  // 策略 B: 在"歷史、重組及公司架構"章节中搜索Pre-IPO关键词
+  if (!hasPreIPOInvestment) {
+    console.log(`[禁售期] 策略B: 提取歷史/重組章节...`);
     const historySection = extractSection(
       textNoSpaceForLockup,
-      [
-        /歷史.*?重組.*?公司架構/i,
-        /歷史.*?發展.*?公司架構/i,
-        /历史.*?重组.*?公司架构/i,
-        /HISTORY.*?REORGANIZATION/i,
-        /HISTORY.*?CORPORATESTRUCTURE/i
-      ],
+      [/歷史.*?重組.*?公司架構/i, /歷史.*?發展.*?公司架構/i, /历史.*?重组.*?公司架构/i,
+       /HISTORY.*?REORGANIZATION/i, /HISTORY.*?CORPORATESTRUCTURE/i],
       [/業務/i, /业务/i, /BUSINESS/i],
-      150000,
-      true
+      150000, true
     );
-
     console.log(`[禁售期] 歷史章节长度: ${historySection?.length || 0}`);
 
     if (historySection && historySection.length > 1000) {
-      preIPOSectionTitle = '歷史、重組及公司架構';
-
-      // 在历史章节中搜索Pre-IPO相关关键词
-      const preIPOKeywords = [
-        '首次公開發售前投資', '首次公开发售前投资',
-        'Pre-IPO', 'PreIPO',
-        '上市前投資', '上市前投资',
-        '首次公開發售前投資者', '戰略投資'
-      ];
-
-      for (const kw of preIPOKeywords) {
+      for (const kw of PREIPO_EXISTENCE_KW) {
         const idx = historySection.indexOf(kw);
-        if (idx !== -1) {
-          hasPreIPOInvestment = true;
-          preIPOContext = historySection.slice(Math.max(0, idx - 30), Math.min(historySection.length, idx + 200));
-          console.log(`[禁售期] ✓ 发现Pre-IPO: ${kw}`);
-
-          // 在Pre-IPO关键词附近搜索禁售期（扩大到3000字符）
-          const nearbyText = historySection.slice(Math.max(0, idx - 200), Math.min(historySection.length, idx + 3000));
-          const lockupKeywords = ['禁售期', '鎖定期', '锁定期', 'lock-up', 'lockup', '不得出售', '不得轉讓', '不得转让'];
-          const LOCKUP_PERIOD_PATTERN2 = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
-
-          for (const lkw of lockupKeywords) {
-            const lidx = nearbyText.indexOf(lkw);
-            if (lidx !== -1) {
-              hasLockup = true;
-              lockupContext = nearbyText.slice(Math.max(0, lidx - 30), Math.min(nearbyText.length, lidx + 200));
-              console.log(`[禁售期] ✓ 发现禁售期: ${lkw}`);
-
-              // 提取禁售期时长
-              const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN2);
-              if (periodMatch) {
-                lockupPeriod = periodMatch[0];
-              }
-              break;
-            }
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  // -------- 策略3: 兜底搜索（在招股书中间部分） --------
-  if (!hasPreIPOInvestment) {
-    console.log(`[禁售期] 策略2未匹配，尝试策略3兜底...`);
-    const midSection = textNoSpaceForLockup.slice(50000, 300000);
-    const preIPOKeywords = ['首次公開發售前投資', 'Pre-IPO', 'PreIPO', '上市前投資'];
-
-    for (const kw of preIPOKeywords) {
-      if (midSection.includes(kw)) {
+        if (idx === -1) continue;
         hasPreIPOInvestment = true;
-        const idx = midSection.indexOf(kw);
-        preIPOContext = midSection.slice(Math.max(0, idx - 30), Math.min(midSection.length, idx + 200));
-        preIPOSectionTitle = '招股书中间部分（兜底）';
-        console.log(`[禁售期] ✓ 兜底发现Pre-IPO: ${kw}`);
-
-        // 搜索禁售期（扩大到3000字符）
-        const LOCKUP_PERIOD_PATTERN3 = /六個月|六个月|6個月|6个月|180天|180日|12個月|12个月|十二個月|十二个月|一年|1年|兩年|两年|2年|24個月|24个月|三年|3年|36個月|36个月/;
-        const nearbyText = midSection.slice(Math.max(0, idx - 200), Math.min(midSection.length, idx + 3000));
-        if (/禁售期|鎖定期|锁定期|lock.up/i.test(nearbyText)) {
-          hasLockup = true;
-          const lockupMatch = nearbyText.match(/(?:禁售期|鎖定期|锁定期|lock.up).{0,200}/i);
-          if (lockupMatch) {
-            lockupContext = lockupMatch[0];
-            const periodMatch = lockupContext.match(LOCKUP_PERIOD_PATTERN3);
-            if (periodMatch) lockupPeriod = periodMatch[0];
-          }
-        }
+        preIPOSectionTitle = '歷史、重組及公司架構';
+        preIPOContext = historySection.slice(Math.max(0, idx - 30), Math.min(historySection.length, idx + 200));
+        lockupConfidence += 40;
+        console.log(`[禁售期] ✓ 策略B命中Pre-IPO关键词: "${kw}"`);
+        // 提取 ±8000 字符作为候选区块
+        const block = historySection.slice(Math.max(0, idx - 500), Math.min(historySection.length, idx + 8000));
+        findLockupInBlock(block);
         break;
       }
     }
   }
 
-  console.log(`[禁售期] 结果: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, period=${lockupPeriod || '无'}`);
+  // 策略 C: 全文兜底（招股书50000-300000字区间）
+  if (!hasPreIPOInvestment) {
+    console.log(`[禁售期] 策略C: 全文兜底搜索...`);
+    const midSection = textNoSpaceForLockup.slice(50000, 300000);
+    for (const kw of PREIPO_EXISTENCE_KW) {
+      const idx = midSection.indexOf(kw);
+      if (idx === -1) continue;
+      hasPreIPOInvestment = true;
+      preIPOSectionTitle = '全文兜底';
+      preIPOContext = midSection.slice(Math.max(0, idx - 30), Math.min(midSection.length, idx + 200));
+      lockupConfidence += 20;
+      console.log(`[禁售期] ✓ 策略C命中Pre-IPO关键词: "${kw}"`);
+      const block = midSection.slice(Math.max(0, idx - 500), Math.min(midSection.length, idx + 8000));
+      findLockupInBlock(block);
+      break;
+    }
+  }
+
+  if (hasLockup) lockupConfidence += 30;
+  if (lockupMonths !== null) lockupConfidence += 10;
+  lockupConfidence = Math.min(lockupConfidence, 100);
+
+  console.log(`[禁售期] 结果: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, period="${lockupPeriod || '无'}", months=${lockupMonths ?? '未知'}, confidence=${lockupConfidence}`);
+
+  // ── Step 6: 评分 ──────────────────────────────────────────────────────────
+  let lockupScore = 0;
+  let lockupReason = '';
+  let lockupDetails = '';
+  let lockupScoreRule = '';
+
+  if (!hasPreIPOInvestment) {
+    lockupScore = 0;
+    lockupReason = '无Pre-IPO';
+    lockupDetails = '未发现Pre-IPO投资者';
+    lockupScoreRule = '无Pre-IPO投资者，0分';
+  } else if (hasLockup && (lockupMonths === null || lockupMonths >= 6)) {
+    lockupScore = 0;
+    lockupReason = 'Pre-IPO有禁售期';
+    lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : '（时长未明确，视为充足）'}`;
+    lockupScoreRule = '有Pre-IPO且禁售期≥6个月（或时长未明确），0分（安全）';
+  } else if (hasLockup && lockupMonths !== null && lockupMonths < 6) {
+    lockupScore = -1;
+    lockupReason = 'Pre-IPO禁售期偏短';
+    lockupDetails = `有Pre-IPO投资者，禁售期仅${lockupPeriod}（< 6个月）`;
+    lockupScoreRule = '有Pre-IPO且禁售期<6个月，-1分（风险偏高）';
+  } else {
+    lockupScore = -2;
+    lockupReason = 'Pre-IPO无禁售安排';
+    lockupDetails = '警告：有Pre-IPO投资者但未发现明确禁售安排';
+    lockupScoreRule = '有Pre-IPO但无禁售期，-2分（高风险）';
+  }
 
   const lockupEvidence = {
     section: preIPOSectionTitle || '未找到Pre-IPO相关章节',
     preIPOFound: hasPreIPOInvestment,
     lockupFound: hasLockup,
-    lockupPeriod: lockupPeriod,
-    preIPOContext: preIPOContext,
-    lockupContext: lockupContext,
+    lockupPeriod,
+    lockupMonths,
+    confidenceScore: lockupConfidence,
+    preIPOContext,
+    lockupContext,
+    scoreRule: lockupScoreRule,
   };
 
-  if (hasPreIPOInvestment) {
-    if (hasLockup) {
-      scores.lockup = {
-        score: 0,
-        reason: 'Pre-IPO有禁售期',
-        details: `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : ''}`,
-        evidence: {
-          ...lockupEvidence,
-          scoreRule: '有Pre-IPO投资者且有禁售期，0分（安全）',
-        },
-      };
-    } else {
-      scores.lockup = {
-        score: -2,
-        reason: 'Pre-IPO无禁售期',
-        details: '警告：有Pre-IPO投资者但未发现明确禁售期安排',
-        evidence: {
-          ...lockupEvidence,
-          scoreRule: '有Pre-IPO但未发现禁售期，-2分（风险）',
-        },
-      };
-    }
-  } else {
-    scores.lockup = {
-      score: 0,
-      reason: '无Pre-IPO',
-      details: '未发现Pre-IPO投资者',
-      evidence: {
-        ...lockupEvidence,
-        scoreRule: '无Pre-IPO投资者，0分',
-      },
-    };
-  }
-  
+  scores.lockup = {
+    score: lockupScore,
+    reason: lockupReason,
+    details: lockupDetails,
+    evidence: lockupEvidence,
+  };
+
   // ========== 5. 行业评分（基于炒作逻辑）==========
   console.log(`\n[行业] ========== 开始 ==========`);
 
