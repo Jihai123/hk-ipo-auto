@@ -33,6 +33,11 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
+// ==================== V5 新增：etnet 爬虫模块 ====================
+const { crawlIPODetail }      = require('./crawlers/etnet/ipoDetail');
+const { buildIndustryCodeMap } = require('./crawlers/etnet/industryCodeMap');
+const { getComparablePE }     = require('./crawlers/etnet/industryPE');
+
 const app = express();
 const PORT = process.env.PORT || 3010;
 
@@ -1855,25 +1860,297 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
 
 
+// ==================== V5：PDF 总股本提取 ====================
+/**
+ * 从招股书文本中提取发行后总股本（股数）
+ * 必须用总股本（而非H股股本）计算总市值，否则PE会被严重低估。
+ *
+ * 策略优先级：
+ *   A  股本章节定位 "緊隨全球發售完成後" 附近数字
+ *   B  "股份結構" / "股本結構" 表格
+ *   C  EPS 反推（净利润 / 每股收益）
+ * @returns {{ totalShares: number|null, confidence: string, source: string }}
+ */
+function extractTotalShares(text) {
+  const noSpace = text.replace(/\s+/g, '');
+
+  // 辅助：从数字字符串解析整数
+  const parseShares = (raw) => parseInt(raw.replace(/,/g, ''), 10);
+
+  // 辅助：合理性校验（1千万 ~ 500亿）
+  const isReasonable = (n) => n >= 1e7 && n <= 5e10;
+
+  // ── 策略 A：搜索"緊隨全球發售完成後"相关表述 ──
+  const anchorPatterns = [
+    /緊隨全球發售(?:及資本化發行)?完成後/,
+    /紧随全球发售(?:及资本化发行)?完成后/,
+    /全球發售完成後/,
+    /上市後已發行股份/,
+  ];
+  for (const anchor of anchorPatterns) {
+    const m = anchor.exec(noSpace);
+    if (!m) continue;
+    const nearby = noSpace.slice(m.index, m.index + 3000);
+    const patterns = [
+      /已發行股份總數[^\d]*([\d,]+)\s*股/,
+      /已發行股本[^\d]*([\d,]+)\s*股/,
+      /將有\s*([\d,]+)\s*股/,
+      /合共\s*([\d,]+)\s*股/,
+      /總數為\s*([\d,]+)\s*股/,
+      /共([\d,]+)股/,
+    ];
+    for (const p of patterns) {
+      const hit = p.exec(nearby);
+      if (hit) {
+        const n = parseShares(hit[1]);
+        if (isReasonable(n)) {
+          console.log(`[totalShares] 策略A命中: ${n.toLocaleString()}股`);
+          return { totalShares: n, confidence: 'high', source: '股本章节(緊隨全球發售完成後)' };
+        }
+      }
+    }
+  }
+
+  // ── 策略 B：搜索"股本結構" / "股份結構" 表格 ──
+  const structPatterns = [/股本結構/, /股份結構/, /股本结构/, /股份结构/];
+  for (const sp of structPatterns) {
+    const m = sp.exec(noSpace);
+    if (!m) continue;
+    const nearby = noSpace.slice(m.index, m.index + 2000);
+    const hit = /已發行(?:及繳足)?(?:股份)?總數[^\d]*([\d,]+)\s*股/.exec(nearby)
+             || /全部已發行股份[^\d]*([\d,]+)/.exec(nearby);
+    if (hit) {
+      const n = parseShares(hit[1]);
+      if (isReasonable(n)) {
+        console.log(`[totalShares] 策略B命中: ${n.toLocaleString()}股`);
+        return { totalShares: n, confidence: 'medium', source: '股本結構表格' };
+      }
+    }
+  }
+
+  // ── 策略 C：EPS 反推（净利润 / 每股基本盈利）──
+  const epsHit = /每股基本盈利[^\d]*([\d.]+)港仙/.exec(noSpace)
+              || /每股盈利[^\d]*([\d.]+)仙/.exec(noSpace);
+  if (epsHit) {
+    const profit = extractNetProfit(text);
+    if (profit && profit.hkdAmount > 0) {
+      const epsHKD = parseFloat(epsHit[1]) / 100; // 港仙→港元
+      if (epsHKD > 0) {
+        const shares = Math.round(profit.hkdAmount / epsHKD);
+        if (isReasonable(shares)) {
+          console.log(`[totalShares] 策略C(EPS反推): ${shares.toLocaleString()}股`);
+          return { totalShares: shares, confidence: 'low', source: 'EPS反推' };
+        }
+      }
+    }
+  }
+
+  console.log('[totalShares] 未提取到总股本');
+  return { totalShares: null, confidence: 'none', source: '未找到' };
+}
+
+// ==================== V5：PDF 净利润提取 ====================
+/**
+ * 从招股书提取最近完整财年归属母公司净利润（转换为港元）
+ *
+ * 优先级：股東應佔溢利 > 本年溢利 > 年內溢利 > 純利
+ * 单位识别：人民币千元（最常见）/ 港元百万 / 港元千元
+ * @returns {{ hkdAmount: number|null, currency: string, unit: string, source: string }}
+ */
+function extractNetProfit(text) {
+  const noSpace = text.replace(/\s+/g, '');
+
+  // 匹配负数（亏损）时捕获符号
+  const NUM_RE = /[（(]?([\d,]+)[）)]?/;
+
+  /**
+   * 将原始数字字符串 + 单位描述 → 港元数值
+   * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
+   */
+  function toHKD(raw, currency, unit) {
+    const n = parseInt(raw.replace(/,/g, ''), 10);
+    if (isNaN(n) || n <= 0) return null;
+
+    let multiplier = 1;
+    if (/千/.test(unit)) multiplier = 1e3;
+    else if (/百萬|百万/.test(unit)) multiplier = 1e6;
+    else if (/億|亿/.test(unit)) multiplier = 1e8;
+
+    const baseAmount = n * multiplier;
+
+    if (/人民幣|人民币|RMB|CNY/.test(currency)) return Math.round(baseAmount * 1.10);
+    if (/港/.test(currency)) return baseAmount;
+    if (/美/.test(currency)) return Math.round(baseAmount * 7.80);
+    return baseAmount; // 未知货币，原值返回
+  }
+
+  // 识别财务报告单位（页面通常有 "（人民幣千元）" 这样的表头）
+  const unitHint = /（?(人民幣|港幣|港元|美元|RMB|HKD|USD)([千百萬億千万亿元]+)?）?/.exec(noSpace);
+  const defaultCurrency = unitHint ? unitHint[1] : '人民幣';
+  const defaultUnit     = unitHint ? (unitHint[2] || '千元') : '千元';
+
+  // ── 策略 A：搜索財務資料概要章节 ──
+  const summaryAnchors = [
+    /財務資料概要/,
+    /財務資料撮要/,
+    /主要財務資料/,
+    /财务资料概要/,
+  ];
+
+  const profitPatterns = [
+    { re: /股東應佔溢利[^\d（(]*([\d,]+)/, label: '股東應佔溢利', isLoss: false },
+    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
+    { re: /股東應佔虧損[^\d（(]*([\d,]+)/, label: '股東應佔虧損', isLoss: true },
+    { re: /本年溢利[^\d（(]*([\d,]+)/, label: '本年溢利', isLoss: false },
+    { re: /年內溢利[^\d（(]*([\d,]+)/, label: '年內溢利', isLoss: false },
+    { re: /期內溢利[^\d（(]*([\d,]+)/, label: '期內溢利', isLoss: false },
+    { re: /純利[^\d（(]*([\d,]+)/, label: '純利', isLoss: false },
+    { re: /年內虧損[^\d（(]*([\d,]+)/, label: '年內虧損', isLoss: true },
+  ];
+
+  for (const anchor of summaryAnchors) {
+    const m = anchor.exec(noSpace);
+    if (!m) continue;
+    const section = noSpace.slice(m.index, m.index + 8000);
+
+    for (const { re, label, isLoss } of profitPatterns) {
+      const hit = re.exec(section);
+      if (!hit) continue;
+      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+      if (!hkd) continue;
+      const amount = isLoss ? -hkd : hkd;
+      console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
+      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `財務概要(${label})` };
+    }
+  }
+
+  // ── 策略 B：搜索"所得稅開支"向下找净利润 ──
+  const taxIdx = noSpace.indexOf('所得稅開支');
+  if (taxIdx !== -1) {
+    const after = noSpace.slice(taxIdx, taxIdx + 500);
+    for (const { re, label, isLoss } of profitPatterns) {
+      const hit = re.exec(after);
+      if (!hit) continue;
+      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+      if (!hkd) continue;
+      const amount = isLoss ? -hkd : hkd;
+      console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
+      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `所得稅附近(${label})` };
+    }
+  }
+
+  // ── 策略 C：全文搜索 ──
+  for (const { re, label, isLoss } of profitPatterns) {
+    const hit = re.exec(noSpace);
+    if (!hit) continue;
+    const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+    if (!hkd) continue;
+    const amount = isLoss ? -hkd : hkd;
+    console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
+    return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `全文搜索(${label})` };
+  }
+
+  console.log('[netProfit] 未提取到净利润');
+  return { hkdAmount: null, currency: null, unit: null, source: '未找到' };
+}
+
+// ==================== V5：PE 评分函数（独立，供主流程调用）====================
+/**
+ * 根据发行价、总股本、净利润、同行PE，计算PE评分
+ * @param {number|null} offerPriceMid  - 发行价中值（港元）
+ * @param {number|null} totalShares    - 总股本（股）
+ * @param {number|null} netProfitHKD   - 净利润（港元）
+ * @param {number|null} peerMedianPE   - 同行PE中位数
+ * @returns {{ score: number, reason: string, details: string, evidence: Object }}
+ */
+function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE) {
+  const evidence = { offerPriceMid, totalShares, netProfitHKD, peerMedianPE };
+
+  // 亏损公司
+  if (netProfitHKD !== null && netProfitHKD <= 0) {
+    return { score: 0, reason: 'PE：未盈利', details: '净利润≤0，无法计算PE，中性评分', evidence };
+  }
+
+  // 数据缺失
+  if (!offerPriceMid || !totalShares || !netProfitHKD) {
+    return { score: 0, reason: 'PE：数据不足', details: '发行价/股本/利润数据缺失，无法计算', evidence };
+  }
+
+  if (!peerMedianPE || peerMedianPE <= 0) {
+    return { score: 0, reason: 'PE：无法对标', details: '可比公司不足3家，无法对标', evidence };
+  }
+
+  const totalMarketCap = offerPriceMid * totalShares;
+  const newIPOpe = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
+  const ratio    = parseFloat((newIPOpe / peerMedianPE).toFixed(4));
+
+  evidence.newIPOPE     = newIPOpe;
+  evidence.peerMedianPE = peerMedianPE;
+  evidence.ratio        = ratio;
+
+  let score, reason, details;
+  if (ratio < 0.70) {
+    score  = 3;  reason = 'PE：大幅折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（>30%）`;
+  } else if (ratio < 0.85) {
+    score  = 2;  reason = 'PE：明显折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（15-30%）`;
+  } else if (ratio < 0.95) {
+    score  = 1;  reason = 'PE：轻微折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（5-15%）`;
+  } else if (ratio <= 1.05) {
+    score  = 0;  reason = 'PE：基本持平';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，与市场持平`;
+  } else if (ratio <= 1.15) {
+    score  = -1; reason = 'PE：轻微溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（5-15%）`;
+  } else if (ratio <= 1.30) {
+    score  = -2; reason = 'PE：明显溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（15-30%）`;
+  } else {
+    score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
+  }
+
+  console.log(`[PE] ${reason}: ${details}`);
+  return { score, reason, details, evidence };
+}
+
 // ==================== 评分引擎 ====================
 
 /**
- * 主评分函数
+ * 主评分函数（V5）
+ * 新增维度：PE估值（-3~+3）、募资规模（-1~+1）
+ * 绿鞋检测：展示项，不计分
  */
-function scoreProspectus(rawText, stockCode) {
+async function scoreProspectus(rawText, stockCode) {
   const text = rawText;
   const normalizedText = normalizeText(rawText);
   const SPONSORS = getAllSponsors();
-  
-  console.log(`[评分] 开始评分: ${stockCode}, 文本长度: ${text.length}`);
-  
+
+  console.log(`[评分] 开始评分(V5): ${stockCode}, 文本长度: ${text.length}`);
+
   const scores = {
-    oldShares: { score: 0, reason: '', details: '' },
-    sponsor: { score: 0, reason: '', details: '', sponsors: [] },
+    oldShares:   { score: 0, reason: '', details: '' },
+    sponsor:     { score: 0, reason: '', details: '', sponsors: [] },
     cornerstone: { score: 0, reason: '', details: '', investors: [] },
-    lockup: { score: 0, reason: '', details: '' },
-    industry: { score: 0, reason: '', details: '', track: '' },
+    lockup:      { score: 0, reason: '', details: '' },
+    industry:    { score: 0, reason: '', details: '', track: '' },
+    pe:          { score: 0, reason: 'PE：待计算', details: '' },    // V5 新增
+    ipoSize:     { score: 0, reason: '募资规模：待计算', details: '' }, // V5 新增
   };
+
+  // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
+  let etnetData = null;
+  try {
+    const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
+    etnetData = await crawlIPODetail(fmtCode);
+    console.log(`[etnet] 数据获取${etnetData ? '成功' : '失败'}`);
+  } catch (e) {
+    console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取`);
+  }
+
+  // ── V5：绿鞋检测（展示项，不计分）──
+  const greenShoeKeywords = [
+    '超額配股權', '超额配股权', '穩定價格操作', '稳定价格操作',
+    '穩定價格經辦人', 'Over-allotment', 'Over allotment', 'Green Shoe', 'Greenshoe',
+  ];
+  const front80k = text.slice(0, 80000);
+  const hasGreenShoe = greenShoeKeywords.some(k => front80k.includes(k));
+  console.log(`[绿鞋] hasGreenShoe=${hasGreenShoe}`);
   
   // ========== 1. 旧股检测（优化版：基于PDF前几页的全球發售章节精准定位）==========
   // 核心判断逻辑：
@@ -2031,17 +2308,30 @@ function scoreProspectus(rawText, stockCode) {
 
   console.log(`[旧股检测] 结果: hasOldShares=${hasOldShares}, confidence=${confidence}`);
 
-  // -------- 汇总旧股检测结果 --------
+  // -------- 汇总旧股检测结果（V5：梯度评分）--------
   if (hasOldShares) {
+    let oldShareScore = -2; // 默认：检测到旧股但无具体比例
     let details = '存在销售股份，原始股东套现';
+
     if (newSharesCount && saleSharesCount) {
-      const total = parseInt(newSharesCount) + parseInt(saleSharesCount);
-      const saleRatio = (parseInt(saleSharesCount) / total * 100).toFixed(1);
-      details = `新股${newSharesCount}股 + 旧股${saleSharesCount}股（旧股占比${saleRatio}%）`;
+      const newN  = parseInt(String(newSharesCount).replace(/,/g, ''), 10);
+      const saleN = parseInt(String(saleSharesCount).replace(/,/g, ''), 10);
+      if (!isNaN(newN) && !isNaN(saleN) && newN + saleN > 0) {
+        const total     = newN + saleN;
+        const saleRatio = saleN / total;
+        const salePct   = (saleRatio * 100).toFixed(1);
+        details = `新股${newSharesCount}股 + 旧股${saleSharesCount}股（旧股占比${salePct}%）`;
+        // 梯度评分：占比 >50% → -2，20-50% → -1，<20% → 0
+        if (saleRatio > 0.50)      oldShareScore = -2;
+        else if (saleRatio > 0.20) oldShareScore = -1;
+        else                       oldShareScore = 0;
+        console.log(`[旧股检测] 旧股占比${salePct}% → 梯度分=${oldShareScore}`);
+      }
     }
+
     scores.oldShares = {
-      score: -2,
-      reason: '有旧股发售',
+      score: oldShareScore,
+      reason: oldShareScore === 0 ? '旧股占比低' : oldShareScore === -1 ? '旧股适中' : '有旧股发售',
       details,
       evidence: {
         confidence,
@@ -2506,13 +2796,27 @@ function scoreProspectus(rawText, stockCode) {
     const sponsorNamesStr = allSponsorsSorted.slice(0, 2).map(s => (s.name || '未知').substring(0, 12)).join('、');
     const rateStr = `加权平均 ${sponsorRate >= 0 ? '+' : ''}${sponsorRate.toFixed(1)}%`;
 
-    if (sponsorsWithData.length === 0 && sponsorCount < 8) {
+    // V5：破发率检查 — winRate < 0.4 直接 -2（首日破发概率 > 60%）
+    const weightedWinRate = sponsorsWithData.length > 0
+      ? sponsorsWithData.reduce((s, sp) => s + (sp.winRate || 0) * sp.count, 0) / totalCount
+      : (allSponsorsSorted[0]?.winRate || 1);
+
+    if (sponsorsWithData.length === 0 && sponsorCount < 5) { // V5: 阈值从8降至5
       scores.sponsor = {
         score: 0,
         reason: '数据不足',
-        details: `${sponsorNamesStr} (数据不足，需≥8单)`,
+        details: `${sponsorNamesStr} (数据不足，需≥5单)`,
         sponsors: allSponsorsSorted.slice(0, 3),
-        evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<8单，数据不足不评分', weightedRate: null },
+        evidence: { ...sponsorEvidence, scoreRule: '保荐人历史案例<5单，数据不足不评分', weightedRate: null },
+      };
+    } else if (weightedWinRate < 0.40) {
+      // V5: 破发率>60% 直接最低分
+      scores.sponsor = {
+        score: -2,
+        reason: '低质保荐团队（高破发率）',
+        details: `${sponsorNamesStr} 加权首日上涨率${(weightedWinRate * 100).toFixed(0)}%（破发率>60%）`,
+        sponsors: allSponsorsSorted.slice(0, 3),
+        evidence: { ...sponsorEvidence, scoreRule: '加权首日上涨率<40%（破发率>60%），-2分', weightedRate: sponsorRate.toFixed(1) },
       };
     } else if (sponsorRate >= 70) {
       scores.sponsor = {
@@ -2659,6 +2963,29 @@ function scoreProspectus(rawText, stockCode) {
         evidence: { ...sponsorEvidence, scoreRule: '未匹配到保荐人数据库，不评分' },
       };
     }
+  }
+
+  // V5：头部保荐人加分（如果基础分 < +2，且命中顶级保荐人，则 +1，封顶 +2）
+  const TOP_SPONSORS = [
+    '高盛', 'Goldman Sachs', 'Goldman',
+    '摩根士丹利', 'Morgan Stanley',
+    '摩根大通', 'J.P. Morgan', 'JPMorgan',
+    '瑞银', 'UBS',
+    '中金', '中国国际金融', 'CICC',
+    '中信里昂', '中信证券', 'CLSA', 'CITIC',
+    '海通国际', 'Haitong',
+    '华泰国际', 'HTSC',
+    '招银国际', 'CMBI',
+    '建银国际', 'CCBI',
+  ];
+  const allExtractedNames = (scores.sponsor.sponsors || []).map(s => s.name || '').join(' ');
+  const isTopSponsor = TOP_SPONSORS.some(ts =>
+    allExtractedNames.includes(ts) || extractedSponsors.some(n => n.includes(ts))
+  );
+  if (isTopSponsor && scores.sponsor.score < 2) {
+    scores.sponsor.score = Math.min(2, scores.sponsor.score + 1);
+    scores.sponsor.reason += '（含头部保荐人+1）';
+    console.log(`[保荐人] V5头部保荐人加分 → score=${scores.sponsor.score}`);
   }
 
   // ========== 3. 基石投资者（优化版：基于目录定位章节+表格解析）==========
@@ -2935,13 +3262,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   console.log(`[基石投资者] ========== 完成 ==========`);
 
-  if (uniqueInvestors.length > 0) {
+  // V5：区分明星基石数量（≥3家 +2，1-2家 +1，无 0）
+  if (uniqueInvestors.length >= 3) {
     scores.cornerstone = {
       score: 2,
-      reason: '有明星基石',
+      reason: `有明星基石(${uniqueInvestors.length}家)`,
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
-      evidence: { ...cornerstoneEvidence, scoreRule: '发现明星基石投资者，+2分' },
+      evidence: { ...cornerstoneEvidence, scoreRule: `≥3家明星基石，+2分` },
+    };
+  } else if (uniqueInvestors.length > 0) {
+    scores.cornerstone = {
+      score: 1,
+      reason: `有明星基石(${uniqueInvestors.length}家)`,
+      details: uniqueInvestors.join(', '),
+      investors: uniqueInvestors,
+      evidence: { ...cornerstoneEvidence, scoreRule: `1-2家明星基石，+1分` },
     };
   } else {
     scores.cornerstone = {
@@ -3128,26 +3464,32 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let lockupDetails = '';
   let lockupScoreRule = '';
 
+  // V5：时长梯度细化（原6个月门槛 → 12/6 两档）
   if (!hasPreIPOInvestment) {
     lockupScore = 0;
     lockupReason = '无Pre-IPO';
     lockupDetails = '未发现Pre-IPO投资者';
     lockupScoreRule = '无Pre-IPO投资者，0分';
-  } else if (hasLockup && (lockupMonths === null || lockupMonths >= 6)) {
+  } else if (hasLockup && (lockupMonths === null || lockupMonths >= 12)) {
+    // 禁售≥12个月（或时长未明确，保守视为充足）→ 安全
     lockupScore = 0;
     lockupReason = 'Pre-IPO有禁售期';
     lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : '（时长未明确，视为充足）'}`;
-    lockupScoreRule = '有Pre-IPO且禁售期≥6个月（或时长未明确），0分（安全）';
-  } else if (hasLockup && lockupMonths !== null && lockupMonths < 6) {
+    lockupScoreRule = 'Pre-IPO禁售期≥12个月（或未明确），0分（安全）';
+  } else if (hasLockup && lockupMonths !== null && lockupMonths >= 6) {
+    // 禁售 6-12个月 → 轻微风险
     lockupScore = -1;
-    lockupReason = 'Pre-IPO禁售期偏短';
-    lockupDetails = `有Pre-IPO投资者，禁售期仅${lockupPeriod}（< 6个月）`;
-    lockupScoreRule = '有Pre-IPO且禁售期<6个月，-1分（风险偏高）';
+    lockupReason = 'Pre-IPO禁售期适中';
+    lockupDetails = `有Pre-IPO投资者，禁售期${lockupPeriod}（6-12个月）`;
+    lockupScoreRule = 'Pre-IPO禁售期6-12个月，-1分（轻微风险）';
   } else {
+    // 禁售<6个月 或 无禁售 → 高风险
     lockupScore = -2;
-    lockupReason = 'Pre-IPO无禁售安排';
-    lockupDetails = '警告：有Pre-IPO投资者但未发现明确禁售安排';
-    lockupScoreRule = '有Pre-IPO但无禁售期，-2分（高风险）';
+    lockupReason = hasLockup ? 'Pre-IPO禁售期偏短' : 'Pre-IPO无禁售安排';
+    lockupDetails = hasLockup
+      ? `有Pre-IPO投资者，禁售期仅${lockupPeriod}（< 6个月）`
+      : '警告：有Pre-IPO投资者但未发现明确禁售安排';
+    lockupScoreRule = hasLockup ? 'Pre-IPO禁售<6个月，-2分（高风险）' : 'Pre-IPO无禁售期，-2分（高风险）';
   }
 
   const lockupEvidence = {
@@ -3349,24 +3691,158 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     track: trackType,
     evidence: industryEvidence,
   };
-  
-  // ========== 计算总分 ==========
+
+  // ========== V5 新增：PE 估值评分 ==========
+  console.log(`\n[PE] ========== 开始 ==========`);
+  try {
+    // 1. 发行价：优先 etnet，备选 PDF 提取
+    let offerPriceMid = etnetData?.offerPriceMid || null;
+    if (!offerPriceMid) {
+      // PDF 中搜索发行价
+      const priceMatch = /發售價[^\d]*\$([\d.]+)\s*至\s*\$([\d.]+)/.exec(text.replace(/\s+/g, ''))
+                      || /招股價[^\d]*\$([\d.]+)/.exec(text.replace(/\s+/g, ''));
+      if (priceMatch) {
+        const nums = priceMatch.slice(1).map(Number).filter(n => n > 0);
+        offerPriceMid = nums.length === 1 ? nums[0] : (nums[0] + nums[1]) / 2;
+      }
+    }
+
+    // 2. 总股本：从 PDF 提取（关键：不能用 H 股市值）
+    const sharesResult = extractTotalShares(text);
+    const totalShares  = sharesResult.totalShares;
+
+    // 3. 净利润：从 PDF 提取
+    const profitResult  = extractNetProfit(text);
+    const netProfitHKD  = profitResult.hkdAmount;
+
+    // 4. 同行 PE：通过 etnet 行业代码查询
+    let peerMedianPE = null;
+    const industry = etnetData?.industry || null;
+    if (industry) {
+      try {
+        const codeMap   = await buildIndustryCodeMap();
+        const natureCode = codeMap[industry];
+        if (natureCode) {
+          const peData   = await getComparablePE(natureCode);
+          peerMedianPE   = peData.median;
+          console.log(`[PE] 行业"${industry}"(${natureCode}) 同行PE中位数=${peerMedianPE}`);
+        } else {
+          console.log(`[PE] 行业"${industry}"未找到nature代码`);
+        }
+      } catch (e) {
+        console.warn(`[PE] 行业PE查询失败: ${e.message}`);
+      }
+    }
+
+    console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
+    const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE);
+    scores.pe = {
+      score:   peResult.score,
+      reason:  peResult.reason,
+      details: peResult.details,
+      evidence: {
+        ...peResult.evidence,
+        sharesSource:  sharesResult.source,
+        sharesConfidence: sharesResult.confidence,
+        profitSource:  profitResult.source,
+        industry,
+        scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
+      },
+    };
+  } catch (e) {
+    console.error(`[PE] 评分异常: ${e.message}`);
+    scores.pe = { score: 0, reason: 'PE：计算异常', details: e.message, evidence: {} };
+  }
+
+  // ========== V5 新增：募资规模评分 ==========
+  console.log(`\n[募资规模] ========== 开始 ==========`);
+  try {
+    // 优先 etnet ipoProceeds，备选 PDF 提取
+    let ipoProceeds = etnetData?.ipoProceeds || null;
+
+    if (!ipoProceeds) {
+      // PDF 中搜索净募资额（港元）
+      const noSpace = text.replace(/\s+/g, '');
+      const m = /所得款項凈額約([\d.]+)(?:億|百萬)?港元/.exec(noSpace)
+             || /净募资额约([\d.]+)億港元/.exec(noSpace);
+      if (m) {
+        const v = parseFloat(m[1]);
+        ipoProceeds = m[0].includes('億') ? Math.round(v * 1e8) : Math.round(v * 1e6);
+      }
+    }
+
+    let ipoSizeScore = 0;
+    let ipoSizeReason = '募资规模';
+    let ipoSizeDetails = '无募资数据';
+
+    if (ipoProceeds && ipoProceeds > 0) {
+      const proceedsHKDHundredMillion = ipoProceeds / 1e8;
+      ipoSizeDetails = `募资约${proceedsHKDHundredMillion.toFixed(2)}亿港元`;
+
+      if (ipoProceeds >= 3e8 && ipoProceeds <= 20e8) {
+        // 3亿-20亿：最佳区间，流动性好且机构可参与
+        ipoSizeScore  = 1;
+        ipoSizeReason = '募资规模适中(+1)';
+      } else if (ipoProceeds < 1e8) {
+        // <1亿：迷你盘，流动性差
+        ipoSizeScore  = -1;
+        ipoSizeReason = '募资规模过小(-1)';
+      } else if (ipoProceeds > 50e8) {
+        // >50亿：巨型IPO，易破发
+        ipoSizeScore  = -1;
+        ipoSizeReason = '募资规模过大(-1)';
+      } else {
+        // 1-3亿 或 20-50亿：中性
+        ipoSizeScore  = 0;
+        ipoSizeReason = '募资规模中性(0)';
+      }
+    }
+
+    scores.ipoSize = {
+      score:   ipoSizeScore,
+      reason:  ipoSizeReason,
+      details: ipoSizeDetails,
+      evidence: {
+        ipoProceeds,
+        source: etnetData?.ipoProceeds ? 'etnet' : 'PDF',
+        scoreRule: '3-20亿→+1，1-3亿/20-50亿→0，<1亿/>50亿→-1',
+      },
+    };
+    console.log(`[募资规模] ${ipoSizeReason}: ${ipoSizeDetails}`);
+  } catch (e) {
+    console.error(`[募资规模] 计算异常: ${e.message}`);
+    scores.ipoSize = { score: 0, reason: '募资规模：计算异常', details: e.message, evidence: {} };
+  }
+
+  // ========== 计算总分（V5）==========
+  // 总分范围: [-12, +10]
+  // oldShares[-2,0] + sponsor[-2,+2] + cornerstone[0,+2] + lockup[-2,0] +
+  // industry[-2,+2] + pe[-3,+3] + ipoSize[-1,+1]
   const totalScore = Object.values(scores).reduce((sum, item) => sum + item.score, 0);
-  
+
+  // V5 评级阈值（上调，因新增PE维度最高可+3）
   let rating;
-  if (totalScore >= 6) rating = '强烈推荐';
-  else if (totalScore >= 4) rating = '建议申购';
-  else if (totalScore >= 2) rating = '可以考虑';
-  else if (totalScore >= 0) rating = '谨慎申购';
-  else rating = '不建议';
-  
-  console.log(`[评分] 完成: 总分${totalScore}, ${rating}`);
-  
+  if      (totalScore >= 7)  rating = '强烈推荐';
+  else if (totalScore >= 4)  rating = '建议申购';
+  else if (totalScore >= 2)  rating = '可以考虑';
+  else if (totalScore >= 0)  rating = '谨慎申购';
+  else                       rating = '不建议';
+
+  console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
+  console.log(`[评分] 各维度: 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score} PE${scores.pe.score} 募资${scores.ipoSize.score}`);
+
   return {
-    stockCode: formatStockCode(stockCode),
+    stockCode:   formatStockCode(stockCode),
     totalScore,
     rating,
     scores,
+    // 展示项（不计入总分）
+    display: {
+      hasGreenShoe,
+      subscriptionMultiple: etnetData?.subscriptionMultiple || null,
+      listingDate:          etnetData?.listingDate || null,
+    },
+    _version: 'v5',
   };
 }
 
@@ -3576,7 +4052,7 @@ app.get('/api/score/:code', async (req, res) => {
     }
 
     // 评分
-    const scoreResult = scoreProspectus(pdfText, code);
+    const scoreResult = await scoreProspectus(pdfText, code);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒`);
