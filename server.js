@@ -2008,7 +2008,7 @@ function extractNetProfit(text) {
    * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
    */
   function toHKD(raw, currency, unit) {
-    const n = parseInt(raw.replace(/,/g, ''), 10);
+    const n = parseFloat(raw.replace(/,/g, ''));
     if (isNaN(n) || n <= 0) return null;
 
     let multiplier = 1;
@@ -2038,14 +2038,16 @@ function extractNetProfit(text) {
   ];
 
   const profitPatterns = [
-    { re: /股東應佔溢利[^\d（(]*([\d,]+)/, label: '股東應佔溢利', isLoss: false },
-    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
-    { re: /股東應佔虧損[^\d（(]*([\d,]+)/, label: '股東應佔虧損', isLoss: true },
-    { re: /本年溢利[^\d（(]*([\d,]+)/, label: '本年溢利', isLoss: false },
-    { re: /年內溢利[^\d（(]*([\d,]+)/, label: '年內溢利', isLoss: false },
-    { re: /期內溢利[^\d（(]*([\d,]+)/, label: '期內溢利', isLoss: false },
-    { re: /純利[^\d（(]*([\d,]+)/, label: '純利', isLoss: false },
-    { re: /年內虧損[^\d（(]*([\d,]+)/, label: '年內虧損', isLoss: true },
+    { re: /股東應佔溢利[^\d（(]*([\d,.]+)/, label: '股東應佔溢利', isLoss: false },
+    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,.]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
+    { re: /股東應佔虧損[^\d（(]*([\d,.]+)/, label: '股東應佔虧損', isLoss: true },
+    { re: /本年溢利[^\d（(]*([\d,.]+)/, label: '本年溢利', isLoss: false },
+    { re: /年內溢利[^\d（(]*([\d,.]+)/, label: '年內溢利', isLoss: false },
+    { re: /期內溢利[^\d（(]*([\d,.]+)/, label: '期內溢利', isLoss: false },
+    { re: /純利[^\d（(]*([\d,.]+)/, label: '純利', isLoss: false },
+    { re: /淨利潤(?:╱（虧損）)?[^\d（(]*([\d,.]+)/, label: '淨利潤', isLoss: false },
+    { re: /净利润(?:╱（亏损）)?[^\d（(]*([\d,.]+)/, label: '净利润', isLoss: false },
+    { re: /年內虧損[^\d（(]*([\d,.]+)/, label: '年內虧損', isLoss: true },
   ];
 
   for (const anchor of summaryAnchors) {
