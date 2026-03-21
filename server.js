@@ -2022,7 +2022,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
  *   C  EPS 反推（净利润 / 每股收益）
  * @returns {{ totalShares: number|null, confidence: string, source: string }}
  */
-function extractTotalShares(text) {
+function extractTotalShares(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
 
   // 辅助：从数字字符串解析整数
@@ -2083,7 +2083,10 @@ function extractTotalShares(text) {
   const epsHit = /每股基本盈利[^\d]*([\d.]+)港仙/.exec(noSpace)
               || /每股盈利[^\d]*([\d.]+)仙/.exec(noSpace);
   if (epsHit) {
-    const profit = extractNetProfit(text);
+    const profit = extractNetProfit(text, {
+      debug: options.debug,
+      marketCapHKD: options.marketCapHKD,
+    });
     if (profit && profit.hkdAmount > 0) {
       const epsHKD = parseFloat(epsHit[1]) / 100; // 港仙→港元
       if (epsHKD > 0) {
@@ -2104,6 +2107,7 @@ function extractTotalShares(text) {
 function extractNetProfit(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
   const debug = options.debug !== false;
+  const marketCapHKD = Number.isFinite(options.marketCapHKD) ? options.marketCapHKD : null;
   const FX_RATES = { HKD: 1, RMB: 1.1, USD: 7.8 };
   const SOFT_PENALTY_RULES = [
     { re: /revenue|收益|收入/i, code: 'revenue_context', score: -3 },
@@ -2457,10 +2461,6 @@ function extractNetProfit(text, options = {}) {
     };
   }
 
-  const marketCapHKD = Number.isFinite(etnetData?.marketCap) ? etnetData.marketCap
-    : Number.isFinite(etnetData?.offerPriceMid) && Number.isFinite(etnetData?.totalShares)
-      ? etnetData.offerPriceMid * etnetData.totalShares
-      : null;
   const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
   const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, reason } = chooseBestProfitCandidate(candidates);
 
@@ -4290,7 +4290,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
 
     // 2. 总股本：优先 ETNet 结构化字段，失败时回退 PDF（关键：不能用 H 股市值）
-    let sharesResult = extractTotalShares(text);
+    const initialMarketCapHKD = Number.isFinite(etnetData?.marketCap)
+      ? etnetData.marketCap
+      : Number.isFinite(offerPriceMid) && Number.isFinite(etnetData?.totalShares)
+        ? offerPriceMid * etnetData.totalShares
+        : null;
+    let sharesResult = extractTotalShares(text, { marketCapHKD: initialMarketCapHKD });
     if (etnetData?.totalShares && Number.isFinite(etnetData.totalShares) && etnetData.totalShares >= 1e7 && etnetData.totalShares <= 5e10) {
       sharesResult = {
         totalShares: etnetData.totalShares,
@@ -4302,7 +4307,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     const totalShares  = sharesResult.totalShares;
 
     // 3. 净利润：从 PDF 提取
-    const profitResult  = extractNetProfit(text);
+    const profitMarketCapHKD = Number.isFinite(etnetData?.marketCap)
+      ? etnetData.marketCap
+      : Number.isFinite(offerPriceMid) && Number.isFinite(totalShares)
+        ? offerPriceMid * totalShares
+        : initialMarketCapHKD;
+    const profitResult  = extractNetProfit(text, { marketCapHKD: profitMarketCapHKD });
     const netProfitHKD  = profitResult.hkdAmount;
 
     // 4. 同行 PE：通过 etnet 行业代码查询
