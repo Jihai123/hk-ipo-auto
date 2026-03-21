@@ -2236,6 +2236,56 @@ function extractNetProfit(text, options = {}) {
     return { ...candidate, currency: currencyCode, normalizedValue, netProfitHKD };
   }
 
+  function digitLength(rawValue) {
+    return String(rawValue || '').replace(/\D/g, '').length;
+  }
+
+  function hasResolvableUnit(candidate) {
+    return /千|'000|百萬|百万|million|億|亿/i.test(candidate.unit || '');
+  }
+
+  function hasResolvableCurrency(candidate) {
+    return /人民幣|人民币|RMB|CNY|美元|USD|US\$|港幣|港元|HKD|HK\$/i.test(candidate.currency || '');
+  }
+
+  function isCredibleProfitYear(candidate) {
+    return Number.isInteger(candidate.year) && candidate.year >= 2018 && candidate.year <= new Date().getUTCFullYear() + 1;
+  }
+
+  function validateProfitNumericStructure(candidate, marketCapHKD = null) {
+    const rejectFlags = [...(candidate.rejectFlags || [])];
+    const rawValue = String(candidate.rawValue || '').trim();
+    const numericValue = parseNumericValue(rawValue);
+    const digits = digitLength(rawValue);
+    const commaSegments = rawValue.split(/[,\uFF0C]/).filter(Boolean);
+    const commaCount = Math.max(0, commaSegments.length - 1);
+    const hasMergedPattern = /^\d{1,3}(,\d{3}){4,}$/.test(rawValue);
+    const hasInvalidThousandsGrouping = commaCount > 0
+      && commaSegments.slice(1).some(segment => segment.replace(/\D/g, '').length !== 3);
+    const mergedNumberDetected = hasMergedPattern
+      || (digits > 15 && commaCount > 3)
+      || (commaCount > 3 && hasInvalidThousandsGrouping);
+
+    if (mergedNumberDetected) rejectFlags.push('merged_number_suspected');
+
+    const isSmallPlainNumber = Number.isFinite(numericValue)
+      && Math.abs(numericValue) <= 24
+      && !hasResolvableUnit(candidate)
+      && candidate.fieldTier <= 3;
+    if (isSmallPlainNumber) rejectFlags.push('small_number_suspected');
+
+    const profitOutlier = digits > 15
+      || (Number.isFinite(candidate.netProfitHKD) && Number.isFinite(marketCapHKD) && marketCapHKD > 0
+        && Math.abs(candidate.netProfitHKD) > marketCapHKD * 50);
+    if (profitOutlier) rejectFlags.push('profit_outlier');
+
+    return {
+      rejectFlags: Array.from(new Set(rejectFlags)),
+      mergedNumberDetected,
+      profitDigitLength: digits,
+    };
+  }
+
   function extractNetProfitCandidates() {
     const candidates = [];
     for (const section of locateFinancialSections()) {
@@ -2278,7 +2328,7 @@ function extractNetProfit(text, options = {}) {
     return candidates.map(normalizeProfitCandidate);
   }
 
-  function scoreProfitCandidate(candidate) {
+  function scoreProfitCandidate(candidate, marketCapHKD = null) {
     let score = 0;
     score += ({ table: 80, section: 55, text_fallback: 20, etnet_fallback: 10 }[candidate.sourceLevel] || 0);
     score += ({ 1: 45, 2: 25, 3: 8 }[candidate.fieldTier] || 0);
@@ -2313,6 +2363,12 @@ function extractNetProfit(text, options = {}) {
       candidate.rejectFlag = true;
     }
 
+    const numericValidation = validateProfitNumericStructure(candidate, marketCapHKD);
+    candidate.rejectFlags = Array.from(new Set([...(candidate.rejectFlags || []), ...numericValidation.rejectFlags]));
+    candidate.rejectFlag = candidate.rejectFlag || candidate.rejectFlags.length > 0;
+    candidate.mergedNumberDetected = numericValidation.mergedNumberDetected;
+    candidate.profitDigitLength = numericValidation.profitDigitLength;
+
     return { ...candidate, score };
   }
 
@@ -2328,15 +2384,48 @@ function extractNetProfit(text, options = {}) {
       return Math.abs(b.netProfitHKD || 0) - Math.abs(a.netProfitHKD || 0);
     });
 
-    const validAnnual = sorted.filter(c => !c.rejectFlag && c.periodType === 'annual');
-    const valid = validAnnual.length ? validAnnual : sorted.filter(c => !c.rejectFlag);
-    if (!valid.length) return { best: null, topCandidates: sorted.slice(0, 5), reason: 'insufficient_data' };
+    const debugCandidates = sorted.map(candidate => {
+      const rejectFlags = Array.from(new Set([
+        ...(candidate.rejectFlags || []),
+        ...(hasResolvableUnit(candidate) ? [] : ['unresolved_unit']),
+        ...(hasResolvableCurrency(candidate) ? [] : ['unresolved_currency']),
+        ...(isCredibleProfitYear(candidate) ? [] : ['untrusted_year']),
+        ...(!Number.isFinite(candidate.netProfitHKD) ? ['invalid_amount'] : []),
+      ]));
+      return {
+        ...candidate,
+        debugRejectFlags: rejectFlags,
+      };
+    });
+    const usableCandidates = debugCandidates.filter(c =>
+      c.debugRejectFlags.length === 0
+      && !c.mergedNumberDetected
+      && Number.isFinite(c.netProfitHKD)
+    );
+    const rejectedCandidates = debugCandidates.filter(c => !usableCandidates.includes(c));
+    const rejectReasonMap = rejectedCandidates.reduce((acc, candidate) => {
+      acc[`${candidate.source}:${candidate.label}:${candidate.rawValue}`] = candidate.debugRejectFlags || [];
+      return acc;
+    }, {});
+    const usableAnnual = usableCandidates.filter(c => c.periodType === 'annual');
+    const valid = usableAnnual.length ? usableAnnual : usableCandidates;
+    if (!valid.length) {
+      return {
+        best: null,
+        topCandidates: sorted.slice(0, 5),
+        debugCandidates,
+        usableCandidates,
+        rejectedCandidates,
+        rejectReasonMap,
+        reason: 'insufficient_data',
+      };
+    }
 
     const best = { ...valid[0] };
     const runnerUp = valid[1] || null;
     const topGapTooSmall = !!runnerUp && Math.abs(best.score - runnerUp.score) < 8;
     const reason = [];
-    if (!validAnnual.length && best.periodType === 'interim') reason.push('interim_only');
+    if (!usableAnnual.length && best.periodType === 'interim') reason.push('interim_only');
     if (topGapTooSmall) reason.push('top_gap_too_small');
     if (best.netProfitHKD <= 0) reason.push('non_positive_profit');
 
@@ -2344,14 +2433,36 @@ function extractNetProfit(text, options = {}) {
       ? 'high'
       : (!topGapTooSmall && best.periodType === 'annual' ? 'medium' : 'low');
     if (reason.includes('interim_only')) best.confidence = 'low';
-    best.reason = reason.length ? reason.join(',') : 'ok';
+    if (reason.includes('top_gap_too_small')) {
+      best.netProfitHKD = null;
+      best.normalizedValue = null;
+      best.reason = 'ambiguous_profit_candidates';
+    } else if (reason.includes('interim_only')) {
+      best.netProfitHKD = null;
+      best.normalizedValue = null;
+      best.reason = 'insufficient_data';
+    } else {
+      best.reason = reason.length ? reason.join(',') : 'ok';
+    }
     best.topGapTooSmall = topGapTooSmall;
     best.runnerUpScore = runnerUp?.score ?? null;
-    return { best, topCandidates: sorted.slice(0, 5), reason: best.reason };
+    return {
+      best,
+      topCandidates: sorted.slice(0, 5),
+      debugCandidates,
+      usableCandidates,
+      rejectedCandidates,
+      rejectReasonMap,
+      reason: best.reason,
+    };
   }
 
-  const candidates = extractNetProfitCandidates().map(scoreProfitCandidate);
-  const { best, topCandidates, reason } = chooseBestProfitCandidate(candidates);
+  const marketCapHKD = Number.isFinite(etnetData?.marketCap) ? etnetData.marketCap
+    : Number.isFinite(etnetData?.offerPriceMid) && Number.isFinite(etnetData?.totalShares)
+      ? etnetData.offerPriceMid * etnetData.totalShares
+      : null;
+  const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
+  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, reason } = chooseBestProfitCandidate(candidates);
 
   if (debug) {
     const topSummary = topCandidates.map(c => ({
@@ -2365,6 +2476,15 @@ function extractNetProfit(text, options = {}) {
       rejectFlags: c.rejectFlags,
     }));
     console.log('[netProfit] Top candidates:', JSON.stringify(topSummary, null, 2));
+    console.log('[netProfit] debugCandidates:', JSON.stringify((debugCandidates || []).map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      score: c.score,
+      year: c.year,
+      rejectFlags: c.debugRejectFlags || c.rejectFlags,
+      mergedNumberDetected: !!c.mergedNumberDetected,
+      profitDigitLength: c.profitDigitLength || digitLength(c.rawValue),
+    })), null, 2));
   }
 
   if (!best) {
@@ -2388,10 +2508,13 @@ function extractNetProfit(text, options = {}) {
       rejectFlags: [],
       snippet: '',
       topCandidates,
+      usableCandidates,
+      rejectedCandidates,
+      rejectReasonMap,
     };
   }
 
-  console.log(`[netProfit] 最佳候选: ${best.source}/${best.label}, ${best.netProfitHKD.toLocaleString()} HKD, confidence=${best.confidence}, reason=${best.reason}`);
+  console.log(`[netProfit] 最佳候选: ${best.source}/${best.label}, ${(best.netProfitHKD ?? 'null')} HKD, confidence=${best.confidence}, reason=${best.reason}`);
   return {
     hkdAmount: best.netProfitHKD,
     netProfitHKD: best.netProfitHKD,
@@ -2413,6 +2536,12 @@ function extractNetProfit(text, options = {}) {
     isInterim: best.periodType === 'interim',
     conflict: !!best.topGapTooSmall,
     topCandidates,
+    usableCandidates,
+    rejectedCandidates,
+    rejectReasonMap,
+    debugCandidates,
+    profitDigitLength: best.profitDigitLength || digitLength(best.rawValue),
+    mergedNumberDetected: !!best.mergedNumberDetected,
   };
 }
 
@@ -2499,6 +2628,10 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
       details: `净利润或PE数量级异常（PE ${computedPE.toFixed(1)}x，净利润 ${netProfitHKD.toLocaleString()} HKD），按数据异常暂不评分`,
       evidence,
     };
+  }
+
+  if (computedPE < 0.5) {
+    evidence.warning = 'suspicious_low_pe';
   }
 
   let score, reason, details;
@@ -4201,7 +4334,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       industry: etnetData.industry || null,
     } : {};
     console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
-    console.log('[PE] debug=', JSON.stringify({
+    const peDebug = {
       topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
         label: c.label,
         rawValue: c.rawValue,
@@ -4211,9 +4344,27 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         penalties: c.penalties?.map(p => p.code) || [],
         rejectFlags: c.rejectFlags || [],
       })),
+      usableCandidates: (profitResult.usableCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        score: c.score,
+      })),
+      rejectedCandidates: (profitResult.rejectedCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        rejectFlags: c.rejectFlags || [],
+      })),
+      rejectReasonMap: profitResult.rejectReasonMap || {},
+      computedPE: null,
+      profitDigitLength: profitResult.profitDigitLength ?? null,
+      mergedNumberDetected: !!profitResult.mergedNumberDetected,
       etnetFieldsRaw,
       sitePE: etnetData?.sitePE || null,
-    }, null, 2));
+    };
     const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, {
       profitConfidence: profitResult.confidence || 'none',
       profitSource: profitResult.source || '未找到',
@@ -4223,6 +4374,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       profitTopGapTooSmall: !!profitResult.conflict,
       sitePE: etnetData?.sitePE || null,
     });
+    peDebug.computedPE = peResult.evidence.computedPE ?? null;
+    console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
     let peStatus = 'neutral';
     let peReason = peResult.reason;
     let peConfidence = 'high';
@@ -4234,6 +4387,10 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       peStatus = 'insufficient_data';
       peReason = 'PE：发行价/总股本/净利润数据不足，暂无法判断估值中性';
       peConfidence = sharesResult.confidence === 'none' && profitResult.confidence === 'none' ? 'none' : 'low';
+    } else if (peResult.evidence.warning === 'suspicious_low_pe') {
+      peStatus = 'unknown';
+      peReason = 'PE：结果偏低需人工复核';
+      peConfidence = 'low';
     } else if (!peerMedianPE || peerMedianPE <= 0) {
       peStatus = 'unknown';
       peReason = 'PE：缺少可靠同行PE对标，0分不代表估值中性';
@@ -4263,6 +4420,26 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         profitNormalizedValue: profitResult.normalizedValue,
         profitPenalties: profitResult.penalties || [],
         profitRejectFlags: profitResult.rejectFlags || [],
+        usableCandidates: (profitResult.usableCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          score: c.score,
+        })),
+        rejectedCandidates: (profitResult.rejectedCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          rejectFlags: c.rejectFlags || [],
+        })),
+        rejectReasonMap: profitResult.rejectReasonMap || {},
+        computedPE: peResult.evidence.computedPE ?? null,
+        profitDigitLength: profitResult.profitDigitLength ?? null,
+        mergedNumberDetected: !!profitResult.mergedNumberDetected,
         topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
           label: c.label,
           rawValue: c.rawValue,
