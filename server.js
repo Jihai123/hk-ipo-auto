@@ -693,6 +693,38 @@ function normalizeText(text) {
  * @param {string} sponsorName - 保荐人名称
  * @returns {boolean}
  */
+
+function getLocalUnitContext(block, fallbackCurrency = '人民幣', fallbackUnit = '千元') {
+  if (!block) return { currency: fallbackCurrency, unit: fallbackUnit };
+
+  const normalized = block.replace(/\s+/g, '');
+  const hints = [
+    /(?:單位[：:]?)?(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)\s*([千百萬億万千百万元亿元]+)?/i,
+    /([千百萬億万千百万元亿元]+)\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)/i,
+  ];
+
+  for (const re of hints) {
+    const m = re.exec(normalized);
+    if (!m) continue;
+
+    const currency = /^(千|百|萬|万|億|亿)/.test(m[1]) ? m[2] : m[1];
+    const unit = /^(千|百|萬|万|億|亿)/.test(m[1]) ? m[1] : (m[2] || fallbackUnit);
+
+    return { currency, unit };
+  }
+
+  return { currency: fallbackCurrency, unit: fallbackUnit };
+}
+
+function inferLocalUnitContext(block) {
+  return getLocalUnitContext(block, '人民幣', '千元');
+}
+
+function extractSnippet(text, index, radius = 80) {
+  if (!text || index === undefined || index === null || index < 0) return '';
+  return text.slice(Math.max(0, index - radius), Math.min(text.length, index + radius)).replace(/\s+/g, ' ').trim();
+}
+
 function matchSponsorName(searchText, sponsorName) {
   // 直接匹配
   if (searchText.includes(sponsorName)) return true;
@@ -1804,7 +1836,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
   }
 
   // ===== 1️⃣ 定位表格区域 =====
-  const anchorMatch = cornerstoneSection.match(/下表載列基石配售的詳情[:：]?/);
+  const anchorMatch = cornerstoneSection.match(/下表載列基石(?:配售|投資)的詳情[:：]?/);
   if (!anchorMatch) {
     console.log('[表格定位] ❌ 没找到表格锚点');
     return [];
@@ -1812,11 +1844,91 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
   let tableText = cornerstoneSection.slice(anchorMatch.index, anchorMatch.index + 10000);
 
+  const cleanCornerstoneName = (rawName) => {
+    if (!rawName) return '';
+
+    let name = rawName
+      .replace(/^[\-–—•·\s]+/, '')
+      .replace(/\.{2,}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    name = name
+      .replace(/^(?:[)）]|下表載列基石(?:配售|投資)的詳情[:：]?|基石投資者|基石投资者|認購金額|认购金额|數目|数目|百分比|發售股份|发售股份|股份概約|股份概约|股本概約|股本概约)+/g, '')
+      .replace(/^[^A-Za-z一-龥（(]+/, '')
+      .trim();
+
+    name = name
+      .replace(/[（(]([^）)]*(?:與[^）)]*相關|与[^）)]*相关|最終客戶|最终客户|場外掉期|场外掉期|有關|有关|相關|相关|附註|附注)[^）)]*)[）)]/g, '')
+      .replace(/最終客戶|最终客户|場外掉期|场外掉期|有關|有关|相關|相关/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (/^(資本|资本|投資|投资|基金|管理|控股|集團|集团)$/.test(name)) return '';
+
+    return name;
+  };
+
+  const isNoisyInvestorName = (name) => {
+    if (!name) return true;
+    if (/^(總計|百萬美元|百万美元|百萬港元|百万港元|美元|港元|人民幣|人民币)$/.test(name)) return true;
+    if (/^[（(][^）)]+[）)]$/.test(name)) return true;
+    if (/^(資本|资本|投資|投资|基金|管理|控股|集團|集团)$/.test(name)) return true;
+    if (/(百分比|認購金額|认购金额|股本概約|股本概约|股份概約|股份概约)/.test(name)) return true;
+    return false;
+  };
+
+  const rawTableText = tableText;
+
+  // ===== 2️⃣.1 优先按行提取，保留多行机构全名 =====
+  const lines = rawTableText
+    .replace(/–\s*\d+\s*–/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/\u000c/g, '').trim())
+    .filter(Boolean);
+
+  const lineRegex = /(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*(?:百萬|百万)?(?:美元|港元|人民幣|人民币)?\s+((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s+(\d+\.\d+)%/;
+  const lineInvestors = [];
+  let pendingNameParts = [];
+
+  for (const line of lines) {
+    if (/^基石投資者$|^基於發售價|^假設超額配股權|^總計/.test(line)) {
+      pendingNameParts = [];
+      continue;
+    }
+
+    const match = line.match(lineRegex);
+    if (!match) {
+      if (!/^(認購金額|數目|百分比|將予認購的|發售股份|股份概約|股本概約)/.test(line)) {
+        pendingNameParts.push(line.replace(/\.{2,}/g, ' ').trim());
+      }
+      continue;
+    }
+
+    const inlineName = match[1].replace(/\.{2,}/g, ' ').trim();
+    const combinedName = cleanCornerstoneName([...pendingNameParts, inlineName].filter(Boolean).join(' '));
+    pendingNameParts = [];
+
+    if (isNoisyInvestorName(combinedName)) continue;
+
+    lineInvestors.push({
+      name: combinedName,
+      amount: parseFloat(match[2]),
+      shares: parseInt(match[3].replace(/,/g, ''), 10),
+      percent: parseFloat(match[4]),
+    });
+  }
+
   // ===== 2️⃣ PDF 清洗 =====
   tableText = tableText
     .replace(/\.{2,}/g, ' ')          // 点线
     .replace(/–\s*\d+\s*–/g, ' ')     // 页码
     .replace(/\s+/g, ' ');            // 压缩空白
+
+  tableText = tableText.replace(
+    /^.*?基石投資者認購金額\(1\)數目\(2\)百分比百分比百分比百分比/,
+    ''
+  );
 
   console.log('[表格文本预览]', tableText.slice(0, 400));
 
@@ -1829,28 +1941,44 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
    * Oaktree 30 5,106,200 5.45%
    * 歐萬達基金 20 3,404,100 3.64%
    */
-  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3})\s*([\d,]{6,})\s*\d+\.\d+%/g;
+  const tableRowPattern = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及\s]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*(?:百萬|百万)?(?:美元|港元|人民幣|人民币)?\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
 
-  const investors = [];
-  let match;
+  const investors = lineInvestors.slice();
+  let tableMatch;
 
-  while ((match = rowRegex.exec(tableText)) !== null) {
-    let name = match[1].replace(/\s+/g, ' ').trim();
+  while ((tableMatch = tableRowPattern.exec(tableText)) !== null) {
+    let name = tableMatch[1].replace(/\s+/g, ' ').trim();
 
     // 过滤總計
     if (name.includes('總計')) continue;
 
+    const cleanedName = cleanCornerstoneName(name);
+    if (isNoisyInvestorName(cleanedName)) continue;
+
+    const investor = {
+      name: cleanedName,
+      amount: parseFloat(tableMatch[2]),
+      shares: parseInt(tableMatch[3].replace(/,/g, ''), 10),
+      percent: parseFloat(tableMatch[4]),
+    };
+
     console.log(`[识别] ✅ ${name}`);
-    investors.push(name);
+    investors.push(investor);
   }
 
-  const unique = [...new Set(investors)];
+  const unique = [];
+  const seenNames = new Set();
+  for (const investor of investors) {
+    if (seenNames.has(investor.name)) continue;
+    seenNames.add(investor.name);
+    unique.push(investor);
+  }
 
   console.log(`\n[基石投资者] 🎯 成功识别 ${unique.length} 个基石投资者`);
-  console.log(unique);
+  console.log(unique.map(inv => inv.name));
   console.log('[基石投资者] ====== 解析结束 ======\n');
 
-  return unique.map(name => ({ name }));
+  return unique;
 }
 
 // 使用示例
@@ -1905,7 +2033,7 @@ function extractTotalShares(text) {
         const n = parseShares(hit[1]);
         if (isReasonable(n)) {
           console.log(`[totalShares] 策略A命中: ${n.toLocaleString()}股`);
-          return { totalShares: n, confidence: 'high', source: '股本章节(緊隨全球發售完成後)' };
+          return { totalShares: n, confidence: 'high', source: '股本章节(緊隨全球發售完成後)', snippet: nearby.slice(0, 200) };
         }
       }
     }
@@ -1923,7 +2051,7 @@ function extractTotalShares(text) {
       const n = parseShares(hit[1]);
       if (isReasonable(n)) {
         console.log(`[totalShares] 策略B命中: ${n.toLocaleString()}股`);
-        return { totalShares: n, confidence: 'medium', source: '股本結構表格' };
+        return { totalShares: n, confidence: 'medium', source: '股本結構表格', snippet: nearby.slice(0, 200) };
       }
     }
   }
@@ -1939,14 +2067,14 @@ function extractTotalShares(text) {
         const shares = Math.round(profit.hkdAmount / epsHKD);
         if (isReasonable(shares)) {
           console.log(`[totalShares] 策略C(EPS反推): ${shares.toLocaleString()}股`);
-          return { totalShares: shares, confidence: 'low', source: 'EPS反推' };
+          return { totalShares: shares, confidence: 'low', source: 'EPS反推', snippet: extractSnippet(noSpace, epsHit.index, 120) };
         }
       }
     }
   }
 
   console.log('[totalShares] 未提取到总股本');
-  return { totalShares: null, confidence: 'none', source: '未找到' };
+  return { totalShares: null, confidence: 'none', source: '未找到', snippet: '' };
 }
 
 // ==================== V5：PDF 净利润提取 ====================
@@ -1968,7 +2096,7 @@ function extractNetProfit(text) {
    * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
    */
   function toHKD(raw, currency, unit) {
-    const n = parseInt(raw.replace(/,/g, ''), 10);
+    const n = parseFloat(raw.replace(/,/g, ''));
     if (isNaN(n) || n <= 0) return null;
 
     let multiplier = 1;
@@ -1984,11 +2112,6 @@ function extractNetProfit(text) {
     return baseAmount; // 未知货币，原值返回
   }
 
-  // 识别财务报告单位（页面通常有 "（人民幣千元）" 这样的表头）
-  const unitHint = /（?(人民幣|港幣|港元|美元|RMB|HKD|USD)([千百萬億千万亿元]+)?）?/.exec(noSpace);
-  const defaultCurrency = unitHint ? unitHint[1] : '人民幣';
-  const defaultUnit     = unitHint ? (unitHint[2] || '千元') : '千元';
-
   // ── 策略 A：搜索財務資料概要章节 ──
   const summaryAnchors = [
     /財務資料概要/,
@@ -1998,14 +2121,16 @@ function extractNetProfit(text) {
   ];
 
   const profitPatterns = [
-    { re: /股東應佔溢利[^\d（(]*([\d,]+)/, label: '股東應佔溢利', isLoss: false },
-    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
-    { re: /股東應佔虧損[^\d（(]*([\d,]+)/, label: '股東應佔虧損', isLoss: true },
-    { re: /本年溢利[^\d（(]*([\d,]+)/, label: '本年溢利', isLoss: false },
-    { re: /年內溢利[^\d（(]*([\d,]+)/, label: '年內溢利', isLoss: false },
-    { re: /期內溢利[^\d（(]*([\d,]+)/, label: '期內溢利', isLoss: false },
-    { re: /純利[^\d（(]*([\d,]+)/, label: '純利', isLoss: false },
-    { re: /年內虧損[^\d（(]*([\d,]+)/, label: '年內虧損', isLoss: true },
+    { re: /股東應佔溢利[^\d（(]*([\d,.]+)/, label: '股東應佔溢利', isLoss: false },
+    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,.]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
+    { re: /股東應佔虧損[^\d（(]*([\d,.]+)/, label: '股東應佔虧損', isLoss: true },
+    { re: /本年溢利[^\d（(]*([\d,.]+)/, label: '本年溢利', isLoss: false },
+    { re: /年內溢利[^\d（(]*([\d,.]+)/, label: '年內溢利', isLoss: false },
+    { re: /期內溢利[^\d（(]*([\d,.]+)/, label: '期內溢利', isLoss: false },
+    { re: /純利[^\d（(]*([\d,.]+)/, label: '純利', isLoss: false },
+    { re: /淨利潤(?:╱（虧損）)?[^\d（(]*([\d,.]+)/, label: '淨利潤', isLoss: false },
+    { re: /净利润(?:╱（亏损）)?[^\d（(]*([\d,.]+)/, label: '净利润', isLoss: false },
+    { re: /年內虧損[^\d（(]*([\d,.]+)/, label: '年內虧損', isLoss: true },
   ];
 
   for (const anchor of summaryAnchors) {
@@ -2016,11 +2141,19 @@ function extractNetProfit(text) {
     for (const { re, label, isLoss } of profitPatterns) {
       const hit = re.exec(section);
       if (!hit) continue;
-      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+      const localContext = inferLocalUnitContext(section);
+      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
       if (!hkd) continue;
       const amount = isLoss ? -hkd : hkd;
       console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
-      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `財務概要(${label})` };
+      return {
+        hkdAmount: amount,
+        currency: localContext.currency,
+        unit: localContext.unit,
+        source: `財務概要(${label})`,
+        confidence: 'high',
+        snippet: extractSnippet(section, hit.index, 120),
+      };
     }
   }
 
@@ -2031,11 +2164,19 @@ function extractNetProfit(text) {
     for (const { re, label, isLoss } of profitPatterns) {
       const hit = re.exec(after);
       if (!hit) continue;
-      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+      const localContext = inferLocalUnitContext(after);
+      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
       if (!hkd) continue;
       const amount = isLoss ? -hkd : hkd;
       console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
-      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `所得稅附近(${label})` };
+      return {
+        hkdAmount: amount,
+        currency: localContext.currency,
+        unit: localContext.unit,
+        source: `所得稅附近(${label})`,
+        confidence: 'medium',
+        snippet: extractSnippet(after, hit.index, 120),
+      };
     }
   }
 
@@ -2043,15 +2184,24 @@ function extractNetProfit(text) {
   for (const { re, label, isLoss } of profitPatterns) {
     const hit = re.exec(noSpace);
     if (!hit) continue;
-    const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
+    const localBlock = noSpace.slice(Math.max(0, hit.index - 800), Math.min(noSpace.length, hit.index + 800));
+    const localContext = inferLocalUnitContext(localBlock);
+    const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
     if (!hkd) continue;
     const amount = isLoss ? -hkd : hkd;
     console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
-    return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `全文搜索(${label})` };
+    return {
+      hkdAmount: amount,
+      currency: localContext.currency,
+      unit: localContext.unit,
+      source: `全文搜索(${label})`,
+      confidence: 'low',
+      snippet: extractSnippet(noSpace, hit.index, 120),
+    };
   }
 
   console.log('[netProfit] 未提取到净利润');
-  return { hkdAmount: null, currency: null, unit: null, source: '未找到' };
+  return { hkdAmount: null, currency: null, unit: null, source: '未找到', confidence: 'none', snippet: '' };
 }
 
 // ==================== V5：PE 评分函数（独立，供主流程调用）====================
@@ -3263,12 +3413,18 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[基石投资者] ========== 完成 ==========`);
 
   // V5：区分明星基石数量（≥3家 +2，1-2家 +1，无 0）
+  const cornerstoneConfidence = cornerstoneSection
+    ? (tableInvestors.length > 0 ? 'high' : 'medium')
+    : (investorSearchText ? 'low' : 'none');
+
   if (uniqueInvestors.length >= 3) {
     scores.cornerstone = {
       score: 2,
       reason: `有明星基石(${uniqueInvestors.length}家)`,
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
+      status: 'neutral',
+      confidence: cornerstoneConfidence,
       evidence: { ...cornerstoneEvidence, scoreRule: `≥3家明星基石，+2分` },
     };
   } else if (uniqueInvestors.length > 0) {
@@ -3277,15 +3433,29 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       reason: `有明星基石(${uniqueInvestors.length}家)`,
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
+      status: 'neutral',
+      confidence: cornerstoneConfidence,
       evidence: { ...cornerstoneEvidence, scoreRule: `1-2家明星基石，+1分` },
     };
   } else {
+    const hasAnyCornerstoneData = tableInvestors.length > 0 || (cornerstoneSection && cornerstoneSection.length > 200);
+    const cornerstoneStatus = hasAnyCornerstoneData ? 'neutral' : 'unknown';
+    const cornerstoneReason = hasAnyCornerstoneData ? '无明星基石' : '基石数据缺失';
+    const cornerstoneDetails = hasAnyCornerstoneData
+      ? '未发现指定名单中的基石投资者'
+      : '未定位到可靠的基石章节或表格，暂无法判断是否存在明星基石';
+
     scores.cornerstone = {
       score: 0,
-      reason: '无明星基石',
-      details: '未发现指定名单中的基石投资者',
+      reason: cornerstoneReason,
+      details: cornerstoneDetails,
       investors: [],
-      evidence: { ...cornerstoneEvidence, scoreRule: '未匹配到明星基石名单，0分' },
+      status: cornerstoneStatus,
+      confidence: cornerstoneConfidence,
+      evidence: {
+        ...cornerstoneEvidence,
+        scoreRule: cornerstoneStatus === 'neutral' ? '未匹配到明星基石名单，0分' : '基石章节/表格缺失，暂不判定为中性',
+      },
     };
   }
   
@@ -3736,22 +3906,46 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
     console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
     const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE);
+    let peStatus = 'neutral';
+    let peReason = peResult.reason;
+    let peConfidence = 'high';
+    if (netProfitHKD !== null && netProfitHKD <= 0) {
+      peStatus = 'not_applicable';
+      peReason = 'PE：公司未盈利，暂不适用PE比较';
+      peConfidence = profitResult.confidence || 'medium';
+    } else if (!offerPriceMid || !totalShares || !netProfitHKD) {
+      peStatus = 'insufficient_data';
+      peReason = 'PE：发行价/总股本/净利润数据不足，暂无法判断估值中性';
+      peConfidence = sharesResult.confidence === 'none' && profitResult.confidence === 'none' ? 'none' : 'low';
+    } else if (!peerMedianPE || peerMedianPE <= 0) {
+      peStatus = 'unknown';
+      peReason = 'PE：缺少可靠同行PE对标，0分不代表估值中性';
+      peConfidence = 'medium';
+    }
+
     scores.pe = {
       score:   peResult.score,
-      reason:  peResult.reason,
+      reason:  peReason,
       details: peResult.details,
+      status: peStatus,
+      confidence: peConfidence,
       evidence: {
         ...peResult.evidence,
-        sharesSource:  sharesResult.source,
+        sharesSource: sharesResult.source,
         sharesConfidence: sharesResult.confidence,
-        profitSource:  profitResult.source,
+        sharesSnippet: sharesResult.snippet || '',
+        profitSource: profitResult.source,
+        profitConfidence: profitResult.confidence || 'none',
+        profitSnippet: profitResult.snippet || '',
+        profitCurrency: profitResult.currency,
+        profitUnit: profitResult.unit,
         industry,
         scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
       },
     };
   } catch (e) {
     console.error(`[PE] 评分异常: ${e.message}`);
-    scores.pe = { score: 0, reason: 'PE：计算异常', details: e.message, evidence: {} };
+    scores.pe = { score: 0, reason: 'PE：计算异常，0分不代表估值中性', details: e.message, status: 'error', confidence: 'none', evidence: {} };
   }
 
   // ========== V5 新增：募资规模评分 ==========
@@ -3774,10 +3968,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     let ipoSizeScore = 0;
     let ipoSizeReason = '募资规模';
     let ipoSizeDetails = '无募资数据';
+    let ipoSizeStatus = 'insufficient_data';
+    let ipoSizeConfidence = ipoProceeds ? 'high' : 'none';
 
     if (ipoProceeds && ipoProceeds > 0) {
       const proceedsHKDHundredMillion = ipoProceeds / 1e8;
       ipoSizeDetails = `募资约${proceedsHKDHundredMillion.toFixed(2)}亿港元`;
+      ipoSizeStatus = 'neutral';
+      ipoSizeConfidence = etnetData?.ipoProceeds ? 'high' : 'medium';
 
       if (ipoProceeds >= 3e8 && ipoProceeds <= 20e8) {
         // 3亿-20亿：最佳区间，流动性好且机构可参与
@@ -3796,12 +3994,17 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         ipoSizeScore  = 0;
         ipoSizeReason = '募资规模中性(0)';
       }
+    } else {
+      ipoSizeReason = '募资规模：数据不足，0分不代表规模中性';
+      ipoSizeDetails = '未提取到可靠募资净额';
     }
 
     scores.ipoSize = {
       score:   ipoSizeScore,
       reason:  ipoSizeReason,
       details: ipoSizeDetails,
+      status: ipoSizeStatus,
+      confidence: ipoSizeConfidence,
       evidence: {
         ipoProceeds,
         source: etnetData?.ipoProceeds ? 'etnet' : 'PDF',
@@ -3811,7 +4014,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     console.log(`[募资规模] ${ipoSizeReason}: ${ipoSizeDetails}`);
   } catch (e) {
     console.error(`[募资规模] 计算异常: ${e.message}`);
-    scores.ipoSize = { score: 0, reason: '募资规模：计算异常', details: e.message, evidence: {} };
+    scores.ipoSize = { score: 0, reason: '募资规模：计算异常，0分不代表规模中性', details: e.message, status: 'error', confidence: 'none', evidence: {} };
   }
 
   // ========== 计算总分（V5）==========
