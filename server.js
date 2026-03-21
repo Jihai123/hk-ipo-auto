@@ -2101,177 +2101,318 @@ function extractTotalShares(text) {
 }
 
 // ==================== V5：PDF 净利润提取 ====================
-/**
- * 从招股书提取最近完整财年归属母公司净利润（转换为港元）
- *
- * 优先级：股東應佔溢利 > 本年溢利 > 年內溢利 > 純利
- * 单位识别：人民币千元（最常见）/ 港元百万 / 港元千元
- * @returns {{ hkdAmount: number|null, currency: string, unit: string, source: string }}
- */
-function extractNetProfit(text) {
+function extractNetProfit(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
-
-  function normalizeUnitCurrency(raw, currency, unit) {
-    const n = parseFloat(String(raw || '').replace(/[,，]/g, ''));
-    if (isNaN(n) || n <= 0) return null;
-
-    const normalizedUnit = unit || '';
-    let multiplier = 1;
-    if (/千|'000/i.test(normalizedUnit)) multiplier = 1e3;
-    else if (/百萬|百万|million/i.test(normalizedUnit)) multiplier = 1e6;
-    else if (/億|亿|billion/i.test(normalizedUnit)) multiplier = 1e8;
-
-    const baseAmount = n * multiplier;
-    if (/人民幣|人民币|RMB|CNY/i.test(currency || '')) return Math.round(baseAmount * 1.10);
-    if (/港幣|港元|HKD/i.test(currency || '')) return Math.round(baseAmount);
-    if (/美元|USD/i.test(currency || '')) return Math.round(baseAmount * 7.80);
-    return Math.round(baseAmount);
-  }
-
-  function locateFinancialSection() {
-    const summarySection = extractSection(
-      noSpace,
-      [/財務資料概要/i, /財務資料撮要/i, /主要財務資料/i, /财务资料概要/i, /FinancialSummary/i, /Summary/i],
-      [/風險因素/i, /风险因素/i, /業務/i, /业务/i, /BUSINESS/i],
-      20000,
-      true
-    );
-
-    const incomeSection = extractSection(
-      noSpace,
-      [/綜合損益表/i, /综合损益表/i, /綜合全面收益表/i, /ConsolidatedStatementsofProfitorLoss/i],
-      [/綜合財務狀況表/i, /综合财务状况表/i, /ConsolidatedStatementsofFinancialPosition/i],
-      18000,
-      true
-    );
-
-    const sections = [];
-    if (summarySection) sections.push({ text: summarySection, source: '財務概要', confidence: 'high' });
-    if (incomeSection) sections.push({ text: incomeSection, source: '綜合損益表', confidence: 'high' });
-    if (sections.length > 0) return sections;
-
-    return [{ text: noSpace, source: '全文搜索', confidence: 'low' }];
-  }
-
-  const defaultContext = getLocalUnitContext(noSpace, '人民幣', '千元');
-  const resolveContext = (block, hitIndex) => {
-    const localBlock = block.slice(Math.max(0, hitIndex - 260), Math.min(block.length, hitIndex + 260));
-    return getClosestUnitContext(
-      localBlock,
-      Math.min(260, hitIndex),
-      defaultContext.currency,
-      defaultContext.unit
-    );
-  };
-
+  const debug = options.debug !== false;
+  const FX_RATES = { HKD: 1, RMB: 1.1, USD: 7.8 };
+  const SOFT_PENALTY_RULES = [
+    { re: /revenue|收益|收入/i, code: 'revenue_context', score: -3 },
+    { re: /grossprofit|毛利/i, code: 'gross_profit_context', score: -3 },
+    { re: /每股|eps|earningspershare/i, code: 'eps_context', score: -8 },
+    { re: /附註|附注|note\d*/i, code: 'note_context', score: -8 },
+    { re: /adjusted|經調整|经调整|非ifrs/i, code: 'adjusted_context', score: -20 },
+    { re: /分部|segment/i, code: 'segment_context', score: -20 },
+  ];
+  const HARD_REJECT_RULES = [
+    { re: /beforetax|pretax|除稅前|除税前/i, code: 'before_tax' },
+    { re: /operatingprofit|經營溢利|经营利润/i, code: 'operating_profit' },
+    { re: /adjustedebitda|ebitda/i, code: 'ebitda' },
+    { re: /taxexpense|所得稅|所得税/i, code: 'tax_expense' },
+    { re: /continuingoperations|持續經營|持续经营/i, code: 'continuing_operations' },
+    { re: /discontinuedoperations|已終止經營|已终止经营/i, code: 'discontinued_operations' },
+    { re: /segmentresult|分部業績|分部业绩/i, code: 'segment_result' },
+    { re: /adjustedprofit|經調整利潤|经调整利润/i, code: 'adjusted_profit' },
+    { re: /non-ifrs|nonifrs|非ifrs/i, code: 'non_ifrs' },
+    { re: /excludinglistingexpenses|扣除上市開支前|扣除上市开支前/i, code: 'excluding_listing_expenses' },
+  ];
   const PROFIT_PATTERNS = [
-    { re: /本公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '本公司擁有人應佔利潤', priority: 1, isLoss: false, attributable: true },
-    { re: /母公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '母公司擁有人應佔利潤', priority: 1, isLoss: false, attributable: true },
-    { re: /股東應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '股東應佔利潤', priority: 1, isLoss: false, attributable: true },
-    { re: /profitattributabletoowners(?:ofthecompany)?[^\d(]*([\d,.]+)/ig, label: 'profit attributable to owners', priority: 1, isLoss: false, attributable: true },
-    { re: /本公司擁有人應佔(?:年內|期內)?虧損[^\d（(]*([\d,.]+)/gi, label: '本公司擁有人應佔虧損', priority: 1, isLoss: true, attributable: true },
-    { re: /股東應佔(?:年內|期內)?虧損[^\d（(]*([\d,.]+)/gi, label: '股東應佔虧損', priority: 1, isLoss: true, attributable: true },
-    { re: /年內利潤[^\d（(]*([\d,.]+)/gi, label: '年內利潤', priority: 2, isLoss: false, attributable: false },
-    { re: /年內溢利[^\d（(]*([\d,.]+)/gi, label: '年內溢利', priority: 2, isLoss: false, attributable: false },
-    { re: /期內利潤[^\d（(]*([\d,.]+)/gi, label: '期內利潤', priority: 2, isLoss: false, attributable: false },
-    { re: /期內溢利[^\d（(]*([\d,.]+)/gi, label: '期內溢利', priority: 2, isLoss: false, attributable: false },
-    { re: /profitfortheyear[^\d(]*([\d,.]+)/ig, label: 'profit for the year', priority: 2, isLoss: false, attributable: false },
-    { re: /profitfortheperiod[^\d(]*([\d,.]+)/ig, label: 'profit for the period', priority: 2, isLoss: false, attributable: false },
-    { re: /年內虧損[^\d（(]*([\d,.]+)/gi, label: '年內虧損', priority: 2, isLoss: true, attributable: false },
-    { re: /期內虧損[^\d（(]*([\d,.]+)/gi, label: '期內虧損', priority: 2, isLoss: true, attributable: false },
+    { re: /profitattributabletoowners(?:oftheparent|ofthecompany)?[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit attributable to owners', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /profitattributabletoequityshareholders[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit attributable to equity shareholders', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /本公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '本公司擁有人應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /母公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '母公司擁有人應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /本公司權益股東應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '本公司權益股東應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /股東應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '股東應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /profitfortheyear[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit for the year', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /profitfortheperiod[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit for the period', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /年內(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '年內利潤', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /期內(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '期內利潤', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /netprofit[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'net profit', fieldTier: 3, attributable: false, impliedLoss: false },
+    { re: /(?:^|[(:：])profit[^\d(（-]{0,20}([\-(（]?\d[\d,.]*)/ig, label: 'profit', fieldTier: 3, attributable: false, impliedLoss: false },
+    { re: /利潤[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '利潤', fieldTier: 3, attributable: false, impliedLoss: false },
   ];
 
-  const FORBIDDEN_CONTEXT_RE = /(?:收益|收入|Revenue|grossprofit|毛利|adjusted|經調整|经调整|EBITDA|分部|segment|每股|EPS|earningspershare|附註|附注|note\d*)/i;
-  const INTERIM_CONTEXT_RE = /(?:截至.*?[六6]個月|截至.*?六个月|截至.*?9個月|截至.*?9个月|中期|interim|sixmonthsended|ninemonthsended)/i;
-
-  function extractProfitCandidates(sectionText, sectionSource, baseConfidence) {
-    const candidates = [];
-
-    for (const pattern of PROFIT_PATTERNS) {
-      pattern.re.lastIndex = 0;
-      let hit;
-      while ((hit = pattern.re.exec(sectionText)) !== null) {
-        const rawValue = hit[1];
-        const snippet = extractSnippet(sectionText, hit.index, 220);
-        if (FORBIDDEN_CONTEXT_RE.test(snippet)) {
-          console.log(`[netProfit] 跳过候选(${pattern.label})：上下文疑似收入/毛利/EPS/附注`);
-          continue;
-        }
-
-        const context = resolveContext(sectionText, hit.index);
-        const amount = normalizeUnitCurrency(rawValue, context.currency, context.unit);
-        if (!amount) continue;
-
-        const isInterim = INTERIM_CONTEXT_RE.test(snippet);
-        candidates.push({
-          hkdAmount: pattern.isLoss ? -amount : amount,
-          currency: context.currency,
-          unit: context.unit,
-          source: `${sectionSource}(${pattern.label})`,
-          confidence: isInterim && baseConfidence === 'high' ? 'medium' : baseConfidence,
-          snippet,
-          priority: pattern.priority,
-          attributable: pattern.attributable,
-          isLoss: pattern.isLoss,
-          isInterim,
-        });
-      }
-    }
-
-    return candidates;
+  function locateFinancialSections() {
+    const summarySection = extractSection(
+      noSpace,
+      [/財務資料概要/i, /財務資料撮要/i, /主要財務資料/i, /财务资料概要/i, /FinancialSummary/i, /SummaryofFinancialInformation/i],
+      [/風險因素/i, /风险因素/i, /業務/i, /业务/i, /BUSINESS/i],
+      24000,
+      true
+    );
+    const incomeSection = extractSection(
+      noSpace,
+      [/綜合損益表/i, /综合损益表/i, /綜合全面收益表/i, /ConsolidatedStatementsofProfitorLoss/i, /ConsolidatedIncomeStatement/i],
+      [/綜合財務狀況表/i, /综合财务状况表/i, /ConsolidatedStatementsofFinancialPosition/i],
+      22000,
+      true
+    );
+    const sections = [];
+    if (incomeSection) sections.push({ text: incomeSection, source: '財務表格', sourceLevel: 'table', baseConfidence: 'high' });
+    if (summarySection) sections.push({ text: summarySection, source: '財務章節', sourceLevel: 'section', baseConfidence: 'high' });
+    sections.push({ text: noSpace, source: '全文回退', sourceLevel: 'text_fallback', baseConfidence: 'low' });
+    return sections;
   }
 
-  function chooseBestProfit(candidates) {
-    if (!candidates || candidates.length === 0) return null;
+  function detectYear(context) {
+    const yearMatches = [...context.matchAll(/20\d{2}/g)].map(m => parseInt(m[0], 10));
+    return yearMatches.length ? Math.max(...yearMatches) : null;
+  }
 
+  function detectPeriodType(context) {
+    if (/(sixmonthsended|ninemonthsended|中期|截至.*?[六6]個月|截至.*?六个月|截至.*?9個月|截至.*?9个月)/i.test(context)) return 'interim';
+    if (/(yearended|截至\d{4}年\d{1,2}月\d{1,2}日止年度|截至12月31日止年度|截至.*?止年度)/i.test(context)) return 'annual';
+    return 'unknown';
+  }
+
+  function parseNumericValue(raw) {
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    const negative = /[\-(（(]/.test(trimmed) && /[\d]/.test(trimmed);
+    const n = parseFloat(trimmed.replace(/[(),，（）]/g, '').replace(/-/g, ''));
+    if (!Number.isFinite(n)) return null;
+    return negative ? -n : n;
+  }
+
+  function detectUnit(block) {
+    const unitPatterns = [
+      { re: /RMB['’]?000/i, currency: 'RMB', unit: "RMB'000" },
+      { re: /HK\$?\s*million/i, currency: 'HKD', unit: 'HK$ million' },
+      { re: /US\$?\s*million/i, currency: 'USD', unit: 'US$ million' },
+      { re: /人民幣百萬元|人民币百万元/i, currency: 'RMB', unit: '人民幣百萬元' },
+      { re: /人民幣千元|人民币千元/i, currency: 'RMB', unit: '人民幣千元' },
+      { re: /港元百萬元|港幣百萬元|港币百万元/i, currency: 'HKD', unit: '港元百萬元' },
+      { re: /千元/i, currency: null, unit: '千元' },
+      { re: /百萬元|百万元|million/i, currency: null, unit: '百萬元' },
+      { re: /億元|亿元/i, currency: null, unit: '億元' },
+    ];
+    for (const item of unitPatterns) {
+      if (item.re.test(block)) return item;
+    }
+    return null;
+  }
+
+  function resolveContext(sectionText, hitIndex) {
+    const nearby = sectionText.slice(Math.max(0, hitIndex - 260), Math.min(sectionText.length, hitIndex + 260));
+    const fallback = getLocalUnitContext(noSpace, '人民幣', '千元');
+    const close = getClosestUnitContext(nearby, Math.min(260, hitIndex), fallback.currency, fallback.unit);
+    const localUnit = detectUnit(nearby);
+    const sectionUnit = detectUnit(sectionText.slice(0, Math.min(sectionText.length, 400)));
+    const globalUnit = detectUnit(noSpace.slice(0, 1200));
+
+    const resolvedCurrency = localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || '人民幣';
+    const resolvedUnit = localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || '千元';
+    const unitSource = localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'metadata';
+    return { currency: resolvedCurrency, unit: resolvedUnit, unitSource };
+  }
+
+  function normalizeProfitCandidate(candidate) {
+    const numericValue = parseNumericValue(candidate.rawValue);
+    if (!Number.isFinite(numericValue)) {
+      return { ...candidate, normalizedValue: null, netProfitHKD: null, reason: 'invalid_number' };
+    }
+
+    let multiplier = 1;
+    if (/千|'000/i.test(candidate.unit || '')) multiplier = 1e3;
+    else if (/百萬|百万|million/i.test(candidate.unit || '')) multiplier = 1e6;
+    else if (/億|亿/i.test(candidate.unit || '')) multiplier = 1e8;
+
+    let currencyCode = 'HKD';
+    if (/人民幣|人民币|RMB|CNY/i.test(candidate.currency || '')) currencyCode = 'RMB';
+    else if (/美元|USD|US\$/i.test(candidate.currency || '')) currencyCode = 'USD';
+    else if (/港幣|港元|HKD|HK\$/i.test(candidate.currency || '')) currencyCode = 'HKD';
+
+    const normalizedValue = Math.round(numericValue * multiplier);
+    const netProfitHKD = Math.round(normalizedValue * (FX_RATES[currencyCode] || 1));
+    return { ...candidate, currency: currencyCode, normalizedValue, netProfitHKD };
+  }
+
+  function extractNetProfitCandidates() {
+    const candidates = [];
+    for (const section of locateFinancialSections()) {
+      for (const pattern of PROFIT_PATTERNS) {
+        pattern.re.lastIndex = 0;
+        let hit;
+        while ((hit = pattern.re.exec(section.text)) !== null) {
+          const snippet = extractSnippet(section.text, hit.index, 240);
+          const leadingContext = section.text.slice(Math.max(0, hit.index - 120), hit.index + 80);
+          const context = resolveContext(section.text, hit.index);
+          const labelText = hit[0] || pattern.label;
+          const year = detectYear(snippet);
+          const periodType = detectPeriodType(`${snippet}${leadingContext}`);
+          const rawValue = hit[1];
+          const isLoss = /虧損|亏损|loss/i.test(labelText) || /^[（(-]/.test(String(rawValue || '').trim());
+          candidates.push({
+            label: pattern.label,
+            matchedText: labelText,
+            rawValue,
+            unit: context.unit,
+            currency: context.currency,
+            year,
+            periodType,
+            source: section.source,
+            sourceLevel: section.sourceLevel,
+            confidence: section.baseConfidence,
+            fieldTier: pattern.fieldTier,
+            attributable: pattern.attributable,
+            snippet,
+            contextSnippet: leadingContext,
+            penalties: [],
+            rejectFlags: [],
+            rejectFlag: false,
+            isLoss,
+            unitSource: context.unitSource,
+          });
+        }
+      }
+    }
+    return candidates.map(normalizeProfitCandidate);
+  }
+
+  function scoreProfitCandidate(candidate) {
+    let score = 0;
+    score += ({ table: 80, section: 55, text_fallback: 20, etnet_fallback: 10 }[candidate.sourceLevel] || 0);
+    score += ({ 1: 45, 2: 25, 3: 8 }[candidate.fieldTier] || 0);
+    if (candidate.attributable) score += 20;
+    if (candidate.periodType === 'annual') score += 25;
+    if (candidate.periodType === 'interim') score -= 35;
+    if (candidate.year) score += Math.min(12, Math.max(0, candidate.year - 2018));
+    if (candidate.unitSource === 'nearby') score += 8;
+    else if (candidate.unitSource === 'table_header') score += 5;
+    else if (candidate.unitSource === 'paragraph') score += 2;
+
+    const penaltyText = `${candidate.snippet}${candidate.contextSnippet}${candidate.matchedText}`;
+    for (const rule of SOFT_PENALTY_RULES) {
+      if (rule.re.test(penaltyText)) {
+        candidate.penalties.push({ code: rule.code, score: rule.score });
+        score += rule.score;
+      }
+    }
+    for (const rule of HARD_REJECT_RULES) {
+      if (rule.re.test(penaltyText)) {
+        candidate.rejectFlags.push(rule.code);
+        candidate.rejectFlag = true;
+      }
+    }
+    if (!Number.isFinite(candidate.netProfitHKD) || candidate.netProfitHKD === null) {
+      candidate.rejectFlags.push('invalid_amount');
+      candidate.rejectFlag = true;
+      score -= 100;
+    }
+    if (/每股|eps|earningspershare/i.test(candidate.matchedText)) {
+      candidate.rejectFlags.push('eps_like');
+      candidate.rejectFlag = true;
+    }
+
+    return { ...candidate, score };
+  }
+
+  function chooseBestProfitCandidate(candidates) {
     const sorted = [...candidates].sort((a, b) => {
-      if (a.isInterim !== b.isInterim) return a.isInterim ? 1 : -1;
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      if (a.attributable !== b.attributable) return a.attributable ? -1 : 1;
-      return Math.abs(b.hkdAmount) - Math.abs(a.hkdAmount);
+      if ((a.rejectFlag ? 1 : 0) !== (b.rejectFlag ? 1 : 0)) return a.rejectFlag ? 1 : -1;
+      if (a.periodType !== b.periodType) {
+        if (a.periodType === 'annual') return -1;
+        if (b.periodType === 'annual') return 1;
+      }
+      if (a.fieldTier !== b.fieldTier) return a.fieldTier - b.fieldTier;
+      if (b.score !== a.score) return b.score - a.score;
+      return Math.abs(b.netProfitHKD || 0) - Math.abs(a.netProfitHKD || 0);
     });
 
-    const best = { ...sorted[0] };
-    const comparable = sorted.filter(c => !c.isInterim && c.priority === best.priority);
-    if (comparable.length > 1) {
-      const amounts = comparable.map(c => Math.abs(c.hkdAmount)).filter(Boolean).sort((a, b) => a - b);
-      const min = amounts[0];
-      const max = amounts[amounts.length - 1];
-      if (min > 0 && max / min >= 5) {
-        best.conflict = true;
-        best.conflictCandidates = comparable.slice(0, 3).map(c => ({ source: c.source, hkdAmount: c.hkdAmount, snippet: c.snippet.slice(0, 120) }));
-      }
-    }
-    return best;
+    const validAnnual = sorted.filter(c => !c.rejectFlag && c.periodType === 'annual');
+    const valid = validAnnual.length ? validAnnual : sorted.filter(c => !c.rejectFlag);
+    if (!valid.length) return { best: null, topCandidates: sorted.slice(0, 5), reason: 'insufficient_data' };
+
+    const best = { ...valid[0] };
+    const runnerUp = valid[1] || null;
+    const topGapTooSmall = !!runnerUp && Math.abs(best.score - runnerUp.score) < 8;
+    const reason = [];
+    if (!validAnnual.length && best.periodType === 'interim') reason.push('interim_only');
+    if (topGapTooSmall) reason.push('top_gap_too_small');
+    if (best.netProfitHKD <= 0) reason.push('non_positive_profit');
+
+    best.confidence = best.sourceLevel === 'table' && best.fieldTier === 1 && !topGapTooSmall && best.periodType === 'annual'
+      ? 'high'
+      : (!topGapTooSmall && best.periodType === 'annual' ? 'medium' : 'low');
+    if (reason.includes('interim_only')) best.confidence = 'low';
+    best.reason = reason.length ? reason.join(',') : 'ok';
+    best.topGapTooSmall = topGapTooSmall;
+    best.runnerUpScore = runnerUp?.score ?? null;
+    return { best, topCandidates: sorted.slice(0, 5), reason: best.reason };
   }
 
-  const candidates = [];
-  for (const section of locateFinancialSection()) {
-    candidates.push(...extractProfitCandidates(section.text, section.source, section.confidence));
+  const candidates = extractNetProfitCandidates().map(scoreProfitCandidate);
+  const { best, topCandidates, reason } = chooseBestProfitCandidate(candidates);
+
+  if (debug) {
+    const topSummary = topCandidates.map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
+      score: c.score,
+      penalties: c.penalties.map(p => p.code),
+      rejectFlags: c.rejectFlags,
+    }));
+    console.log('[netProfit] Top candidates:', JSON.stringify(topSummary, null, 2));
   }
 
-  const best = chooseBestProfit(candidates);
   if (!best) {
     console.log('[netProfit] 未提取到净利润');
-    return { hkdAmount: null, currency: null, unit: null, source: '未找到', confidence: 'none', snippet: '' };
+    return {
+      hkdAmount: null,
+      netProfitHKD: null,
+      source: '未找到',
+      sourceLevel: 'text_fallback',
+      label: null,
+      year: null,
+      periodType: null,
+      rawValue: null,
+      normalizedValue: null,
+      unit: null,
+      currency: null,
+      confidence: 'none',
+      reason,
+      score: null,
+      penalties: [],
+      rejectFlags: [],
+      snippet: '',
+      topCandidates,
+    };
   }
 
-  if (best.isInterim) {
-    best.confidence = 'low';
-    best.source = `${best.source}-中期口徑`;
-  }
-
-  console.log(`[netProfit] 最佳候选: ${best.source}, ${best.hkdAmount.toLocaleString()} HKD, confidence=${best.confidence}${best.conflict ? ', conflict=true' : ''}`);
+  console.log(`[netProfit] 最佳候选: ${best.source}/${best.label}, ${best.netProfitHKD.toLocaleString()} HKD, confidence=${best.confidence}, reason=${best.reason}`);
   return {
-    hkdAmount: best.hkdAmount,
-    currency: best.currency,
-    unit: best.unit,
+    hkdAmount: best.netProfitHKD,
+    netProfitHKD: best.netProfitHKD,
     source: best.source,
+    sourceLevel: best.sourceLevel,
+    label: best.label,
+    year: best.year,
+    periodType: best.periodType,
+    rawValue: best.rawValue,
+    normalizedValue: best.normalizedValue,
+    unit: best.unit,
+    currency: best.currency,
     confidence: best.confidence,
+    reason: best.reason,
+    score: best.score,
+    penalties: best.penalties,
+    rejectFlags: best.rejectFlags,
     snippet: best.snippet,
-    isInterim: !!best.isInterim,
-    conflict: !!best.conflict,
-    conflictCandidates: best.conflictCandidates || [],
+    isInterim: best.periodType === 'interim',
+    conflict: !!best.topGapTooSmall,
+    topCandidates,
   };
 }
 
@@ -2302,10 +2443,16 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
   }
 
   const totalMarketCap = offerPriceMid * totalShares;
-  const newIPOpe = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
-  const ratio    = parseFloat((newIPOpe / peerMedianPE).toFixed(4));
+  const computedPE = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
+  const sitePE = Number.isFinite(meta.sitePE) ? meta.sitePE : null;
+  const peDiffPct = sitePE && computedPE > 0 ? parseFloat((((computedPE - sitePE) / sitePE) * 100).toFixed(2)) : null;
+  const ratio    = parseFloat((computedPE / peerMedianPE).toFixed(4));
 
-  evidence.newIPOPE     = newIPOpe;
+  evidence.totalMarketCap = totalMarketCap;
+  evidence.computedPE    = computedPE;
+  evidence.newIPOPE      = computedPE;
+  evidence.sitePE        = sitePE;
+  evidence.peDiffPct     = peDiffPct;
   evidence.peerMedianPE = peerMedianPE;
   evidence.ratio        = ratio;
 
@@ -2318,7 +2465,7 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
     };
   }
 
-  if (meta.profitIsInterim) {
+  if (meta.profitIsInterim || meta.profitReason === 'interim_only' || String(meta.profitReason || '').includes('interim_only')) {
     return {
       score: 0,
       reason: 'PE：仅识别到中期利润',
@@ -2327,39 +2474,48 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
     };
   }
 
-  if ((meta.profitConfidence === 'low' || meta.profitConfidence === 'medium') && newIPOpe > 300) {
+  if (meta.profitTopGapTooSmall) {
     return {
       score: 0,
-      reason: 'PE：利润口径存疑',
-      details: `净利润提取置信度较低且PE高达 ${newIPOpe.toFixed(1)}x，按异常值降级为暂不评分`,
+      reason: 'PE：利润候选分差过小',
+      details: '净利润候选前两名分差过小，利润口径存在歧义，暂不评分',
       evidence,
     };
   }
 
-  if (newIPOpe > 300 || netProfitHKD < 1e6) {
+  if ((meta.profitConfidence === 'low' || meta.profitConfidence === 'medium') && computedPE > 300) {
+    return {
+      score: 0,
+      reason: 'PE：利润口径存疑',
+      details: `净利润提取置信度较低且PE高达 ${computedPE.toFixed(1)}x，按异常值降级为暂不评分`,
+      evidence,
+    };
+  }
+
+  if (computedPE <= 0 || computedPE > 300 || netProfitHKD < 1e6) {
     return {
       score: 0,
       reason: 'PE：疑似异常值',
-      details: `净利润或PE数量级异常（PE ${newIPOpe.toFixed(1)}x，净利润 ${netProfitHKD.toLocaleString()} HKD），按数据异常暂不评分`,
+      details: `净利润或PE数量级异常（PE ${computedPE.toFixed(1)}x，净利润 ${netProfitHKD.toLocaleString()} HKD），按数据异常暂不评分`,
       evidence,
     };
   }
 
   let score, reason, details;
   if (ratio < 0.70) {
-    score  = 3;  reason = 'PE：大幅折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（>30%）`;
+    score  = 3;  reason = 'PE：大幅折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（>30%）`;
   } else if (ratio < 0.85) {
-    score  = 2;  reason = 'PE：明显折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（15-30%）`;
+    score  = 2;  reason = 'PE：明显折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（15-30%）`;
   } else if (ratio < 0.95) {
-    score  = 1;  reason = 'PE：轻微折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（5-15%）`;
+    score  = 1;  reason = 'PE：轻微折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（5-15%）`;
   } else if (ratio <= 1.05) {
-    score  = 0;  reason = 'PE：基本持平';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，与市场持平`;
+    score  = 0;  reason = 'PE：基本持平';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，与市场持平`;
   } else if (ratio <= 1.15) {
-    score  = -1; reason = 'PE：轻微溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（5-15%）`;
+    score  = -1; reason = 'PE：轻微溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（5-15%）`;
   } else if (ratio <= 1.30) {
-    score  = -2; reason = 'PE：明显溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（15-30%）`;
+    score  = -2; reason = 'PE：明显溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（15-30%）`;
   } else {
-    score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
+    score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
   }
 
   console.log(`[PE] ${reason}: ${details}`);
@@ -4000,8 +4156,16 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       }
     }
 
-    // 2. 总股本：从 PDF 提取（关键：不能用 H 股市值）
-    const sharesResult = extractTotalShares(text);
+    // 2. 总股本：优先 ETNet 结构化字段，失败时回退 PDF（关键：不能用 H 股市值）
+    let sharesResult = extractTotalShares(text);
+    if (etnetData?.totalShares && Number.isFinite(etnetData.totalShares) && etnetData.totalShares >= 1e7 && etnetData.totalShares <= 5e10) {
+      sharesResult = {
+        totalShares: etnetData.totalShares,
+        confidence: 'medium',
+        source: 'ETNet结构化字段',
+        snippet: etnetData.totalSharesRaw || '',
+      };
+    }
     const totalShares  = sharesResult.totalShares;
 
     // 3. 净利润：从 PDF 提取
@@ -4027,12 +4191,37 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       }
     }
 
+    const etnetFieldsRaw = etnetData ? {
+      offerPrice: etnetData.offerPrice || null,
+      offerPriceMid: etnetData.offerPriceMid || null,
+      totalShares: etnetData.totalShares || null,
+      totalSharesRaw: etnetData.totalSharesRaw || null,
+      sitePE: etnetData.sitePE || null,
+      marketCapRaw: etnetData.marketCapRaw || null,
+      industry: etnetData.industry || null,
+    } : {};
     console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
+    console.log('[PE] debug=', JSON.stringify({
+      topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        score: c.score,
+        penalties: c.penalties?.map(p => p.code) || [],
+        rejectFlags: c.rejectFlags || [],
+      })),
+      etnetFieldsRaw,
+      sitePE: etnetData?.sitePE || null,
+    }, null, 2));
     const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, {
       profitConfidence: profitResult.confidence || 'none',
       profitSource: profitResult.source || '未找到',
       profitIsInterim: !!profitResult.isInterim,
       profitConflict: !!profitResult.conflict,
+      profitReason: profitResult.reason || '',
+      profitTopGapTooSmall: !!profitResult.conflict,
+      sitePE: etnetData?.sitePE || null,
     });
     let peStatus = 'neutral';
     let peReason = peResult.reason;
@@ -4063,10 +4252,28 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         sharesConfidence: sharesResult.confidence,
         sharesSnippet: sharesResult.snippet || '',
         profitSource: profitResult.source,
+        profitSourceLevel: profitResult.sourceLevel,
         profitConfidence: profitResult.confidence || 'none',
         profitSnippet: profitResult.snippet || '',
+        profitLabel: profitResult.label,
+        profitYear: profitResult.year,
+        profitPeriodType: profitResult.periodType,
         profitCurrency: profitResult.currency,
         profitUnit: profitResult.unit,
+        profitNormalizedValue: profitResult.normalizedValue,
+        profitPenalties: profitResult.penalties || [],
+        profitRejectFlags: profitResult.rejectFlags || [],
+        topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          score: c.score,
+          penalties: c.penalties?.map(p => p.code) || [],
+          rejectFlags: c.rejectFlags || [],
+        })),
+        etnetFieldsRaw,
         industry,
         scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
       },
