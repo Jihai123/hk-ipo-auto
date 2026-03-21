@@ -1930,14 +1930,13 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
    * Oaktree 30 5,106,200 5.45%
    * 歐萬達基金 20 3,404,100 3.64%
    */
-  const rowRegex = /([A-Za-z\u4e00-\u9fa5（）()&.\-]{2,80}?)\s*(\d{1,3}(?:\.\d+)?)(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s*((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s*(\d+\.\d+)%/g;
-  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+  const tableRowPattern = /([A-Za-z\u4e00-\u9fa5（）()&.\-]{2,80}?)\s*(\d{1,3}(?:\.\d+)?)(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s*((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s*(\d+\.\d+)%/g;
 
   const investors = lineInvestors.slice();
-  let match;
+  let tableMatch;
 
-  while ((match = rowRegex.exec(tableText)) !== null) {
-    let name = match[1].replace(/\s+/g, ' ').trim();
+  while ((tableMatch = tableRowPattern.exec(tableText)) !== null) {
+    let name = tableMatch[1].replace(/\s+/g, ' ').trim();
 
     // 过滤總計
     if (name.includes('總計')) continue;
@@ -1947,11 +1946,9 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
     const investor = {
       name: cleanedName,
-    const investor = {
-      name,
-      amount: parseFloat(match[2]),
-      shares: parseInt(match[3].replace(/,/g, ''), 10),
-      percent: parseFloat(match[4]),
+      amount: parseFloat(tableMatch[2]),
+      shares: parseInt(tableMatch[3].replace(/,/g, ''), 10),
+      percent: parseFloat(tableMatch[4]),
     };
 
     console.log(`[识别] ✅ ${name}`);
