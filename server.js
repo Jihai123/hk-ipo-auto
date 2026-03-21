@@ -2146,14 +2146,7 @@ function extractNetProfit(text) {
       if (!hkd) continue;
       const amount = isLoss ? -hkd : hkd;
       console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
-      return {
-        hkdAmount: amount,
-        currency: localContext.currency,
-        unit: localContext.unit,
-        source: `財務概要(${label})`,
-        confidence: 'high',
-        snippet: extractSnippet(section, hit.index, 120),
-      };
+      return { hkdAmount: amount, currency: localContext.currency, unit: localContext.unit, source: `財務概要(${label})` };
     }
   }
 
@@ -2169,14 +2162,7 @@ function extractNetProfit(text) {
       if (!hkd) continue;
       const amount = isLoss ? -hkd : hkd;
       console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
-      return {
-        hkdAmount: amount,
-        currency: localContext.currency,
-        unit: localContext.unit,
-        source: `所得稅附近(${label})`,
-        confidence: 'medium',
-        snippet: extractSnippet(after, hit.index, 120),
-      };
+      return { hkdAmount: amount, currency: localContext.currency, unit: localContext.unit, source: `所得稅附近(${label})` };
     }
   }
 
@@ -2190,18 +2176,11 @@ function extractNetProfit(text) {
     if (!hkd) continue;
     const amount = isLoss ? -hkd : hkd;
     console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
-    return {
-      hkdAmount: amount,
-      currency: localContext.currency,
-      unit: localContext.unit,
-      source: `全文搜索(${label})`,
-      confidence: 'low',
-      snippet: extractSnippet(noSpace, hit.index, 120),
-    };
+    return { hkdAmount: amount, currency: localContext.currency, unit: localContext.unit, source: `全文搜索(${label})` };
   }
 
   console.log('[netProfit] 未提取到净利润');
-  return { hkdAmount: null, currency: null, unit: null, source: '未找到', confidence: 'none', snippet: '' };
+  return { hkdAmount: null, currency: null, unit: null, source: '未找到' };
 }
 
 // ==================== V5：PE 评分函数（独立，供主流程调用）====================
