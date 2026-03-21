@@ -78,6 +78,26 @@ function parseProceeds(raw) {
   return null;
 }
 
+function parseShares(raw) {
+  if (!raw) return null;
+  const cleaned = raw.replace(/,/g, '');
+  const m = cleaned.match(/([\d.]+)\s*(亿股|億股|millionshares|million|百萬股|百万股|股)?/i);
+  if (!m) return null;
+  const value = parseFloat(m[1]);
+  if (!Number.isFinite(value)) return null;
+  const unit = m[2] || '';
+  if (/亿股|億股/i.test(unit)) return Math.round(value * 1e8);
+  if (/百萬股|百万股|million/i.test(unit)) return Math.round(value * 1e6);
+  if (/股/.test(unit) || !unit) return Math.round(value);
+  return null;
+}
+
+function parsePE(raw) {
+  if (!raw) return null;
+  const m = raw.match(/[\d.]+/);
+  return m ? parseFloat(m[0]) : null;
+}
+
 /**
  * 爬取并解析 etnet IPO详情页
  * @param {string} code - 5位股票代码字符串，如 "06809"
@@ -121,6 +141,10 @@ async function crawlIPODetail(code) {
     listingDate:          null,
     subscriptionMultiple: null,
     ipoProceeds:          null,   // 募资净额（港元）
+    totalShares:          null,   // 页面可得的总股本/上市后股份数
+    totalSharesRaw:       null,
+    sitePE:               null,   // 页面展示PE，仅用于debug
+    marketCapRaw:         null,
     _source:              'etnet',
     _fetchedAt:           new Date().toISOString(),
   };
@@ -144,7 +168,10 @@ async function crawlIPODetail(code) {
       result.offerPrice    = val;
       result.offerPriceMid = parseOfferPrice(val);
     }
-    if (/市值/.test(key) && !result.marketCapH) result.marketCapH = val;
+    if (/市值/.test(key)) {
+      if (!result.marketCapH) result.marketCapH = val;
+      if (!result.marketCapRaw) result.marketCapRaw = val;
+    }
 
     // 全球发售 - 保荐人（可能是多行合并或换行）
     if (/保薦人|保荐人/.test(key)) {
@@ -155,6 +182,10 @@ async function crawlIPODetail(code) {
 
     // 发售股份总数
     if (/發售股份數目|发售股份数目/.test(key)) result.totalOfferingShares = val;
+    if (/上市後已發行股份|上市后已发行股份|已發行股份總數|已发行股份总数|總股本|总股本/.test(key)) {
+      result.totalSharesRaw = val;
+      result.totalShares = parseShares(val);
+    }
 
     // 时间表
     if (/上市日期/.test(key) && !result.listingDate) result.listingDate = val;
@@ -165,6 +196,10 @@ async function crawlIPODetail(code) {
     // 募资净额（粗提）
     if (/所得款項凈額|所得款项净额|募集資金|募集资金/.test(key)) {
       result.ipoProceeds = parseProceeds(val);
+    }
+
+    if (/市盈率|pe/i.test(key)) {
+      result.sitePE = parsePE(val);
     }
   });
 
