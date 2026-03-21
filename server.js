@@ -2111,7 +2111,11 @@ function extractTotalShares(text) {
 function extractNetProfit(text) {
   const noSpace = text.replace(/\s+/g, '');
 
-  function normalizeUnitCurrency(raw, currency, unit) {
+  /**
+   * 将原始数字字符串 + 单位描述 → 港元数值
+   * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
+   */
+  function toHKD(raw, currency, unit) {
     const n = parseFloat(String(raw).replace(/,/g, ''));
     if (isNaN(n) || n <= 0) return null;
 
@@ -2122,27 +2126,43 @@ function extractNetProfit(text) {
 
     const baseAmount = n * multiplier;
     if (/人民幣|人民币|RMB|CNY/.test(currency)) return Math.round(baseAmount * 1.10);
-    if (/港|HKD|HK\$/.test(currency)) return Math.round(baseAmount);
-    if (/美|USD|US\$/.test(currency)) return Math.round(baseAmount * 7.80);
-    return Math.round(baseAmount);
+    if (/港/.test(currency)) return baseAmount;
+    if (/美|USD/.test(currency)) return Math.round(baseAmount * 7.80);
+    return baseAmount;
   }
 
-  function locateFinancialSection() {
-    const summarySection = extractSection(
-      noSpace,
-      [/財務資料概要/i, /財務資料撮要/i, /主要財務資料/i, /财务资料概要/i, /FinancialSummary/i, /SummaryofFinancialData/i],
-      [/業務/i, /风险因素/i, /風險因素/i, /BUSINESS/i, /RISKFACTORS/i],
-      40000,
-      true
+  const defaultContext = getLocalUnitContext(noSpace, '人民幣', '千元');
+
+  const resolveContext = (block, hitIndex) => {
+    const localBlock = block.slice(
+      Math.max(0, hitIndex - 220),
+      Math.min(block.length, hitIndex + 220)
     );
 
-    const incomeSection = extractSection(
-      noSpace,
-      [/綜合損益(?:及其他全面收益)?表/i, /综合损益(?:及其他全面收益)?表/i, /ConsolidatedStatementsofProfitorLoss/i],
-      [/綜合財務狀況表/i, /综合财务状况表/i, /ConsolidatedStatementsofFinancialPosition/i, /流動資產/i],
-      25000,
-      true
+    return getClosestUnitContext(
+      localBlock,
+      Math.min(220, hitIndex),
+      defaultContext.currency,
+      defaultContext.unit
     );
+  };
+
+  const buildResult = (amount, context, source, confidence, snippetText, snippetIndex) => ({
+    hkdAmount: amount,
+    currency: context.currency,
+    unit: context.unit,
+    source,
+    confidence,
+    snippet: extractSnippet(snippetText, snippetIndex, 140),
+  });
+
+  // ── 策略 A：搜索財務資料概要章节 ──
+  const summaryAnchors = [
+    /財務資料概要/,
+    /財務資料撮要/,
+    /主要財務資料/,
+    /财务资料概要/,
+  ];
 
     const fallbackSections = [];
     if (summarySection) fallbackSections.push({ text: summarySection, source: '財務概要', confidence: 'high' });
@@ -2168,87 +2188,31 @@ function extractNetProfit(text) {
     { re: /年內虧損[^\d（(]*([\d,.]+)/g, label: '年內虧損', priority: 2, isLoss: true, attributable: false },
   ];
 
-  const forbiddenNearby = /(收益|收入|營業額|营业额|毛利|grossprofit|adjusted|經調整|经调整|non-?gaap|分部|segment|ebitda|每股|eps|附註|附注|note\d*)/i;
-  const interimNearby = /(截至.*?(六月三十日|6月30日|九月三十日|9月30日)|六個月|六个月|中期|interim|three\s*months|six\s*months)/i;
-  const defaultContext = getLocalUnitContext(noSpace, '人民幣', '千元');
+  for (const anchor of summaryAnchors) {
+    const m = anchor.exec(noSpace);
+    if (!m) continue;
 
-  const resolveContext = (block, hitIndex) => {
-    const localBlock = block.slice(Math.max(0, hitIndex - 260), Math.min(block.length, hitIndex + 260));
-    const closest = getClosestUnitContext(localBlock, Math.min(260, hitIndex), defaultContext.currency, defaultContext.unit);
+    const section = noSpace.slice(m.index, m.index + 8000);
 
-    let currency = closest.currency;
-    let unit = closest.unit || defaultContext.unit;
+    for (const { re, label, isLoss } of profitPatterns) {
+      const hit = re.exec(section);
+      if (!hit) continue;
 
-    const asciiHint = localBlock.match(/(RMB|CNY|HKD|USD|HK\$|US\$)\s*'?(000|million|billion)?/i);
-    if (asciiHint) {
-      currency = asciiHint[1];
-      unit = asciiHint[2] || unit;
-    }
+      const localContext = resolveContext(section, hit.index);
+      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
+      if (!hkd) continue;
 
-    return { currency, unit };
-  };
+      const amount = isLoss ? -hkd : hkd;
+      console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
 
-  const extractProfitCandidates = (block, source, confidence) => {
-    const candidates = [];
-
-    for (const pattern of allowedPatterns) {
-      pattern.re.lastIndex = 0;
-      let hit;
-      while ((hit = pattern.re.exec(block)) !== null) {
-        const nearby = block.slice(Math.max(0, hit.index - 120), Math.min(block.length, hit.index + 180));
-        if (forbiddenNearby.test(nearby)) continue;
-
-        const context = resolveContext(block, hit.index);
-        const hkd = normalizeUnitCurrency(hit[1], context.currency, context.unit);
-        if (!hkd) continue;
-
-        const isInterim = interimNearby.test(nearby);
-        candidates.push({
-          hkdAmount: pattern.isLoss ? -hkd : hkd,
-          currency: context.currency,
-          unit: context.unit,
-          source: `${source}(${pattern.label})`,
-          confidence: isInterim && confidence === 'high' ? 'medium' : confidence,
-          snippet: extractSnippet(block, hit.index, 140),
-          priority: pattern.priority,
-          attributable: pattern.attributable,
-          isInterim,
-        });
-      }
-    }
-
-    return candidates;
-  };
-
-  const chooseBestProfit = (candidates) => {
-    if (!candidates.length) return null;
-
-    const annualCandidates = candidates.filter(c => !c.isInterim);
-    const pool = annualCandidates.length ? annualCandidates : candidates;
-
-    pool.sort((a, b) => {
-      const confRank = { high: 3, medium: 2, low: 1, none: 0 };
-      return (
-        (b.attributable ? 1 : 0) - (a.attributable ? 1 : 0) ||
-        a.priority - b.priority ||
-        (confRank[b.confidence] || 0) - (confRank[a.confidence] || 0) ||
-        Math.abs(b.hkdAmount) - Math.abs(a.hkdAmount)
+      return buildResult(
+        amount,
+        localContext,
+        `財務概要(${label})`,
+        'high',
+        section,
+        hit.index
       );
-    });
-
-    const best = pool[0];
-    const conflicting = pool.filter(c => c !== best && Math.abs(c.hkdAmount) > 0)
-      .some(c => {
-        const ratio = Math.max(Math.abs(best.hkdAmount), Math.abs(c.hkdAmount)) / Math.max(1, Math.min(Math.abs(best.hkdAmount), Math.abs(c.hkdAmount)));
-        return ratio >= 50;
-      });
-
-    if (conflicting && best.confidence === 'low') {
-      return null;
-    }
-
-    if (conflicting && best.confidence === 'high') {
-      best.confidence = 'medium';
     }
 
     return best;
@@ -2260,30 +2224,57 @@ function extractNetProfit(text) {
     candidates = candidates.concat(extractProfitCandidates(section.text, section.source, section.confidence));
   }
 
-  // 税项附近仅作为中等置信度补充，不再优先于财务章节
-  if (candidates.length === 0) {
-    const taxIdx = noSpace.indexOf('所得稅開支');
-    if (taxIdx !== -1) {
-      const after = noSpace.slice(taxIdx, taxIdx + 1500);
-      candidates = candidates.concat(extractProfitCandidates(after, '所得稅附近', 'medium'));
+  // ── 策略 B：搜索"所得稅開支"向下找净利润 ──
+  const taxIdx = noSpace.indexOf('所得稅開支');
+  if (taxIdx !== -1) {
+    const after = noSpace.slice(taxIdx, taxIdx + 1200);
+
+    for (const { re, label, isLoss } of profitPatterns) {
+      const hit = re.exec(after);
+      if (!hit) continue;
+
+      const localContext = resolveContext(after, hit.index);
+      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
+      if (!hkd) continue;
+
+      const amount = isLoss ? -hkd : hkd;
+      console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
+
+      return buildResult(
+        amount,
+        localContext,
+        `所得稅附近(${label})`,
+        'medium',
+        after,
+        hit.index
+      );
     }
   }
 
-  if (candidates.length === 0) {
-    candidates = candidates.concat(extractProfitCandidates(noSpace, '全文搜索', 'low'));
-  }
+  // ── 策略 C：全文搜索 ──
+  for (const { re, label, isLoss } of profitPatterns) {
+    const hit = re.exec(noSpace);
+    if (!hit) continue;
 
-  const best = chooseBestProfit(candidates);
-  if (best) {
-    console.log(`[netProfit] 命中(${best.source}): ${best.hkdAmount.toLocaleString()} HKD, confidence=${best.confidence}`);
-    return {
-      hkdAmount: best.hkdAmount,
-      currency: best.currency,
-      unit: best.unit,
-      source: best.source,
-      confidence: best.confidence,
-      snippet: best.snippet,
-    };
+    const localBlock = noSpace.slice(
+      Math.max(0, hit.index - 300),
+      Math.min(noSpace.length, hit.index + 500)
+    );
+    const localContext = resolveContext(localBlock, Math.min(300, hit.index));
+    const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
+    if (!hkd) continue;
+
+    const amount = isLoss ? -hkd : hkd;
+    console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
+
+    return buildResult(
+      amount,
+      localContext,
+      `全文搜索(${label})`,
+      'low',
+      noSpace,
+      hit.index
+    );
   }
 
   console.log('[netProfit] 未提取到净利润');
