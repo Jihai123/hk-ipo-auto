@@ -1931,6 +1931,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
    * 歐萬達基金 20 3,404,100 3.64%
    */
   const rowRegex = /([A-Za-z\u4e00-\u9fa5（）()&.\-]{2,80}?)\s*(\d{1,3}(?:\.\d+)?)(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s*((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s*(\d+\.\d+)%/g;
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
 
   const investors = lineInvestors.slice();
   let match;
@@ -1946,6 +1947,8 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
     const investor = {
       name: cleanedName,
+    const investor = {
+      name,
       amount: parseFloat(match[2]),
       shares: parseInt(match[3].replace(/,/g, ''), 10),
       percent: parseFloat(match[4]),
