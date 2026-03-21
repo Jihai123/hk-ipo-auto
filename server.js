@@ -2111,174 +2111,168 @@ function extractTotalShares(text) {
 function extractNetProfit(text) {
   const noSpace = text.replace(/\s+/g, '');
 
-  /**
-   * 将原始数字字符串 + 单位描述 → 港元数值
-   * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
-   */
-  function toHKD(raw, currency, unit) {
-    const n = parseFloat(String(raw).replace(/,/g, ''));
+  function normalizeUnitCurrency(raw, currency, unit) {
+    const n = parseFloat(String(raw || '').replace(/[,，]/g, ''));
     if (isNaN(n) || n <= 0) return null;
 
+    const normalizedUnit = unit || '';
     let multiplier = 1;
-    if (/千|'000/i.test(unit)) multiplier = 1e3;
-    else if (/百萬|百万|million/i.test(unit)) multiplier = 1e6;
-    else if (/億|亿|billion/i.test(unit)) multiplier = 1e8;
+    if (/千|'000/i.test(normalizedUnit)) multiplier = 1e3;
+    else if (/百萬|百万|million/i.test(normalizedUnit)) multiplier = 1e6;
+    else if (/億|亿|billion/i.test(normalizedUnit)) multiplier = 1e8;
 
     const baseAmount = n * multiplier;
-    if (/人民幣|人民币|RMB|CNY/.test(currency)) return Math.round(baseAmount * 1.10);
-    if (/港/.test(currency)) return baseAmount;
-    if (/美|USD/.test(currency)) return Math.round(baseAmount * 7.80);
-    return baseAmount;
+    if (/人民幣|人民币|RMB|CNY/i.test(currency || '')) return Math.round(baseAmount * 1.10);
+    if (/港幣|港元|HKD/i.test(currency || '')) return Math.round(baseAmount);
+    if (/美元|USD/i.test(currency || '')) return Math.round(baseAmount * 7.80);
+    return Math.round(baseAmount);
+  }
+
+  function locateFinancialSection() {
+    const summarySection = extractSection(
+      noSpace,
+      [/財務資料概要/i, /財務資料撮要/i, /主要財務資料/i, /财务资料概要/i, /FinancialSummary/i, /Summary/i],
+      [/風險因素/i, /风险因素/i, /業務/i, /业务/i, /BUSINESS/i],
+      20000,
+      true
+    );
+
+    const incomeSection = extractSection(
+      noSpace,
+      [/綜合損益表/i, /综合损益表/i, /綜合全面收益表/i, /ConsolidatedStatementsofProfitorLoss/i],
+      [/綜合財務狀況表/i, /综合财务状况表/i, /ConsolidatedStatementsofFinancialPosition/i],
+      18000,
+      true
+    );
+
+    const sections = [];
+    if (summarySection) sections.push({ text: summarySection, source: '財務概要', confidence: 'high' });
+    if (incomeSection) sections.push({ text: incomeSection, source: '綜合損益表', confidence: 'high' });
+    if (sections.length > 0) return sections;
+
+    return [{ text: noSpace, source: '全文搜索', confidence: 'low' }];
   }
 
   const defaultContext = getLocalUnitContext(noSpace, '人民幣', '千元');
-
   const resolveContext = (block, hitIndex) => {
-    const localBlock = block.slice(
-      Math.max(0, hitIndex - 220),
-      Math.min(block.length, hitIndex + 220)
-    );
-
+    const localBlock = block.slice(Math.max(0, hitIndex - 260), Math.min(block.length, hitIndex + 260));
     return getClosestUnitContext(
       localBlock,
-      Math.min(220, hitIndex),
+      Math.min(260, hitIndex),
       defaultContext.currency,
       defaultContext.unit
     );
   };
 
-  const buildResult = (amount, context, source, confidence, snippetText, snippetIndex) => ({
-    hkdAmount: amount,
-    currency: context.currency,
-    unit: context.unit,
-    source,
-    confidence,
-    snippet: extractSnippet(snippetText, snippetIndex, 140),
-  });
-
-  // ── 策略 A：搜索財務資料概要章节 ──
-  const summaryAnchors = [
-    /財務資料概要/,
-    /財務資料撮要/,
-    /主要財務資料/,
-    /财务资料概要/,
+  const PROFIT_PATTERNS = [
+    { re: /本公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '本公司擁有人應佔利潤', priority: 1, isLoss: false, attributable: true },
+    { re: /母公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '母公司擁有人應佔利潤', priority: 1, isLoss: false, attributable: true },
+    { re: /股東應佔(?:年內|期內)?(?:溢利|利潤|利润)[^\d（(]*([\d,.]+)/gi, label: '股東應佔利潤', priority: 1, isLoss: false, attributable: true },
+    { re: /profitattributabletoowners(?:ofthecompany)?[^\d(]*([\d,.]+)/ig, label: 'profit attributable to owners', priority: 1, isLoss: false, attributable: true },
+    { re: /本公司擁有人應佔(?:年內|期內)?虧損[^\d（(]*([\d,.]+)/gi, label: '本公司擁有人應佔虧損', priority: 1, isLoss: true, attributable: true },
+    { re: /股東應佔(?:年內|期內)?虧損[^\d（(]*([\d,.]+)/gi, label: '股東應佔虧損', priority: 1, isLoss: true, attributable: true },
+    { re: /年內利潤[^\d（(]*([\d,.]+)/gi, label: '年內利潤', priority: 2, isLoss: false, attributable: false },
+    { re: /年內溢利[^\d（(]*([\d,.]+)/gi, label: '年內溢利', priority: 2, isLoss: false, attributable: false },
+    { re: /期內利潤[^\d（(]*([\d,.]+)/gi, label: '期內利潤', priority: 2, isLoss: false, attributable: false },
+    { re: /期內溢利[^\d（(]*([\d,.]+)/gi, label: '期內溢利', priority: 2, isLoss: false, attributable: false },
+    { re: /profitfortheyear[^\d(]*([\d,.]+)/ig, label: 'profit for the year', priority: 2, isLoss: false, attributable: false },
+    { re: /profitfortheperiod[^\d(]*([\d,.]+)/ig, label: 'profit for the period', priority: 2, isLoss: false, attributable: false },
+    { re: /年內虧損[^\d（(]*([\d,.]+)/gi, label: '年內虧損', priority: 2, isLoss: true, attributable: false },
+    { re: /期內虧損[^\d（(]*([\d,.]+)/gi, label: '期內虧損', priority: 2, isLoss: true, attributable: false },
   ];
 
-    const fallbackSections = [];
-    if (summarySection) fallbackSections.push({ text: summarySection, source: '財務概要', confidence: 'high' });
-    if (incomeSection) fallbackSections.push({ text: incomeSection, source: '綜合損益表', confidence: 'high' });
+  const FORBIDDEN_CONTEXT_RE = /(?:收益|收入|Revenue|grossprofit|毛利|adjusted|經調整|经调整|EBITDA|分部|segment|每股|EPS|earningspershare|附註|附注|note\d*)/i;
+  const INTERIM_CONTEXT_RE = /(?:截至.*?[六6]個月|截至.*?六个月|截至.*?9個月|截至.*?9个月|中期|interim|sixmonthsended|ninemonthsended)/i;
 
-    if (fallbackSections.length > 0) return fallbackSections;
+  function extractProfitCandidates(sectionText, sectionSource, baseConfidence) {
+    const candidates = [];
 
-    return [
-      { text: noSpace, source: '全文搜索', confidence: 'low' },
-    ];
-  }
+    for (const pattern of PROFIT_PATTERNS) {
+      pattern.re.lastIndex = 0;
+      let hit;
+      while ((hit = pattern.re.exec(sectionText)) !== null) {
+        const rawValue = hit[1];
+        const snippet = extractSnippet(sectionText, hit.index, 220);
+        if (FORBIDDEN_CONTEXT_RE.test(snippet)) {
+          console.log(`[netProfit] 跳过候选(${pattern.label})：上下文疑似收入/毛利/EPS/附注`);
+          continue;
+        }
 
-  const allowedPatterns = [
-    { re: /股東應佔溢利[^\d（(]*([\d,.]+)/g, label: '股東應佔溢利', priority: 1, isLoss: false, attributable: true },
-    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,.]+)/g, label: '本公司擁有人應佔溢利', priority: 1, isLoss: false, attributable: true },
-    { re: /profitattributabletoowners[^\d(]*([\d,.]+)/ig, label: 'profit attributable to owners', priority: 1, isLoss: false, attributable: true },
-    { re: /股東應佔虧損[^\d（(]*([\d,.]+)/g, label: '股東應佔虧損', priority: 1, isLoss: true, attributable: true },
-    { re: /年內溢利[^\d（(]*([\d,.]+)/g, label: '年內溢利', priority: 2, isLoss: false, attributable: false },
-    { re: /期內溢利[^\d（(]*([\d,.]+)/g, label: '期內溢利', priority: 2, isLoss: false, attributable: false },
-    { re: /本年溢利[^\d（(]*([\d,.]+)/g, label: '本年溢利', priority: 2, isLoss: false, attributable: false },
-    { re: /淨利潤(?:╱（虧損）)?[^\d（(]*([\d,.]+)/g, label: '淨利潤', priority: 3, isLoss: false, attributable: false },
-    { re: /净利润(?:╱（亏损）)?[^\d（(]*([\d,.]+)/g, label: '净利润', priority: 3, isLoss: false, attributable: false },
-    { re: /年內虧損[^\d（(]*([\d,.]+)/g, label: '年內虧損', priority: 2, isLoss: true, attributable: false },
-  ];
+        const context = resolveContext(sectionText, hit.index);
+        const amount = normalizeUnitCurrency(rawValue, context.currency, context.unit);
+        if (!amount) continue;
 
-  for (const anchor of summaryAnchors) {
-    const m = anchor.exec(noSpace);
-    if (!m) continue;
-
-    const section = noSpace.slice(m.index, m.index + 8000);
-
-    for (const { re, label, isLoss } of profitPatterns) {
-      const hit = re.exec(section);
-      if (!hit) continue;
-
-      const localContext = resolveContext(section, hit.index);
-      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
-      if (!hkd) continue;
-
-      const amount = isLoss ? -hkd : hkd;
-      console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
-
-      return buildResult(
-        amount,
-        localContext,
-        `財務概要(${label})`,
-        'high',
-        section,
-        hit.index
-      );
+        const isInterim = INTERIM_CONTEXT_RE.test(snippet);
+        candidates.push({
+          hkdAmount: pattern.isLoss ? -amount : amount,
+          currency: context.currency,
+          unit: context.unit,
+          source: `${sectionSource}(${pattern.label})`,
+          confidence: isInterim && baseConfidence === 'high' ? 'medium' : baseConfidence,
+          snippet,
+          priority: pattern.priority,
+          attributable: pattern.attributable,
+          isLoss: pattern.isLoss,
+          isInterim,
+        });
+      }
     }
 
+    return candidates;
+  }
+
+  function chooseBestProfit(candidates) {
+    if (!candidates || candidates.length === 0) return null;
+
+    const sorted = [...candidates].sort((a, b) => {
+      if (a.isInterim !== b.isInterim) return a.isInterim ? 1 : -1;
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (a.attributable !== b.attributable) return a.attributable ? -1 : 1;
+      return Math.abs(b.hkdAmount) - Math.abs(a.hkdAmount);
+    });
+
+    const best = { ...sorted[0] };
+    const comparable = sorted.filter(c => !c.isInterim && c.priority === best.priority);
+    if (comparable.length > 1) {
+      const amounts = comparable.map(c => Math.abs(c.hkdAmount)).filter(Boolean).sort((a, b) => a - b);
+      const min = amounts[0];
+      const max = amounts[amounts.length - 1];
+      if (min > 0 && max / min >= 5) {
+        best.conflict = true;
+        best.conflictCandidates = comparable.slice(0, 3).map(c => ({ source: c.source, hkdAmount: c.hkdAmount, snippet: c.snippet.slice(0, 120) }));
+      }
+    }
     return best;
+  }
+
+  const candidates = [];
+  for (const section of locateFinancialSection()) {
+    candidates.push(...extractProfitCandidates(section.text, section.source, section.confidence));
+  }
+
+  const best = chooseBestProfit(candidates);
+  if (!best) {
+    console.log('[netProfit] 未提取到净利润');
+    return { hkdAmount: null, currency: null, unit: null, source: '未找到', confidence: 'none', snippet: '' };
+  }
+
+  if (best.isInterim) {
+    best.confidence = 'low';
+    best.source = `${best.source}-中期口徑`;
+  }
+
+  console.log(`[netProfit] 最佳候选: ${best.source}, ${best.hkdAmount.toLocaleString()} HKD, confidence=${best.confidence}${best.conflict ? ', conflict=true' : ''}`);
+  return {
+    hkdAmount: best.hkdAmount,
+    currency: best.currency,
+    unit: best.unit,
+    source: best.source,
+    confidence: best.confidence,
+    snippet: best.snippet,
+    isInterim: !!best.isInterim,
+    conflict: !!best.conflict,
+    conflictCandidates: best.conflictCandidates || [],
   };
-
-  const sections = locateFinancialSection();
-  let candidates = [];
-  for (const section of sections) {
-    candidates = candidates.concat(extractProfitCandidates(section.text, section.source, section.confidence));
-  }
-
-  // ── 策略 B：搜索"所得稅開支"向下找净利润 ──
-  const taxIdx = noSpace.indexOf('所得稅開支');
-  if (taxIdx !== -1) {
-    const after = noSpace.slice(taxIdx, taxIdx + 1200);
-
-    for (const { re, label, isLoss } of profitPatterns) {
-      const hit = re.exec(after);
-      if (!hit) continue;
-
-      const localContext = resolveContext(after, hit.index);
-      const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
-      if (!hkd) continue;
-
-      const amount = isLoss ? -hkd : hkd;
-      console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
-
-      return buildResult(
-        amount,
-        localContext,
-        `所得稅附近(${label})`,
-        'medium',
-        after,
-        hit.index
-      );
-    }
-  }
-
-  // ── 策略 C：全文搜索 ──
-  for (const { re, label, isLoss } of profitPatterns) {
-    const hit = re.exec(noSpace);
-    if (!hit) continue;
-
-    const localBlock = noSpace.slice(
-      Math.max(0, hit.index - 300),
-      Math.min(noSpace.length, hit.index + 500)
-    );
-    const localContext = resolveContext(localBlock, Math.min(300, hit.index));
-    const hkd = toHKD(hit[1], localContext.currency, localContext.unit);
-    if (!hkd) continue;
-
-    const amount = isLoss ? -hkd : hkd;
-    console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
-
-    return buildResult(
-      amount,
-      localContext,
-      `全文搜索(${label})`,
-      'low',
-      noSpace,
-      hit.index
-    );
-  }
-
-  console.log('[netProfit] 未提取到净利润');
-  return { hkdAmount: null, currency: null, unit: null, source: '未找到', confidence: 'none', snippet: '' };
 }
 
 // ==================== V5：PE 评分函数（独立，供主流程调用）====================
@@ -2315,7 +2309,25 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
   evidence.peerMedianPE = peerMedianPE;
   evidence.ratio        = ratio;
 
-  if (meta.profitConfidence === 'low' && newIPOpe > 300) {
+  if (meta.profitConflict) {
+    return {
+      score: 0,
+      reason: 'PE：利润候选冲突',
+      details: '净利润候选值差异过大，疑似抓到不同口径或脏数据，暂不评分',
+      evidence,
+    };
+  }
+
+  if (meta.profitIsInterim) {
+    return {
+      score: 0,
+      reason: 'PE：仅识别到中期利润',
+      details: '仅找到中期/期间利润口径，未找到最近完整财年利润，暂不评分',
+      evidence,
+    };
+  }
+
+  if ((meta.profitConfidence === 'low' || meta.profitConfidence === 'medium') && newIPOpe > 300) {
     return {
       score: 0,
       reason: 'PE：利润口径存疑',
@@ -2324,7 +2336,7 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
     };
   }
 
-  if (newIPOpe > 3000 || netProfitHKD < 1e6) {
+  if (newIPOpe > 300 || netProfitHKD < 1e6) {
     return {
       score: 0,
       reason: 'PE：疑似异常值',
@@ -3588,10 +3600,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   const EXPLICIT_NO_LOCKUP_KW = [
     '無禁售', '无禁售', '可立即出售', '可立即轉讓', '可立即转让',
     'nolock-up', 'nolockup', 'withoutlock-up', 'withoutlockup',
+    'nolockupperiod', 'freelydispose', 'freelytransfer',
   ];
 
   // Step 4: 禁售时长正则（支持"上市后X个月"等前置语境）
-  const LOCKUP_DURATION_RE = /(?:上市後|自上市日期?起(?:計)?|上市日期?起計)?(?:三年|3年|36個月|36个月|兩年|两年|2年|24個月|24个月|十二個月|十二个月|12個月|12个月|一年|1年|六個月|六个月|6個月|6个月|180[天日]|三個月|三个月|3個月|3个月|90[天日])/;
+  const LOCKUP_DURATION_RE = /(?:上市後|上市后|自上市日期?起(?:計)?|自上市之日起|上市日期?起計|fromtheListingDate|afterListing)?(?:三年|3年|36個月|36个月|兩年|两年|2年|24個月|24个月|十八個月|十八个月|18個月|18个月|十二個月|十二个月|12個月|12个月|一年|1年|六個月|六个月|6個月|6个月|180[天日]|三個月|三个月|3個月|3个月|90[天日]|sixmonths|12months|18months|24months)/i;
 
   // Step 5: 区分投资者禁售 vs 创始人禁售的标记词
   // 禁售条文附近（±300字）必须含以下任一词，才认定为Pre-IPO投资者禁售
@@ -3601,17 +3614,6 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     '首次公開發售前', '首次公开发售前',
     '上市前投資', '上市前投资',
   ];
-
-  // 将时长表达式转换为月数（用于判断是否 >= 6 个月）
-  const parseDurationMonths = (expr) => {
-    if (!expr) return null;
-    if (/三年|3年|36個月|36个月/.test(expr)) return 36;
-    if (/兩年|两年|2年|24個月|24个月/.test(expr)) return 24;
-    if (/十二個月|十二个月|12個月|12个月|一年|1年/.test(expr)) return 12;
-    if (/六個月|六个月|6個月|6个月|180/.test(expr)) return 6;
-    if (/三個月|三个月|3個月|3个月|90/.test(expr)) return 3;
-    return null;
-  };
 
   // ── 工作变量 ──────────────────────────────────────────────────────────────
   let hasPreIPOInvestment = false;
@@ -3627,7 +3629,26 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   // ── Step 2: 提取Pre-IPO条款区块（按优先级三级策略）─────────────────────
 
-  // 辅助：在候选区块中搜索禁售（含投资者语境过滤）
+  const parseDurationMonths = (expr) => {
+    if (!expr) return null;
+    if (/三年|3年|36個月|36个月/.test(expr)) return 36;
+    if (/兩年|两年|2年|24個月|24个月|24months/i.test(expr)) return 24;
+    if (/十八個月|十八个月|18個月|18个月|18months/i.test(expr)) return 18;
+    if (/十二個月|十二个月|12個月|12个月|一年|1年|12months/i.test(expr)) return 12;
+    if (/六個月|六个月|6個月|6个月|180|sixmonths/i.test(expr)) return 6;
+    if (/三個月|三个月|3個月|3个月|90/.test(expr)) return 3;
+    return null;
+  };
+
+  const historySection = extractSection(
+    textNoSpaceForLockup,
+    [/歷史.*?發展.*?公司架構/i, /歷史.*?重組.*?公司架構/i, /历史.*?发展.*?公司架构/i, /历史.*?重组.*?公司架构/i,
+     /History.*?Development.*?CorporateStructure/i, /History.*?Reorganization.*?CorporateStructure/i],
+    [/業務/i, /业务/i, /BUSINESS/i],
+    180000,
+    true
+  );
+
   const findLockupInBlock = (block) => {
     for (const nkw of EXPLICIT_NO_LOCKUP_KW) {
       const idx = block.indexOf(nkw);
@@ -3655,7 +3676,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         }
 
         // Step 4: 在禁售关键词前后500字内提取时长
-        const nearby = block.slice(Math.max(0, idx - 100), Math.min(block.length, idx + 500));
+        const nearby = block.slice(Math.max(0, idx - 120), Math.min(block.length, idx + 800));
         const durationMatch = nearby.match(LOCKUP_DURATION_RE);
         const period = durationMatch ? durationMatch[0] : '';
         const months = parseDurationMonths(period);
@@ -3675,11 +3696,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   // 策略 A: 优先匹配"首次公開發售前投資的主要條款"专属子章节（置信度最高）
   console.log(`[禁售期] 策略A: 查找"首次公開發售前投資的主要條款"...`);
   const TERMS_SECTION_RE = /首次公開發售前投資的主要條款|首次公开发售前投资的主要条款|Pre-IPOInvestment.*?Terms/i;
-  const termsSectionMatch = textNoSpaceForLockup.match(TERMS_SECTION_RE);
+  const termsSectionMatch = historySection ? historySection.match(TERMS_SECTION_RE) : textNoSpaceForLockup.match(TERMS_SECTION_RE);
   if (termsSectionMatch) {
+    const sourceText = historySection || textNoSpaceForLockup;
     const matchIdx = termsSectionMatch.index;
     // 提取匹配位置 ±8000 字符
-    const block = textNoSpaceForLockup.slice(Math.max(0, matchIdx - 500), Math.min(textNoSpaceForLockup.length, matchIdx + 8000));
+    const block = sourceText.slice(Math.max(0, matchIdx - 500), Math.min(sourceText.length, matchIdx + 9000));
     preIPOSectionTitle = '首次公開發售前投資的主要條款';
     hasPreIPOInvestment = true;
     preIPOContext = block.slice(0, 200);
@@ -3691,13 +3713,6 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   // 策略 B: 在"歷史、重組及公司架構"章节中搜索Pre-IPO关键词
   if (!hasPreIPOInvestment) {
     console.log(`[禁售期] 策略B: 提取歷史/重組章节...`);
-    const historySection = extractSection(
-      textNoSpaceForLockup,
-      [/歷史.*?重組.*?公司架構/i, /歷史.*?發展.*?公司架構/i, /历史.*?重组.*?公司架构/i,
-       /History.*?Development.*?CorporateStructure/i, /HISTORY.*?REORGANIZATION/i, /HISTORY.*?CORPORATESTRUCTURE/i],
-      [/業務/i, /业务/i, /BUSINESS/i],
-      150000, true
-    );
     console.log(`[禁售期] 歷史章节长度: ${historySection?.length || 0}`);
 
     if (historySection && historySection.length > 1000) {
@@ -3710,7 +3725,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         lockupConfidence += 40;
         console.log(`[禁售期] ✓ 策略B命中Pre-IPO关键词: "${kw}"`);
         // 提取更大的后文区块，避免漏掉紧随其后的禁售安排
-        const block = historySection.slice(Math.max(0, idx - 800), Math.min(historySection.length, idx + 12000));
+        const block = historySection.slice(Math.max(0, idx - 1000), Math.min(historySection.length, idx + 12000));
         findLockupInBlock(block);
         break;
       }
@@ -3741,43 +3756,32 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   console.log(`[禁售期] 结果: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, period="${lockupPeriod || '无'}", months=${lockupMonths ?? '未知'}, confidence=${lockupConfidence}`);
 
-  // ── Step 6: 评分 ──────────────────────────────────────────────────────────
+  // ── Step 6: 评分（保持原有规则：有禁售/无Pre-IPO=0，明确无禁售=-2，未知=0） ─────
   let lockupScore = 0;
   let lockupReason = '';
   let lockupDetails = '';
   let lockupScoreRule = '';
 
-  // V5：时长梯度细化（原6个月门槛 → 12/6 两档）
   if (!hasPreIPOInvestment) {
     lockupScore = 0;
     lockupReason = '无Pre-IPO';
     lockupDetails = '未发现Pre-IPO投资者';
     lockupScoreRule = '无Pre-IPO投资者，0分';
-  } else if (hasLockup === true && (lockupMonths === null || lockupMonths >= 12)) {
-    // 禁售≥12个月（或时长未明确，保守视为充足）→ 安全
+  } else if (hasLockup === true) {
     lockupScore = 0;
     lockupReason = 'Pre-IPO有禁售期';
-    lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : '（时长未明确，视为充足）'}`;
-    lockupScoreRule = 'Pre-IPO禁售期≥12个月（或未明确），0分（安全）';
-  } else if (hasLockup === true && lockupMonths !== null && lockupMonths >= 6) {
-    // 禁售 6-12个月 → 轻微风险
-    lockupScore = -1;
-    lockupReason = 'Pre-IPO禁售期适中';
-    lockupDetails = `有Pre-IPO投资者，禁售期${lockupPeriod}（6-12个月）`;
-    lockupScoreRule = 'Pre-IPO禁售期6-12个月，-1分（轻微风险）';
+    lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : ''}`;
+    lockupScoreRule = '有Pre-IPO投资者且有禁售期，0分';
   } else if (hasLockup === 'unknown') {
     lockupScore = 0;
     lockupReason = 'Pre-IPO禁售未明确';
     lockupDetails = '发现Pre-IPO投资者，但未检出明确禁售或明确无禁售表述，暂不按无禁售处理';
     lockupScoreRule = 'Pre-IPO禁售状态未知，0分（避免脏数据误伤）';
   } else {
-    // 禁售<6个月 或 无禁售 → 高风险
     lockupScore = -2;
-    lockupReason = hasLockup === true ? 'Pre-IPO禁售期偏短' : 'Pre-IPO无禁售安排';
-    lockupDetails = hasLockup === true
-      ? `有Pre-IPO投资者，禁售期仅${lockupPeriod}（< 6个月）`
-      : '有Pre-IPO投资者，且存在明确无禁售/可立即出售表述';
-    lockupScoreRule = hasLockup === true ? 'Pre-IPO禁售<6个月，-2分（高风险）' : 'Pre-IPO明确无禁售期，-2分（高风险）';
+    lockupReason = 'Pre-IPO无禁售安排';
+    lockupDetails = '有Pre-IPO投资者，且存在明确无禁售/可立即出售表述';
+    lockupScoreRule = 'Pre-IPO明确无禁售期，-2分';
   }
 
   const lockupEvidence = {
@@ -4027,6 +4031,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, {
       profitConfidence: profitResult.confidence || 'none',
       profitSource: profitResult.source || '未找到',
+      profitIsInterim: !!profitResult.isInterim,
+      profitConflict: !!profitResult.conflict,
     });
     let peStatus = 'neutral';
     let peReason = peResult.reason;
