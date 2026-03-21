@@ -1831,7 +1831,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
   }
 
   // ===== 1️⃣ 定位表格区域 =====
-  const anchorMatch = cornerstoneSection.match(/下表載列基石配售的詳情[:：]?/);
+  const anchorMatch = cornerstoneSection.match(/下表載列基石(?:配售|投資)的詳情[:：]?/);
   if (!anchorMatch) {
     console.log('[表格定位] ❌ 没找到表格锚点');
     return [];
@@ -1839,11 +1839,85 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
   let tableText = cornerstoneSection.slice(anchorMatch.index, anchorMatch.index + 10000);
 
+  const cleanupInvestorName = (rawName) => {
+    if (!rawName) return '';
+    let name = rawName
+      .replace(/^[\-–—•·\s]+/, '')
+      .replace(/\.{2,}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    name = name
+      .replace(/^(?:[)）]|基石投資者|基石投资者|認購金額|认购金额|數目|数目|百分比|發售股份|发售股份|股份概約|股份概约|股本概約|股本概约)+/g, '')
+      .replace(/^[^A-Za-z\u4e00-\u9fa5（(]+/, '')
+      .trim();
+
+    // 删除仅用于解释的括号说明，但保留机构名中的正常括号（如“（亞洲）”）
+    name = name.replace(/[（(]([^）)]*(?:有關|有关|相關|相关|掉期|附註|附注)[^）)]*)[）)]/g, '').trim();
+
+    return name;
+  };
+
+  const isNoisyInvestorName = (name) => {
+    if (!name) return true;
+    if (/^(總計|百萬美元|百万美元|百萬港元|百万港元|美元|港元|人民幣|人民币)$/.test(name)) return true;
+    if (/^[（(][^）)]+[）)]$/.test(name)) return true;
+    if (/^(資本|资本|投資|投资|基金|管理|控股|集團|集团)$/.test(name)) return true;
+    if (/(百分比|認購金額|认购金额|股本概約|股本概约|股份概約|股份概约)/.test(name)) return true;
+    return false;
+  };
+
+  const rawTableText = tableText;
+
+  // ===== 2️⃣.1 优先按行提取，保留多行机构全名 =====
+  const lines = rawTableText
+    .replace(/–\s*\d+\s*–/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/\u000c/g, '').trim())
+    .filter(Boolean);
+
+  const lineRegex = /(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s+((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s+(\d+\.\d+)%/;
+  const lineInvestors = [];
+  let pendingNameParts = [];
+
+  for (const line of lines) {
+    if (/^基石投資者$|^基於發售價|^假設超額配股權|^總計/.test(line)) {
+      pendingNameParts = [];
+      continue;
+    }
+
+    const match = line.match(lineRegex);
+    if (!match) {
+      if (!/^(認購金額|數目|百分比|將予認購的|發售股份|股份概約|股本概約)/.test(line)) {
+        pendingNameParts.push(line.replace(/\.{2,}/g, ' ').trim());
+      }
+      continue;
+    }
+
+    const inlineName = match[1].replace(/\.{2,}/g, ' ').trim();
+    const combinedName = cleanupInvestorName([...pendingNameParts, inlineName].filter(Boolean).join(' '));
+    pendingNameParts = [];
+
+    if (isNoisyInvestorName(combinedName)) continue;
+
+    lineInvestors.push({
+      name: combinedName,
+      amount: parseFloat(match[2]),
+      shares: parseInt(match[3].replace(/,/g, ''), 10),
+      percent: parseFloat(match[4]),
+    });
+  }
+
   // ===== 2️⃣ PDF 清洗 =====
   tableText = tableText
     .replace(/\.{2,}/g, ' ')          // 点线
     .replace(/–\s*\d+\s*–/g, ' ')     // 页码
     .replace(/\s+/g, ' ');            // 压缩空白
+
+  tableText = tableText.replace(
+    /^.*?基石投資者認購金額\(1\)數目\(2\)百分比百分比百分比百分比/,
+    ''
+  );
 
   console.log('[表格文本预览]', tableText.slice(0, 400));
 
@@ -1856,9 +1930,10 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
    * Oaktree 30 5,106,200 5.45%
    * 歐萬達基金 20 3,404,100 3.64%
    */
+  const rowRegex = /([A-Za-z\u4e00-\u9fa5（）()&.\-]{2,80}?)\s*(\d{1,3}(?:\.\d+)?)(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s*((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s*(\d+\.\d+)%/g;
   const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
 
-  const investors = [];
+  const investors = lineInvestors.slice();
   let match;
 
   while ((match = rowRegex.exec(tableText)) !== null) {
@@ -1867,6 +1942,11 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
     // 过滤總計
     if (name.includes('總計')) continue;
 
+    const cleanedName = cleanupInvestorName(name);
+    if (isNoisyInvestorName(cleanedName)) continue;
+
+    const investor = {
+      name: cleanedName,
     const investor = {
       name,
       amount: parseFloat(match[2]),
