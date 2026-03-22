@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-22T03:33:00.707Z",
+  "generatedAt": "2026-03-22T08:47:33.327Z",
   "sampleCodes": [
     "01021",
     "01989",
@@ -111,6 +111,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -119,7 +120,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -127,7 +128,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -193,6 +195,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -201,7 +204,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -209,7 +212,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -279,6 +283,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": -61727600,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -287,7 +292,7 @@
       "status": "not_applicable",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -295,7 +300,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -351,6 +357,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -359,7 +366,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -367,7 +374,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -431,6 +439,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": 39600,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -439,7 +448,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -447,7 +456,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -510,6 +520,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -531,6 +542,7 @@
       "offerPriceMid": null,
       "totalShares": 267482700,
       "netProfitHKD": 1069700000,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -539,7 +551,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -547,7 +559,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -606,6 +619,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": -20823000,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -614,7 +628,7 @@
       "status": "not_applicable",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -622,7 +636,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -688,6 +703,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -696,7 +712,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -704,7 +720,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -769,6 +786,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": 4963800000,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -777,7 +795,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -785,7 +803,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -845,6 +864,7 @@
       "offerPriceMid": null,
       "totalShares": 967798453,
       "netProfitHKD": -4141500,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -853,7 +873,7 @@
       "status": "not_applicable",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -861,7 +881,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -922,6 +943,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": 118250,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -930,7 +952,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -938,7 +960,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -1005,6 +1028,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": -73640600,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -1013,7 +1037,7 @@
       "status": "not_applicable",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -1021,7 +1045,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -1086,6 +1111,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -1094,7 +1120,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -1102,7 +1128,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -1171,6 +1198,7 @@
       "offerPriceMid": null,
       "totalShares": 400000000,
       "netProfitHKD": 414856200,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -1179,7 +1207,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -1187,7 +1215,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -1255,6 +1284,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": 0,
@@ -1263,7 +1293,7 @@
       "status": "insufficient_data",
       "peerPEStatus": {
         "status": "network_error",
-        "reason": "etnet IPO详情抓取失败",
+        "reason": "Request failed with status code 403",
         "industry": null,
         "natureCode": null,
         "sampleSize": 0,
@@ -1271,7 +1301,8 @@
         "details": {
           "etnetFetchStatus": {
             "status": "network_error",
-            "reason": "etnet IPO详情抓取失败"
+            "reason": "Request failed with status code 403",
+            "attempts": 3
           }
         }
       },
@@ -1337,6 +1368,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1358,6 +1390,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1379,6 +1412,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1400,6 +1434,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1421,6 +1456,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1442,6 +1478,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1463,6 +1500,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
@@ -1484,6 +1522,7 @@
       "offerPriceMid": null,
       "totalShares": null,
       "netProfitHKD": null,
+      "marketCapMid": null,
       "peerMedianPE": null,
       "finalPE": null,
       "scorePE": null,
