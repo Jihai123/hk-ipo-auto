@@ -2195,6 +2195,9 @@ function extractNetProfit(text, options = {}) {
       { re: /人民幣百萬元|人民币百万元/i, currency: 'RMB', unit: '人民幣百萬元' },
       { re: /人民幣千元|人民币千元/i, currency: 'RMB', unit: '人民幣千元' },
       { re: /港元百萬元|港幣百萬元|港币百万元/i, currency: 'HKD', unit: '港元百萬元' },
+      { re: /港元千元|港幣千元|港币千元/i, currency: 'HKD', unit: '港元千元' },
+      { re: /美元百萬元/i, currency: 'USD', unit: '美元百萬元' },
+      { re: /美元千元/i, currency: 'USD', unit: '美元千元' },
       { re: /千元/i, currency: null, unit: '千元' },
       { re: /百萬元|百万元|million/i, currency: null, unit: '百萬元' },
       { re: /億元|亿元/i, currency: null, unit: '億元' },
@@ -2207,15 +2210,15 @@ function extractNetProfit(text, options = {}) {
 
   function resolveContext(sectionText, hitIndex) {
     const nearby = sectionText.slice(Math.max(0, hitIndex - 260), Math.min(sectionText.length, hitIndex + 260));
-    const fallback = getLocalUnitContext(noSpace, '人民幣', '千元');
+    const fallback = getLocalUnitContext(noSpace, null, null);
     const close = getClosestUnitContext(nearby, Math.min(260, hitIndex), fallback.currency, fallback.unit);
     const localUnit = detectUnit(nearby);
     const sectionUnit = detectUnit(sectionText.slice(0, Math.min(sectionText.length, 400)));
     const globalUnit = detectUnit(noSpace.slice(0, 1200));
 
-    const resolvedCurrency = localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || '人民幣';
-    const resolvedUnit = localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || '千元';
-    const unitSource = localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'metadata';
+    const resolvedCurrency = localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || null;
+    const resolvedUnit = localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || null;
+    const unitSource = localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'unresolved';
     return { currency: resolvedCurrency, unit: resolvedUnit, unitSource };
   }
 
@@ -2272,11 +2275,29 @@ function extractNetProfit(text, options = {}) {
 
     if (mergedNumberDetected) rejectFlags.push('merged_number_suspected');
 
+    const isYearLikeValue = Number.isFinite(numericValue)
+      && Number.isInteger(Math.abs(numericValue))
+      && Math.abs(numericValue) >= 2000
+      && Math.abs(numericValue) <= new Date().getUTCFullYear() + 1;
+    if (isYearLikeValue) rejectFlags.push('year_value_suspected');
+
     const isSmallPlainNumber = Number.isFinite(numericValue)
       && Math.abs(numericValue) <= 24
       && !hasResolvableUnit(candidate)
       && candidate.fieldTier <= 3;
     if (isSmallPlainNumber) rejectFlags.push('small_number_suspected');
+
+    const hasWeakUnitLocality = Number.isFinite(numericValue)
+      && Math.abs(numericValue) <= 99
+      && candidate.fieldTier >= 2
+      && candidate.unitSource === 'paragraph';
+    if (hasWeakUnitLocality) rejectFlags.push('weak_unit_locality_small_value');
+
+    const profitTooSmallForAnnual = candidate.periodType === 'annual'
+      && Number.isFinite(candidate.netProfitHKD)
+      && Math.abs(candidate.netProfitHKD) > 0
+      && Math.abs(candidate.netProfitHKD) < 1e6;
+    if (profitTooSmallForAnnual) rejectFlags.push('profit_too_small_for_annual');
 
     const profitOutlier = digits > 15
       || (Number.isFinite(candidate.netProfitHKD) && Number.isFinite(marketCapHKD) && marketCapHKD > 0
