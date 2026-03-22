@@ -132,6 +132,30 @@ function parsePE(raw) {
   return m ? parseFloat(m[0]) : null;
 }
 
+function parseMarketCap(raw) {
+  if (!raw) return null;
+  const normalized = String(raw).replace(/,/g, '').replace(/\s+/g, '');
+  const matchers = [
+    { re: /([\d.]+)億元?/i, multiplier: 1e8 },
+    { re: /([\d.]+)亿港元?/i, multiplier: 1e8 },
+    { re: /([\d.]+)百萬元?/i, multiplier: 1e6 },
+    { re: /([\d.]+)百万港元?/i, multiplier: 1e6 },
+    { re: /([\d.]+)萬元?/i, multiplier: 1e4 },
+    { re: /([\d.]+)万港元?/i, multiplier: 1e4 },
+  ];
+  for (const { re, multiplier } of matchers) {
+    const m = normalized.match(re);
+    if (m) {
+      const value = Number.parseFloat(m[1]);
+      if (Number.isFinite(value)) return Math.round(value * multiplier);
+    }
+  }
+  const plain = normalized.match(/([\d.]+)/);
+  if (!plain) return null;
+  const value = Number.parseFloat(plain[1]);
+  return Number.isFinite(value) ? Math.round(value) : null;
+}
+
 /**
  * 爬取并解析 etnet IPO详情页
  * @param {string} code - 5位股票代码字符串，如 "06809"
@@ -181,6 +205,9 @@ async function crawlIPODetail(code) {
     offerPrice:           null,   // 原始字符串
     offerPriceMid:        null,   // 中值（港元）
     marketCapH:           null,   // H股市值（仅展示，不用于PE计算）
+    marketCapUpper:       null,
+    marketCapLower:       null,
+    marketCapMid:         null,
     sponsors:             [],
     totalOfferingShares:  null,
     listingDate:          null,
@@ -221,6 +248,14 @@ async function crawlIPODetail(code) {
       if (!result.marketCapH) result.marketCapH = val;
       if (!result.marketCapRaw) result.marketCapRaw = val;
     }
+    if (/市值（?上限）?|上限市值/.test(key)) {
+      result.marketCapUpper = parseMarketCap(val);
+      if (!result.marketCapRaw) result.marketCapRaw = val;
+    }
+    if (/市值（?下限）?|下限市值/.test(key)) {
+      result.marketCapLower = parseMarketCap(val);
+      if (!result.marketCapRaw) result.marketCapRaw = val;
+    }
 
     // 全球发售 - 保荐人（可能是多行合并或换行）
     if (/保薦人|保荐人/.test(key)) {
@@ -252,6 +287,10 @@ async function crawlIPODetail(code) {
     }
     result._debug.extractedKeys.push(key);
   });
+
+  if (Number.isFinite(result.marketCapUpper) && Number.isFinite(result.marketCapLower)) {
+    result.marketCapMid = Math.round((result.marketCapUpper + result.marketCapLower) / 2);
+  }
 
   if (!result.offerPriceMid || !result.totalShares || !result.industry) {
     console.warn(`[etnet/ipoDetail] 容错提示: code=${code} missing=${[!result.offerPriceMid && 'offerPriceMid', !result.totalShares && 'totalShares', !result.industry && 'industry'].filter(Boolean).join(',') || 'none'}`);

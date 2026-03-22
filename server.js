@@ -2686,6 +2686,7 @@ function extractNetProfit(text, options = {}) {
       label: null,
       year: null,
       periodType: null,
+      profitPeriodType: 'unknown',
       rawValue: null,
       normalizedValue: null,
       unit: null,
@@ -2715,6 +2716,7 @@ function extractNetProfit(text, options = {}) {
     label: best.label,
     year: best.year,
     periodType: best.periodType,
+    profitPeriodType: best.periodType === 'annual' || best.periodType === 'interim' ? best.periodType : (best.periodType ? 'derived' : 'unknown'),
     rawValue: best.rawValue,
     normalizedValue: best.normalizedValue,
     unit: best.unit,
@@ -2766,6 +2768,14 @@ function extractNetProfit(text, options = {}) {
  */
 function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = {}) {
   const evidence = { offerPriceMid, totalShares, netProfitHKD, peerMedianPE, ...meta };
+  const profitPeriodType = meta.profitPeriodType || 'unknown';
+  const peMethod = profitPeriodType === 'annual'
+    ? 'static'
+    : profitPeriodType === 'interim'
+      ? 'rolling_like'
+      : 'uncertain';
+  evidence.profitPeriodType = profitPeriodType;
+  evidence.peMethod = peMethod;
 
   // 亏损公司
   if (netProfitHKD !== null && netProfitHKD <= 0) {
@@ -2773,15 +2783,22 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
   }
 
   // 数据缺失
-  if (!offerPriceMid || !totalShares || !netProfitHKD) {
-    return { score: 0, reason: 'PE：数据不足', details: '发行价/股本/利润数据缺失，无法计算', evidence };
+  const marketCapMid = Number.isFinite(meta.marketCapMid) ? meta.marketCapMid : null;
+  const fallbackMarketCap = Number.isFinite(offerPriceMid) && Number.isFinite(totalShares) ? offerPriceMid * totalShares : null;
+  const totalMarketCap = Number.isFinite(marketCapMid) ? marketCapMid : fallbackMarketCap;
+  evidence.marketCapMid = marketCapMid;
+  evidence.marketCapUpper = Number.isFinite(meta.marketCapUpper) ? meta.marketCapUpper : null;
+  evidence.marketCapLower = Number.isFinite(meta.marketCapLower) ? meta.marketCapLower : null;
+  evidence.marketCapSource = meta.marketCapSource || (Number.isFinite(marketCapMid) ? 'etnet_mid' : 'price_shares');
+
+  if (!totalMarketCap || !netProfitHKD) {
+    return { score: 0, reason: 'PE：数据不足', details: '市值/利润数据缺失，无法计算', evidence };
   }
 
   if (!peerMedianPE || peerMedianPE <= 0) {
     return { score: 0, reason: 'PE：无法对标', details: '可比公司不足3家，无法对标', evidence };
   }
 
-  const totalMarketCap = offerPriceMid * totalShares;
   const computedPE = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
   const sitePE = Number.isFinite(meta.sitePE) ? meta.sitePE : null;
   const peDiffPct = sitePE && computedPE > 0 ? parseFloat((((computedPE - sitePE) / sitePE) * 100).toFixed(2)) : null;
@@ -4600,8 +4617,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
 
     // 2. 总股本：优先 ETNet 结构化字段，失败时回退 PDF（关键：不能用 H 股市值）
-    const initialMarketCapHKD = Number.isFinite(etnetData?.marketCap)
-      ? etnetData.marketCap
+    const initialMarketCapHKD = Number.isFinite(etnetData?.marketCapMid)
+      ? etnetData.marketCapMid
       : Number.isFinite(offerPriceMid) && Number.isFinite(etnetData?.totalShares)
         ? offerPriceMid * etnetData.totalShares
         : null;
@@ -4617,8 +4634,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     const totalShares  = sharesResult.totalShares;
 
     // 3. 净利润：从 PDF 提取
-    const profitMarketCapHKD = Number.isFinite(etnetData?.marketCap)
-      ? etnetData.marketCap
+    const profitMarketCapHKD = Number.isFinite(etnetData?.marketCapMid)
+      ? etnetData.marketCapMid
       : Number.isFinite(offerPriceMid) && Number.isFinite(totalShares)
         ? offerPriceMid * totalShares
         : initialMarketCapHKD;
@@ -4651,7 +4668,10 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           debug: resolvedIndustry.debug,
         }, null, 2));
         if (natureCode) {
-          const peData = await getComparablePE(natureCode);
+          const peerSelectionIpoMarketCap = Number.isFinite(etnetData?.marketCapMid)
+            ? etnetData.marketCapMid
+            : (Number.isFinite(offerPriceMid) && Number.isFinite(totalShares) ? offerPriceMid * totalShares : null);
+          const peData = await getComparablePE(natureCode, { ipoMarketCap: peerSelectionIpoMarketCap });
           peerMedianPE = peData.median;
           peerPEStatus = {
             status: peData.status || (Number.isFinite(peData.median) ? 'success' : 'parse_error'),
@@ -4660,8 +4680,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
             natureCode,
             sampleSize: peData.sampleSize || 0,
             median: peData.median ?? null,
+            peerSelectionMethod: peData.peerSelectionMethod || peData.details?.peerSelectionMethod || null,
+            peerCountUsed: peData.peerCountUsed || peData.details?.peerCountUsed || 0,
             details: {
               ...(peData.details || {}),
+              peerSelectionMethod: peData.peerSelectionMethod || peData.details?.peerSelectionMethod || null,
+              peerCountUsed: peData.peerCountUsed || peData.details?.peerCountUsed || 0,
               industryMapping: {
                 matchLevel: resolvedIndustry.matchLevel,
                 ...resolvedIndustry.debug,
@@ -4779,6 +4803,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       totalSharesRaw: etnetData.totalSharesRaw || null,
       sitePE: etnetData.sitePE || null,
       marketCapRaw: etnetData.marketCapRaw || null,
+      marketCapUpper: etnetData.marketCapUpper || null,
+      marketCapLower: etnetData.marketCapLower || null,
+      marketCapMid: etnetData.marketCapMid || null,
       industry: etnetData.industry || null,
       staticFieldCache: etnetData._staticFieldCache || null,
       fetchStatus: etnetData._fetchStatus || null,
@@ -4841,6 +4868,17 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       dataSourceLevel: dataSourceLevel || 'none',
       fallbackUsed,
       staticFieldCacheStatus: etnetData?._staticFieldCache?.status || null,
+      marketCapUpper: etnetData?.marketCapUpper || null,
+      marketCapLower: etnetData?.marketCapLower || null,
+      marketCapMid: etnetData?.marketCapMid || null,
+      marketCapSource: Number.isFinite(etnetData?.marketCapMid)
+        ? 'etnet_mid'
+        : (etnetData?._staticFieldCache?.fallbackUsed || []).includes('marketCapMid')
+          ? 'cache'
+          : 'price_shares',
+      profitPeriodType: profitResult.profitPeriodType || profitResult.periodType || 'unknown',
+      peerSelectionMethod: peerPEStatus?.details?.peerSelectionMethod || peerPEStatus?.peerSelectionMethod || null,
+      peerCountUsed: peerPEStatus?.details?.peerCountUsed || peerPEStatus?.peerCountUsed || null,
     });
     peDebug.computedPE = peResult.evidence.computedPE ?? null;
     console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
@@ -4849,9 +4887,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     if (netProfitHKD !== null && netProfitHKD <= 0) {
       peStatus = 'not_applicable';
       peReason = 'PE：公司未盈利，暂不适用PE比较';
-    } else if (!offerPriceMid || !totalShares || !netProfitHKD) {
+    } else if (!(Number.isFinite(peResult.evidence.totalMarketCap) && Number.isFinite(netProfitHKD))) {
       peStatus = 'insufficient_data';
-      peReason = 'PE：发行价/总股本/净利润数据不足，暂无法判断估值中性';
+      peReason = 'PE：市值/净利润数据不足，暂无法判断估值中性';
       if (etnetFetchStatus.status === 'network_error' && etnetData?._staticFieldCache?.status === 'cache_missing') {
         peReason = 'PE：实时抓取失败且静态缓存不存在，insufficient_data';
       }
@@ -4889,7 +4927,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         profitSnippet: profitResult.snippet || '',
         profitLabel: profitResult.label,
         profitYear: profitResult.year,
-        profitPeriodType: profitResult.periodType,
+        profitPeriodType: profitResult.profitPeriodType || profitResult.periodType || 'unknown',
+        peMethod: peResult.evidence.peMethod || 'uncertain',
+        marketCapSource: peResult.evidence.marketCapSource || null,
+        peerSelectionMethod: peResult.evidence.peerSelectionMethod || null,
+        peerCountUsed: peResult.evidence.peerCountUsed || null,
         profitCurrency: profitResult.currency,
         profitUnit: profitResult.unit,
         profitNormalizedValue: profitResult.normalizedValue,
@@ -4916,6 +4958,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         rejectSummary: profitResult.rejectSummary || {},
         winnerRunnerUp: profitResult.winnerRunnerUp || null,
         peerPEStatus,
+        peerSelectionMethod: peerPEStatus.peerSelectionMethod || peerPEStatus.details?.peerSelectionMethod || null,
+        peerCountUsed: peerPEStatus.peerCountUsed || peerPEStatus.details?.peerCountUsed || 0,
         computedPE: peResult.evidence.computedPE ?? null,
         confidenceScore: peConfidenceResult.rawScore,
         confidenceBreakdown: peConfidenceResult.breakdown,
@@ -5154,7 +5198,7 @@ function applyIPOStaticFieldFallback(stockCode, realtimeData, fetchStatus) {
   }
 
   if (realtimeFailed) {
-    for (const field of ['offerPriceMid', 'totalShares', 'industry']) {
+    for (const field of ['offerPriceMid', 'totalShares', 'industry', 'marketCapMid']) {
       if ((merged[field] === null || merged[field] === undefined || merged[field] === '') && fields[field] !== undefined) {
         merged[field] = fields[field];
         fallbackUsed.push(field);

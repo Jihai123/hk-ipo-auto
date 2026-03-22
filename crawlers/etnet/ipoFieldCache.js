@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CACHE_PATH = path.join(__dirname, '../../data/ipo-static-fields-cache.json');
-const CACHED_FIELDS = ['offerPriceMid', 'totalShares', 'industry'];
+const CACHED_FIELDS = ['offerPriceMid', 'totalShares', 'industry', 'marketCapMid'];
 
 function normalizeCode(code) {
   return String(code || '').replace(/\D/g, '').padStart(5, '0');
@@ -35,7 +35,7 @@ function pickStaticFields(source = {}) {
   for (const field of CACHED_FIELDS) {
     const value = source[field];
     if (value === null || value === undefined || value === '') continue;
-    if ((field === 'offerPriceMid' || field === 'totalShares') && !Number.isFinite(value)) continue;
+    if ((field === 'offerPriceMid' || field === 'totalShares' || field === 'marketCapMid') && !Number.isFinite(value)) continue;
     picked[field] = value;
   }
   return picked;
