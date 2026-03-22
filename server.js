@@ -2300,6 +2300,7 @@ function extractNetProfit(text, options = {}) {
     const mergedNumberDetected = hasMergedPattern
       || (digits > 15 && commaCount > 3)
       || (commaCount > 3 && hasInvalidThousandsGrouping)
+      || (commaCount > 0 && hasInvalidThousandsGrouping && digits >= 7)
       || (digits >= 8 && /^20\d{2},20\d{2}/.test(rawValue));
 
     if (mergedNumberDetected) rejectFlags.push('merged_number_suspected');
@@ -2351,6 +2352,7 @@ function extractNetProfit(text, options = {}) {
     if (annualTinyPlainValue) rejectFlags.push('annual_profit_tiny_plain_value');
 
     const profitOutlier = digits > 15
+      || (Number.isFinite(candidate.netProfitHKD) && Math.abs(candidate.netProfitHKD) > 1e13)
       || (Number.isFinite(candidate.netProfitHKD) && Number.isFinite(marketCapHKD) && marketCapHKD > 0
         && Math.abs(candidate.netProfitHKD) > marketCapHKD * 50);
     if (profitOutlier) rejectFlags.push('profit_outlier');
@@ -2361,6 +2363,7 @@ function extractNetProfit(text, options = {}) {
       'weak_unit_locality_small_value',
       'unresolved_unit_suspected',
       'annual_profit_tiny_plain_value',
+      'profit_outlier',
     ];
     const vetoFlags = ['profit_too_small_for_annual'];
 
@@ -2697,6 +2700,7 @@ function extractNetProfit(text, options = {}) {
       rejectReasonMap,
       rejectSummary,
       winnerRunnerUp,
+      winnerDiagnostics: null,
     };
   }
 
@@ -2727,6 +2731,22 @@ function extractNetProfit(text, options = {}) {
     rejectReasonMap,
     rejectSummary,
     winnerRunnerUp,
+    winnerDiagnostics: {
+      score: best.score,
+      semanticScore: best.semanticScore,
+      yearScore: best.yearScore,
+      unitScore: best.unitScore,
+      sourceScore: best.sourceScore,
+      semanticPurityScore: best.semanticPurityScore,
+      unitResolved: !!best.unitResolved,
+      currencyResolved: !!best.currencyResolved,
+      hasStrongUnitLocality: !!best.hasStrongUnitLocality,
+      unitSource: best.unitSource || null,
+      sourceLevel: best.sourceLevel,
+      fieldTier: best.fieldTier,
+      attributable: !!best.attributable,
+      penaltiesCount: Array.isArray(best.penalties) ? best.penalties.length : 0,
+    },
     debugCandidates,
     profitDigitLength: best.profitDigitLength || digitLength(best.rawValue),
     mergedNumberDetected: !!best.mergedNumberDetected,
@@ -2843,6 +2863,91 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
   return { score, reason, details, evidence };
 }
 
+function computePEConfidence({ peStatus, sharesResult, profitResult, peerPEStatus, peResult }) {
+  const diagnostics = profitResult?.winnerDiagnostics || {};
+  const breakdown = [];
+  let score = 52;
+
+  const add = (delta, label) => {
+    score += delta;
+    breakdown.push({ label, delta });
+  };
+
+  const profitConfidenceDelta = { none: -36, low: -14, medium: 2, high: 8 };
+  add(profitConfidenceDelta[profitResult?.confidence || 'none'] ?? -8, `profitConfidence:${profitResult?.confidence || 'none'}`);
+
+  const sharesConfidenceDelta = { none: -22, low: -10, medium: 2, high: 8 };
+  add(sharesConfidenceDelta[sharesResult?.confidence || 'none'] ?? -8, `sharesConfidence:${sharesResult?.confidence || 'none'}`);
+
+  const peerStatus = peerPEStatus?.status || 'unknown';
+  const peerStatusDelta = {
+    success: 16,
+    insufficient_samples: -12,
+    parse_error: -16,
+    network_error: -18,
+    industry_mapping_failed: -14,
+    empty_table: -14,
+    no_nature_code: -14,
+  };
+  add(peerStatusDelta[peerStatus] ?? -10, `peerPEStatus:${peerStatus}`);
+
+  const sampleSize = Number(peerPEStatus?.sampleSize || 0);
+  if (sampleSize >= 10) add(8, `peerSampleSize:${sampleSize}`);
+  else if (sampleSize >= 5) add(4, `peerSampleSize:${sampleSize}`);
+  else if (sampleSize >= 3) add(1, `peerSampleSize:${sampleSize}`);
+  else if (peerStatus === 'success') add(-4, `peerSampleSize:${sampleSize}`);
+
+  const matchLevel = peerPEStatus?.details?.industryMapping?.matchLevel || 'unknown';
+  const matchLevelDelta = { exact: 8, normalized: 5, alias: 2, fallback: -6, failed: -12, unknown: 0 };
+  add(matchLevelDelta[matchLevel] ?? 0, `industryMapping:${matchLevel}`);
+
+  const semanticPurityScore = Number(diagnostics.semanticPurityScore);
+  if (Number.isFinite(semanticPurityScore)) {
+    if (semanticPurityScore >= 170) add(10, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore >= 145) add(6, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore >= 120) add(2, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore < 100) add(-8, `semanticPurity:${semanticPurityScore}`);
+  }
+
+  if (diagnostics.unitResolved) add(8, 'unitResolved');
+  else add(-18, 'unitUnresolved');
+  if (diagnostics.hasStrongUnitLocality) add(6, 'strongUnitLocality');
+  if (Number.isFinite(diagnostics.yearScore)) {
+    if (diagnostics.yearScore >= 30) add(6, `yearScore:${diagnostics.yearScore}`);
+    else if (diagnostics.yearScore < 0) add(-6, `yearScore:${diagnostics.yearScore}`);
+  }
+
+  const penaltiesCount = Array.isArray(profitResult?.penalties) ? profitResult.penalties.length : 0;
+  if (penaltiesCount > 0) add(-Math.min(8, penaltiesCount * 2), `winnerPenalties:${penaltiesCount}`);
+
+  const runnerGap = Number(profitResult?.winnerRunnerUp?.scoreGap);
+  if (Number.isFinite(runnerGap)) {
+    if (runnerGap < 8) add(-18, `runnerGap:${runnerGap}`);
+    else if (runnerGap < 18) add(-8, `runnerGap:${runnerGap}`);
+    else if (runnerGap >= 35) add(4, `runnerGap:${runnerGap}`);
+  }
+
+  if (profitResult?.conflict) add(-20, 'profitConflict');
+  if (profitResult?.isInterim) add(-18, 'interimOnly');
+  if (peResult?.evidence?.warning === 'suspicious_low_pe') add(-12, 'suspiciousLowPE');
+
+  let confidence;
+  if (score >= 78) confidence = 'high';
+  else if (score >= 58) confidence = 'medium';
+  else if (score > 0) confidence = 'low';
+  else confidence = 'none';
+
+  if (peStatus === 'insufficient_data') confidence = confidence === 'none' ? 'none' : 'low';
+  if (peStatus === 'unknown' && confidence === 'high') confidence = 'medium';
+  if (peStatus === 'not_applicable' && confidence === 'high' && (profitResult?.confidence || 'none') !== 'high') confidence = 'medium';
+
+  return {
+    confidence,
+    rawScore: Math.max(0, Math.min(100, score)),
+    breakdown,
+  };
+}
+
 // ==================== 评分引擎 ====================
 
 /**
@@ -2869,11 +2974,16 @@ async function scoreProspectus(rawText, stockCode) {
 
   // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
   let etnetData = null;
+  let etnetFetchStatus = { status: 'not_requested', reason: '' };
   try {
     const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
     etnetData = await crawlIPODetail(fmtCode);
+    etnetFetchStatus = etnetData
+      ? { status: 'success', reason: '' }
+      : { status: 'network_error', reason: 'etnet IPO详情抓取失败' };
     console.log(`[etnet] 数据获取${etnetData ? '成功' : '失败'}`);
   } catch (e) {
+    etnetFetchStatus = { status: 'network_error', reason: e.message };
     console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取`);
   }
 
@@ -4507,13 +4617,13 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     let peerMedianPE = null;
     const industry = etnetData?.industry || null;
     let peerPEStatus = {
-      status: industry ? 'industry_mapping_failed' : 'industry_mapping_failed',
-      reason: industry ? '行业未映射到natureCode' : '缺少行业信息',
+      status: industry ? 'industry_mapping_failed' : (etnetFetchStatus.status === 'network_error' ? 'network_error' : 'missing_industry'),
+      reason: industry ? '行业未映射到natureCode' : (etnetFetchStatus.status === 'network_error' ? etnetFetchStatus.reason : '缺少行业信息'),
       industry,
       natureCode: null,
       sampleSize: 0,
       median: null,
-      details: {},
+      details: { etnetFetchStatus },
     };
     if (industry) {
       try {
@@ -4542,6 +4652,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
                 matchLevel: resolvedIndustry.matchLevel,
                 ...resolvedIndustry.debug,
               },
+              etnetFetchStatus,
             },
           };
           console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
@@ -4554,6 +4665,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
                 matchLevel: resolvedIndustry.matchLevel,
                 ...resolvedIndustry.debug,
               },
+              etnetFetchStatus,
             },
           };
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
@@ -4567,7 +4679,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           natureCode: null,
           sampleSize: 0,
           median: null,
-          details: { errorName: e.name || 'Error' },
+          details: { errorName: e.name || 'Error', etnetFetchStatus },
         };
         console.warn(`[PE] 行业PE查询失败: ${e.message}`);
         console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
@@ -4638,24 +4750,27 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
     let peStatus = 'neutral';
     let peReason = peResult.reason;
-    let peConfidence = 'high';
     if (netProfitHKD !== null && netProfitHKD <= 0) {
       peStatus = 'not_applicable';
       peReason = 'PE：公司未盈利，暂不适用PE比较';
-      peConfidence = profitResult.confidence || 'medium';
     } else if (!offerPriceMid || !totalShares || !netProfitHKD) {
       peStatus = 'insufficient_data';
       peReason = 'PE：发行价/总股本/净利润数据不足，暂无法判断估值中性';
-      peConfidence = sharesResult.confidence === 'none' && profitResult.confidence === 'none' ? 'none' : 'low';
     } else if (peResult.evidence.warning === 'suspicious_low_pe') {
       peStatus = 'unknown';
       peReason = 'PE：结果偏低需人工复核';
-      peConfidence = 'low';
     } else if (!peerMedianPE || peerMedianPE <= 0) {
       peStatus = 'unknown';
       peReason = 'PE：缺少可靠同行PE对标，0分不代表估值中性';
-      peConfidence = 'medium';
     }
+    const peConfidenceResult = computePEConfidence({
+      peStatus,
+      sharesResult,
+      profitResult,
+      peerPEStatus,
+      peResult,
+    });
+    const peConfidence = peConfidenceResult.confidence;
     console.log('[PE] finalScoreReason:', JSON.stringify({ status: peStatus, reason: peReason, details: peResult.details, peerPEStatus }, null, 2));
 
     scores.pe = {
@@ -4681,6 +4796,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         profitNormalizedValue: profitResult.normalizedValue,
         profitPenalties: profitResult.penalties || [],
         profitRejectFlags: profitResult.rejectFlags || [],
+        profitWinnerDiagnostics: profitResult.winnerDiagnostics || null,
         usableCandidates: (profitResult.usableCandidates || []).map(c => ({
           label: c.label,
           rawValue: c.rawValue,
@@ -4702,6 +4818,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         winnerRunnerUp: profitResult.winnerRunnerUp || null,
         peerPEStatus,
         computedPE: peResult.evidence.computedPE ?? null,
+        confidenceScore: peConfidenceResult.rawScore,
+        confidenceBreakdown: peConfidenceResult.breakdown,
         profitDigitLength: profitResult.profitDigitLength ?? null,
         mergedNumberDetected: !!profitResult.mergedNumberDetected,
         scorePEReason: {
