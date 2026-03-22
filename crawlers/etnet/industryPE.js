@@ -238,9 +238,64 @@ function classifyPeValue(peRaw) {
   return { pe, rejectReason: null };
 }
 
+function parseMarketCapValue(raw) {
+  const normalized = normalizeText(raw).replace(/,/g, '').replace(/\s+/g, '');
+  if (!normalized) return null;
+  const matchers = [
+    { re: /([\d.]+)億元?/i, multiplier: 1e8 },
+    { re: /([\d.]+)亿/i, multiplier: 1e8 },
+    { re: /([\d.]+)百萬元?/i, multiplier: 1e6 },
+    { re: /([\d.]+)百万/i, multiplier: 1e6 },
+    { re: /([\d.]+)萬元?/i, multiplier: 1e4 },
+    { re: /([\d.]+)万/i, multiplier: 1e4 },
+  ];
+  for (const { re, multiplier } of matchers) {
+    const match = normalized.match(re);
+    if (match) {
+      const value = Number.parseFloat(match[1]);
+      if (Number.isFinite(value)) return value * multiplier;
+    }
+  }
+  const plain = Number.parseFloat(normalized);
+  return Number.isFinite(plain) ? plain : null;
+}
+
+function detectCapColumn(headerTexts) {
+  const normalizedHeaders = headerTexts.map(normalizeHeaderText);
+  return normalizedHeaders.findIndex(header => /市值|marketcap|marketcapitalization/.test(header));
+}
+
+function computeMarketCapSimilarity(peerMarketCap, ipoMarketCap) {
+  if (!(Number.isFinite(peerMarketCap) && peerMarketCap > 0 && Number.isFinite(ipoMarketCap) && ipoMarketCap > 0)) return 0;
+  return Math.exp(-Math.abs(Math.log(peerMarketCap / ipoMarketCap)));
+}
+
+function selectTopPeers(rows, ipoMarketCap, limit = 5) {
+  const ranked = rows.map((row, index) => {
+    const industryMatchScore = 1;
+    const marketCapSimilarity = computeMarketCapSimilarity(row.marketCap, ipoMarketCap);
+    return {
+      ...row,
+      industryMatchScore,
+      marketCapSimilarity,
+      combinedScore: industryMatchScore * marketCapSimilarity,
+      originalIndex: index,
+    };
+  }).filter(row => row.pe !== null);
+
+  if (!(Number.isFinite(ipoMarketCap) && ipoMarketCap > 0)) {
+    return ranked.slice(0, limit).map(row => ({ ...row, combinedScore: 1, marketCapSimilarity: null }));
+  }
+
+  return ranked
+    .sort((a, b) => b.combinedScore - a.combinedScore || a.pe - b.pe || a.originalIndex - b.originalIndex)
+    .slice(0, limit);
+}
+
 function parseComparableTable($, tableCandidate) {
   const headerRowIndex = tableCandidate.bestHeader.rowIndex;
   const { nameIndex, peIndex, normalizedHeaders } = tableCandidate.bestHeader.detection;
+  const capIndex = detectCapColumn(tableCandidate.bestHeader.headerTexts);
   const rows = tableCandidate.rows.slice(headerRowIndex + 1);
   const parsedRows = [];
   const validSamples = [];
@@ -256,6 +311,7 @@ function parseComparableTable($, tableCandidate) {
 
     const name = getCellText($, cells[nameIndex]);
     const peRaw = getCellText($, cells[peIndex]);
+    const marketCapRaw = capIndex >= 0 && cells.length > capIndex ? getCellText($, cells[capIndex]) : '';
 
     if (!name && !peRaw) return;
 
@@ -270,7 +326,7 @@ function parseComparableTable($, tableCandidate) {
     }
 
     const peResult = classifyPeValue(peRaw);
-    const parsed = { name, peRaw, pe: peResult.pe, rejectReason: peResult.rejectReason };
+    const parsed = { name, peRaw, pe: peResult.pe, rejectReason: peResult.rejectReason, marketCapRaw, marketCap: parseMarketCapValue(marketCapRaw) };
     parsedRows.push(parsed);
 
     if (parsed.pe !== null && !parsed.rejectReason) {
@@ -284,7 +340,7 @@ function parseComparableTable($, tableCandidate) {
     originalRowCount: rows.length,
     parsedRowCount: parsedRows.length,
     rejectedRowSummary: summarizeRejectedRows(parsedRows),
-    detectedColumns: { nameIndex, peIndex },
+    detectedColumns: { nameIndex, peIndex, capIndex },
     headerDetection: {
       headerRowIndex,
       headerTexts: tableCandidate.bestHeader.headerTexts,
@@ -339,7 +395,14 @@ function buildResult(base, overrides = {}) {
   };
 }
 
-async function getComparablePE(natureCode) {
+function buildCacheKey(natureCode, ipoMarketCap) {
+  if (!(Number.isFinite(ipoMarketCap) && ipoMarketCap > 0)) return `pe_${natureCode}.json`;
+  const bucket = Math.max(1, Math.round(ipoMarketCap / 1e8));
+  return `pe_${natureCode}_cap${bucket}.json`;
+}
+
+async function getComparablePE(natureCode, options = {}) {
+  const ipoMarketCap = Number.isFinite(options.ipoMarketCap) ? options.ipoMarketCap : null;
   if (!natureCode) {
     return buildResult({
       reason: '无行业代码',
@@ -348,7 +411,7 @@ async function getComparablePE(natureCode) {
     });
   }
 
-  const cacheFile = path.join(CACHE_DIR, `pe_${natureCode}.json`);
+  const cacheFile = path.join(CACHE_DIR, buildCacheKey(natureCode, ipoMarketCap));
   const cached = readCache(cacheFile);
   if (cached) return cached;
 
@@ -398,7 +461,8 @@ async function getComparablePE(natureCode) {
   }
 
   const parsed = parseComparableTable($, tableDetection.table);
-  const peValues = [...parsed.validSamples].sort((a, b) => a - b);
+  const selectedPeers = selectTopPeers(parsed.parsedRows.filter(row => row.pe !== null && !row.rejectReason), ipoMarketCap, 5);
+  const peValues = selectedPeers.map(row => row.pe).sort((a, b) => a - b);
 
   if (parsed.detectedColumns.nameIndex < 0 || parsed.detectedColumns.peIndex < 0) {
     const result = buildResult({
@@ -413,6 +477,8 @@ async function getComparablePE(natureCode) {
         headerDetection: parsed.headerDetection,
       },
       detectedColumns: parsed.detectedColumns,
+      peerSelectionMethod: 'industry+cap_similarity',
+      peerCountUsed: selectedPeers.length,
       headerDetection: parsed.headerDetection,
       rejectedRowSummary: parsed.rejectedRowSummary,
       originalRowCount: parsed.originalRowCount,
@@ -434,6 +500,8 @@ async function getComparablePE(natureCode) {
         natureCode,
         url,
         stage: 'raw_samples',
+        peerSelectionMethod: 'industry+cap_similarity',
+        peerCountUsed: selectedPeers.length,
         originalRowCount: parsed.originalRowCount,
         parsedRowCount: parsed.parsedRowCount,
         rejectedRowSummary: parsed.rejectedRowSummary,
@@ -467,6 +535,8 @@ async function getComparablePE(natureCode) {
         parsedRowCount: parsed.parsedRowCount,
         rawSampleSize: peValues.length,
         trimmedCount: trimmed.length,
+        peerSelectionMethod: 'industry+cap_similarity',
+        peerCountUsed: selectedPeers.length,
         rejectedRowSummary: parsed.rejectedRowSummary,
       },
       detectedColumns: parsed.detectedColumns,
@@ -493,6 +563,8 @@ async function getComparablePE(natureCode) {
         url,
         stage: 'median',
         trimmedCount: trimmed.length,
+        peerSelectionMethod: 'industry+cap_similarity',
+        peerCountUsed: selectedPeers.length,
       },
       detectedColumns: parsed.detectedColumns,
       headerDetection: parsed.headerDetection,
@@ -513,6 +585,8 @@ async function getComparablePE(natureCode) {
     originalCount: peValues.length,
     reason: `${trimmed.length}家可比公司（截尾后）`,
     status: 'success',
+    peerSelectionMethod: 'industry+cap_similarity',
+    peerCountUsed: selectedPeers.length,
     details: {
       natureCode,
       url,
@@ -521,6 +595,9 @@ async function getComparablePE(natureCode) {
       parsedRowCount: parsed.parsedRowCount,
       rawSampleSize: peValues.length,
       trimmedCount: trimmed.length,
+      peerSelectionMethod: 'industry+cap_similarity',
+      peerCountUsed: selectedPeers.length,
+      selectedPeers: selectedPeers.map(row => ({ name: row.name, pe: row.pe, marketCap: row.marketCap, marketCapSimilarity: row.marketCapSimilarity, combinedScore: row.combinedScore })),
       rejectedRowSummary: parsed.rejectedRowSummary,
     },
     detectedColumns: parsed.detectedColumns,
@@ -533,7 +610,7 @@ async function getComparablePE(natureCode) {
   };
 
   writeCache(cacheFile, result);
-  console.log(`[etnet/industryPE] 完成: ${natureCode} median=${med} (${trimmed.length}家样本)`);
+  console.log(`[etnet/industryPE] 完成: ${natureCode} median=${med} (${trimmed.length}家样本, selected=${selectedPeers.length})`);
   return result;
 }
 
