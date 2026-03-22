@@ -2110,12 +2110,15 @@ function extractNetProfit(text, options = {}) {
   const marketCapHKD = Number.isFinite(options.marketCapHKD) ? options.marketCapHKD : null;
   const FX_RATES = { HKD: 1, RMB: 1.1, USD: 7.8 };
   const SOFT_PENALTY_RULES = [
-    { re: /revenue|收益|收入/i, code: 'revenue_context', score: -3 },
-    { re: /grossprofit|毛利/i, code: 'gross_profit_context', score: -3 },
-    { re: /每股|eps|earningspershare/i, code: 'eps_context', score: -8 },
-    { re: /附註|附注|note\d*/i, code: 'note_context', score: -8 },
-    { re: /adjusted|經調整|经调整|非ifrs/i, code: 'adjusted_context', score: -20 },
-    { re: /分部|segment/i, code: 'segment_context', score: -20 },
+    { re: /revenue|收益|收入/i, code: 'revenue_context', score: -35 },
+    { re: /grossprofit|毛利/i, code: 'gross_profit_context', score: -120 },
+    { re: /每股|eps|earningspershare/i, code: 'eps_context', score: -12 },
+    { re: /附註|附注|note\d*/i, code: 'note_context', score: -10 },
+    { re: /adjusted|經調整|经调整|非ifrs/i, code: 'adjusted_context', score: -55 },
+    { re: /分部|segment/i, code: 'segment_context', score: -28 },
+    { re: /beforetax|pretax|除稅前|除税前/i, code: 'before_tax_context', score: -80 },
+    { re: /taxexpense|所得稅|所得税/i, code: 'tax_expense_context', score: -80 },
+    { re: /continuingoperations|持續經營|持续经营/i, code: 'continuing_operations_context', score: -65 },
   ];
   const HARD_REJECT_RULES = [
     { re: /beforetax|pretax|除稅前|除税前/i, code: 'before_tax' },
@@ -2418,21 +2421,41 @@ function extractNetProfit(text, options = {}) {
 
   function scoreProfitCandidate(candidate, marketCapHKD = null) {
     let score = 0;
-    score += ({ table: 80, section: 55, text_fallback: 20, etnet_fallback: 10 }[candidate.sourceLevel] || 0);
-    score += ({ 1: 45, 2: 25, 3: 8 }[candidate.fieldTier] || 0);
-    if (candidate.attributable) score += 20;
-    if (candidate.periodType === 'annual') score += 25;
-    if (candidate.periodType === 'interim') score -= 35;
-    if (candidate.year) score += Math.min(12, Math.max(0, candidate.year - 2018));
-    if (candidate.unitSource === 'nearby') score += 8;
-    else if (candidate.unitSource === 'table_header') score += 5;
-    else if (candidate.unitSource === 'paragraph') score += 2;
+    let semanticScore = 0;
+    let yearScore = 0;
+    let unitScore = 0;
+    let sourceScore = 0;
+
+    semanticScore += ({ 1: 90, 2: 48, 3: 14 }[candidate.fieldTier] || 0);
+    if (candidate.attributable) semanticScore += 30;
+    if (candidate.periodType === 'annual') semanticScore += 40;
+    if (candidate.periodType === 'interim') semanticScore -= 55;
+
+    if (isCredibleProfitYear(candidate)) {
+      yearScore += 26;
+      yearScore += Math.min(8, Math.max(0, candidate.year - 2021));
+    } else if (candidate.year) {
+      yearScore -= 22;
+    } else {
+      yearScore -= 28;
+    }
+
+    if (candidate.unitResolved) unitScore += 32;
+    else unitScore -= 42;
+    if (candidate.currencyResolved) unitScore += 10;
+    if (candidate.hasStrongUnitLocality) unitScore += 16;
+    if (candidate.unitSource === 'nearby') unitScore += 10;
+    else if (candidate.unitSource === 'table_header') unitScore += 6;
+    else if (candidate.unitSource === 'paragraph') unitScore += 1;
+    if (!candidate.currencyResolved) unitScore -= 6;
+
+    sourceScore += ({ table: 18, section: 10, text_fallback: 2, etnet_fallback: 0 }[candidate.sourceLevel] || 0);
 
     const penaltyText = `${candidate.snippet}${candidate.contextSnippet}${candidate.matchedText}`;
     for (const rule of SOFT_PENALTY_RULES) {
       if (rule.re.test(penaltyText)) {
         candidate.penalties.push({ code: rule.code, score: rule.score });
-        score += rule.score;
+        semanticScore += rule.score;
       }
     }
     for (const rule of HARD_REJECT_RULES) {
@@ -2441,10 +2464,21 @@ function extractNetProfit(text, options = {}) {
         candidate.rejectFlag = true;
       }
     }
+
+    const penaltyCodes = new Set((candidate.penalties || []).map(p => p.code));
+    if (penaltyCodes.has('gross_profit_context')) {
+      candidate.rejectFlags.push('gross_profit_context');
+      candidate.rejectFlag = true;
+    }
+    if (penaltyCodes.has('revenue_context')) semanticScore -= 12;
+    if (penaltyCodes.has('adjusted_context')) semanticScore -= 18;
+    if (penaltyCodes.has('before_tax_context')) candidate.strongVeto = true;
+    if (penaltyCodes.has('tax_expense_context') || penaltyCodes.has('continuing_operations_context')) semanticScore -= 12;
+
     if (!Number.isFinite(candidate.netProfitHKD) || candidate.netProfitHKD === null) {
       candidate.rejectFlags.push('invalid_amount');
       candidate.rejectFlag = true;
-      score -= 100;
+      semanticScore -= 100;
     }
     if (/每股|eps|earningspershare/i.test(candidate.matchedText)) {
       candidate.rejectFlags.push('eps_like');
@@ -2454,22 +2488,37 @@ function extractNetProfit(text, options = {}) {
     const numericValidation = validateProfitNumericStructure(candidate, marketCapHKD);
     candidate.rejectFlags = Array.from(new Set([...(candidate.rejectFlags || []), ...numericValidation.rejectFlags]));
     candidate.rejectFlag = candidate.rejectFlag || numericValidation.hardReject || candidate.rejectFlags.length > 0;
-    candidate.strongVeto = !!numericValidation.strongVeto;
+    candidate.strongVeto = !!candidate.strongVeto || !!numericValidation.strongVeto;
     candidate.mergedNumberDetected = numericValidation.mergedNumberDetected;
     candidate.profitDigitLength = numericValidation.profitDigitLength;
 
-    return { ...candidate, score };
+    score = semanticScore + yearScore + unitScore + sourceScore;
+
+    return {
+      ...candidate,
+      score,
+      semanticScore,
+      yearScore,
+      unitScore,
+      sourceScore,
+      semanticPurityScore: semanticScore + unitScore + yearScore,
+    };
   }
 
   function chooseBestProfitCandidate(candidates) {
     const sorted = [...candidates].sort((a, b) => {
       if ((a.rejectFlag ? 1 : 0) !== (b.rejectFlag ? 1 : 0)) return a.rejectFlag ? 1 : -1;
+      if ((a.strongVeto ? 1 : 0) !== (b.strongVeto ? 1 : 0)) return a.strongVeto ? 1 : -1;
+      if ((b.semanticPurityScore || 0) !== (a.semanticPurityScore || 0)) return (b.semanticPurityScore || 0) - (a.semanticPurityScore || 0);
+      if ((b.unitScore || 0) !== (a.unitScore || 0)) return (b.unitScore || 0) - (a.unitScore || 0);
+      if ((b.yearScore || 0) !== (a.yearScore || 0)) return (b.yearScore || 0) - (a.yearScore || 0);
       if (a.periodType !== b.periodType) {
         if (a.periodType === 'annual') return -1;
         if (b.periodType === 'annual') return 1;
       }
       if (a.fieldTier !== b.fieldTier) return a.fieldTier - b.fieldTier;
       if (b.score !== a.score) return b.score - a.score;
+      if ((b.sourceScore || 0) !== (a.sourceScore || 0)) return (b.sourceScore || 0) - (a.sourceScore || 0);
       return Math.abs(b.netProfitHKD || 0) - Math.abs(a.netProfitHKD || 0);
     });
 
