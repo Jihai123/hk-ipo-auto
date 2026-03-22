@@ -2428,6 +2428,12 @@ function extractNetProfit(text, options = {}) {
       && Number.isFinite(c.netProfitHKD)
     );
     const rejectedCandidates = debugCandidates.filter(c => !usableCandidates.includes(c));
+    const rejectSummary = rejectedCandidates.reduce((acc, candidate) => {
+      for (const flag of (candidate.debugRejectFlags || [])) {
+        acc[flag] = (acc[flag] || 0) + 1;
+      }
+      return acc;
+    }, {});
     const rejectReasonMap = rejectedCandidates.reduce((acc, candidate) => {
       acc[`${candidate.source}:${candidate.label}:${candidate.rawValue}`] = candidate.debugRejectFlags || [];
       return acc;
@@ -2442,6 +2448,8 @@ function extractNetProfit(text, options = {}) {
         usableCandidates,
         rejectedCandidates,
         rejectReasonMap,
+        rejectSummary,
+        winnerRunnerUp: { winner: null, runnerUp: null, scoreGap: null },
         reason: 'insufficient_data',
       };
     }
@@ -2478,12 +2486,34 @@ function extractNetProfit(text, options = {}) {
       usableCandidates,
       rejectedCandidates,
       rejectReasonMap,
+      rejectSummary,
+      winnerRunnerUp: {
+        winner: {
+          label: best.label,
+          rawValue: best.rawValue,
+          year: best.year,
+          source: best.source,
+          score: best.score,
+          confidence: best.confidence,
+          reason: best.reason,
+        },
+        runnerUp: runnerUp ? {
+          label: runnerUp.label,
+          rawValue: runnerUp.rawValue,
+          year: runnerUp.year,
+          source: runnerUp.source,
+          score: runnerUp.score,
+          confidence: runnerUp.confidence || null,
+          reason: runnerUp.reason || null,
+        } : null,
+        scoreGap: runnerUp ? best.score - runnerUp.score : null,
+      },
       reason: best.reason,
     };
   }
 
   const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
-  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, reason } = chooseBestProfitCandidate(candidates);
+  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, reason } = chooseBestProfitCandidate(candidates);
 
   if (debug) {
     const topSummary = topCandidates.map(c => ({
@@ -2496,16 +2526,29 @@ function extractNetProfit(text, options = {}) {
       penalties: c.penalties.map(p => p.code),
       rejectFlags: c.rejectFlags,
     }));
-    console.log('[netProfit] Top candidates:', JSON.stringify(topSummary, null, 2));
-    console.log('[netProfit] debugCandidates:', JSON.stringify((debugCandidates || []).map(c => ({
+    console.log('[netProfit] rawCandidates:', JSON.stringify(topSummary, null, 2));
+    console.log('[netProfit] usableCandidates:', JSON.stringify((usableCandidates || []).map(c => ({
       label: c.label,
       rawValue: c.rawValue,
       score: c.score,
       year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
+      rejectFlags: c.debugRejectFlags || c.rejectFlags,
+    })), null, 2));
+    console.log('[netProfit] rejectedCandidates:', JSON.stringify((rejectedCandidates || []).map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      score: c.score,
+      year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
       rejectFlags: c.debugRejectFlags || c.rejectFlags,
       mergedNumberDetected: !!c.mergedNumberDetected,
       profitDigitLength: c.profitDigitLength || digitLength(c.rawValue),
     })), null, 2));
+    console.log('[netProfit] rejectSummary:', JSON.stringify(rejectSummary || {}, null, 2));
+    console.log('[netProfit] winnerVsRunnerUp:', JSON.stringify(winnerRunnerUp || {}, null, 2));
   }
 
   if (!best) {
@@ -2532,6 +2575,8 @@ function extractNetProfit(text, options = {}) {
       usableCandidates,
       rejectedCandidates,
       rejectReasonMap,
+      rejectSummary,
+      winnerRunnerUp,
     };
   }
 
@@ -2560,6 +2605,8 @@ function extractNetProfit(text, options = {}) {
     usableCandidates,
     rejectedCandidates,
     rejectReasonMap,
+    rejectSummary,
+    winnerRunnerUp,
     debugCandidates,
     profitDigitLength: best.profitDigitLength || digitLength(best.rawValue),
     mergedNumberDetected: !!best.mergedNumberDetected,
@@ -4339,20 +4386,52 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     // 4. 同行 PE：通过 etnet 行业代码查询
     let peerMedianPE = null;
     const industry = etnetData?.industry || null;
+    let peerPEStatus = {
+      status: industry ? 'industry_mapping_failed' : 'industry_mapping_failed',
+      reason: industry ? '行业未映射到natureCode' : '缺少行业信息',
+      industry,
+      natureCode: null,
+      sampleSize: 0,
+      median: null,
+      details: {},
+    };
     if (industry) {
       try {
-        const codeMap   = await buildIndustryCodeMap();
+        const codeMap = await buildIndustryCodeMap();
         const natureCode = codeMap[industry];
+        console.log('[PE] industryMapping:', JSON.stringify({ industry, natureCode: natureCode || null }, null, 2));
         if (natureCode) {
-          const peData   = await getComparablePE(natureCode);
-          peerMedianPE   = peData.median;
-          console.log(`[PE] 行业"${industry}"(${natureCode}) 同行PE中位数=${peerMedianPE}`);
+          const peData = await getComparablePE(natureCode);
+          peerMedianPE = peData.median;
+          peerPEStatus = {
+            status: peData.status || (Number.isFinite(peData.median) ? 'success' : 'parse_error'),
+            reason: peData.reason || '',
+            industry,
+            natureCode,
+            sampleSize: peData.sampleSize || 0,
+            median: peData.median ?? null,
+            details: peData.details || {},
+          };
+          console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         } else {
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
+          console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         }
       } catch (e) {
+        peerPEStatus = {
+          status: 'network_error',
+          reason: e.message,
+          industry,
+          natureCode: null,
+          sampleSize: 0,
+          median: null,
+          details: { errorName: e.name || 'Error' },
+        };
         console.warn(`[PE] 行业PE查询失败: ${e.message}`);
+        console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
       }
+    } else {
+      console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
     }
 
     const etnetFieldsRaw = etnetData ? {
@@ -4373,7 +4452,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         source: c.source,
         score: c.score,
         penalties: c.penalties?.map(p => p.code) || [],
-        rejectFlags: c.rejectFlags || [],
+        rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
       })),
       usableCandidates: (profitResult.usableCandidates || []).map(c => ({
         label: c.label,
@@ -4387,9 +4466,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         rawValue: c.rawValue,
         year: c.year,
         source: c.source,
-        rejectFlags: c.rejectFlags || [],
+        rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
       })),
       rejectReasonMap: profitResult.rejectReasonMap || {},
+      rejectSummary: profitResult.rejectSummary || {},
+      winnerRunnerUp: profitResult.winnerRunnerUp || null,
+      peerPEStatus,
       computedPE: null,
       profitDigitLength: profitResult.profitDigitLength ?? null,
       mergedNumberDetected: !!profitResult.mergedNumberDetected,
@@ -4404,6 +4486,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       profitReason: profitResult.reason || '',
       profitTopGapTooSmall: !!profitResult.conflict,
       sitePE: etnetData?.sitePE || null,
+      peerPEStatus: peerPEStatus.status,
+      peerPEReason: peerPEStatus.reason,
+      peerPEIndustry: peerPEStatus.industry,
+      peerPENatureCode: peerPEStatus.natureCode,
+      peerPESampleSize: peerPEStatus.sampleSize,
     });
     peDebug.computedPE = peResult.evidence.computedPE ?? null;
     console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
@@ -4427,6 +4514,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       peReason = 'PE：缺少可靠同行PE对标，0分不代表估值中性';
       peConfidence = 'medium';
     }
+    console.log('[PE] finalScoreReason:', JSON.stringify({ status: peStatus, reason: peReason, details: peResult.details, peerPEStatus }, null, 2));
 
     scores.pe = {
       score:   peResult.score,
@@ -4465,12 +4553,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           year: c.year,
           source: c.source,
           sourceLevel: c.sourceLevel,
-          rejectFlags: c.rejectFlags || [],
+          rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
         })),
         rejectReasonMap: profitResult.rejectReasonMap || {},
+        rejectSummary: profitResult.rejectSummary || {},
+        winnerRunnerUp: profitResult.winnerRunnerUp || null,
+        peerPEStatus,
         computedPE: peResult.evidence.computedPE ?? null,
         profitDigitLength: profitResult.profitDigitLength ?? null,
         mergedNumberDetected: !!profitResult.mergedNumberDetected,
+        scorePEReason: {
+          status: peStatus,
+          reason: peReason,
+          details: peResult.details,
+          peerPEStatus: peerPEStatus.status,
+          peerPEReason: peerPEStatus.reason,
+        },
         topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
           label: c.label,
           rawValue: c.rawValue,
@@ -4479,7 +4577,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           sourceLevel: c.sourceLevel,
           score: c.score,
           penalties: c.penalties?.map(p => p.code) || [],
-          rejectFlags: c.rejectFlags || [],
+          rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
         })),
         etnetFieldsRaw,
         industry,

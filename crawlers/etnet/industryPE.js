@@ -50,10 +50,10 @@ function median(arr) {
 /**
  * 获取指定行业的可比公司PE中位数
  * @param {string} natureCode - etnet 行业代码，如 "SEM"
- * @returns {{ median: number|null, sampleSize: number, reason: string }}
+ * @returns {{ median: number|null, sampleSize: number, reason: string, status: string, details?: object }}
  */
 async function getComparablePE(natureCode) {
-  if (!natureCode) return { median: null, sampleSize: 0, reason: '无行业代码' };
+  if (!natureCode) return { median: null, sampleSize: 0, reason: '无行业代码', status: 'industry_mapping_failed', details: { natureCode: null } };
 
   const cacheFile = path.join(CACHE_DIR, `pe_${natureCode}.json`);
   if (fs.existsSync(cacheFile)) {
@@ -61,8 +61,14 @@ async function getComparablePE(natureCode) {
     if (Date.now() - stat.mtimeMs < CACHE_TTL_MS) {
       try {
         const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
-        console.log(`[etnet/industryPE] 命中缓存: ${natureCode} median=${cached.median}`);
-        return cached;
+        const cachedResult = {
+          status: cached.status || (Number.isFinite(cached.median) ? 'success' : (cached.sampleSize || 0) < 3 ? 'insufficient_samples' : 'parse_error'),
+          details: cached.details || { cacheHit: true },
+          ...cached,
+        };
+        cachedResult.details = { cacheHit: true, ...(cachedResult.details || {}) };
+        console.log(`[etnet/industryPE] 命中缓存: ${natureCode} status=${cachedResult.status} median=${cachedResult.median}`);
+        return cachedResult;
       } catch (_) { /* 损坏则重新爬 */ }
     }
   }
@@ -75,7 +81,13 @@ async function getComparablePE(natureCode) {
 
   const html = await fetchWithRetry(url);
   if (!html) {
-    return { median: null, sampleSize: 0, reason: '网络请求失败' };
+    return {
+      median: null,
+      sampleSize: 0,
+      reason: '网络请求失败',
+      status: 'network_error',
+      details: { natureCode, url },
+    };
   }
 
   const $ = cheerio.load(html);
@@ -101,7 +113,13 @@ async function getComparablePE(natureCode) {
   });
 
   if (peValues.length < 3) {
-    const res = { median: null, sampleSize: peValues.length, reason: '可比公司不足3家' };
+    const res = {
+      median: null,
+      sampleSize: peValues.length,
+      reason: '可比公司不足3家',
+      status: 'insufficient_samples',
+      details: { natureCode, url, stage: 'raw_samples', originalCount: peValues.length },
+    };
     fs.writeFileSync(cacheFile, JSON.stringify(res, null, 2));
     return res;
   }
@@ -112,13 +130,35 @@ async function getComparablePE(natureCode) {
   const trimmed = peValues.slice(cutoff, peValues.length - cutoff);
 
   if (trimmed.length < 3) {
-    const res = { median: null, sampleSize: trimmed.length, reason: '截尾后可比公司不足3家' };
+    const res = {
+      median: null,
+      sampleSize: trimmed.length,
+      reason: '截尾后可比公司不足3家',
+      status: 'insufficient_samples',
+      details: { natureCode, url, stage: 'trimmed_samples', originalCount: peValues.length, trimmedCount: trimmed.length },
+    };
     fs.writeFileSync(cacheFile, JSON.stringify(res, null, 2));
     return res;
   }
 
   // 过滤规则5：取中位数
-  const med = parseFloat(median(trimmed).toFixed(2));
+  const rawMedian = median(trimmed);
+  if (!Number.isFinite(rawMedian)) {
+    const res = {
+      natureCode,
+      median: null,
+      sampleSize: trimmed.length,
+      originalCount: peValues.length,
+      reason: '同行PE解析失败',
+      status: 'parse_error',
+      details: { natureCode, url, stage: 'median', trimmedCount: trimmed.length },
+      _fetchedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(res, null, 2));
+    return res;
+  }
+
+  const med = parseFloat(rawMedian.toFixed(2));
 
   const result = {
     natureCode,
@@ -126,6 +166,8 @@ async function getComparablePE(natureCode) {
     sampleSize: trimmed.length,
     originalCount: peValues.length,
     reason: `${trimmed.length}家可比公司（截尾后）`,
+    status: 'success',
+    details: { natureCode, url, stage: 'completed', originalCount: peValues.length, trimmedCount: trimmed.length },
     _fetchedAt: new Date().toISOString(),
   };
 
