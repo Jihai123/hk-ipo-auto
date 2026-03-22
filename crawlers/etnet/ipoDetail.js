@@ -10,6 +10,13 @@ const path   = require('path');
 const fs     = require('fs');
 const cfg    = require('./config');
 
+const SELECTOR_CANDIDATES = [
+  'table tr',
+  '.sectionTable tr',
+  '.tableContent tr',
+  'tr',
+];
+
 const CACHE_DIR      = path.join(__dirname, '../../cache/etnet');
 const CACHE_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // IPO详情缓存7天
 
@@ -20,19 +27,46 @@ if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
  * 带重试的 HTTP GET
  */
 async function fetchWithRetry(url, retries = cfg.maxRetries) {
+  let lastError = null;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      console.log(`[etnet/ipoDetail] fetch attempt=${attempt}/${retries} timeout=${cfg.timeout}ms url=${url}`);
       const res = await axios.get(url, {
         headers: cfg.headers,
         timeout: cfg.timeout,
       });
-      return res.data;
+      return {
+        html: res.data,
+        error: null,
+        attempts: attempt,
+        timedOut: false,
+      };
     } catch (err) {
+      lastError = err;
+      const timedOut = err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '');
       console.warn(`[etnet/ipoDetail] 请求失败(第${attempt}次): ${url} — ${err.message}`);
       if (attempt < retries) await new Promise(r => setTimeout(r, cfg.requestDelay * attempt));
+      if (timedOut) {
+        console.warn(`[etnet/ipoDetail] timeout detected on attempt=${attempt}`);
+      }
     }
   }
-  return null;
+  return { html: null, error: lastError, attempts: retries, timedOut: !!(lastError && (lastError.code === 'ECONNABORTED' || /timeout/i.test(lastError.message || ''))) };
+}
+
+function collectCandidateRows($) {
+  const seen = new Set();
+  const rows = [];
+  for (const selector of SELECTOR_CANDIDATES) {
+    const matched = $(selector).toArray();
+    console.log(`[etnet/ipoDetail] selector=${selector} matchedRows=${matched.length}`);
+    for (const row of matched) {
+      if (seen.has(row)) continue;
+      seen.add(row);
+      rows.push(row);
+    }
+  }
+  return rows;
 }
 
 /**
@@ -121,10 +155,21 @@ async function crawlIPODetail(code) {
   const url = cfg.baseURL + cfg.urls.ipoDetail(code);
   console.log(`[etnet/ipoDetail] 爬取: ${url}`);
 
-  const html = await fetchWithRetry(url);
+  const fetchResult = await fetchWithRetry(url);
+  const html = fetchResult.html;
   if (!html) {
-    console.error(`[etnet/ipoDetail] 获取失败: ${code}`);
-    return null;
+    console.error(`[etnet/ipoDetail] 获取失败: ${code}, attempts=${fetchResult.attempts}, reason=${fetchResult.error ? fetchResult.error.message : 'unknown_error'}`);
+    return {
+      code,
+      _source: 'etnet',
+      _fetchedAt: new Date().toISOString(),
+      _fetchStatus: {
+        status: 'network_error',
+        reason: fetchResult.error ? fetchResult.error.message : 'unknown_error',
+        attempts: fetchResult.attempts || cfg.maxRetries,
+        timedOut: !!fetchResult.timedOut,
+      },
+    };
   }
 
   const $ = cheerio.load(html);
@@ -147,10 +192,14 @@ async function crawlIPODetail(code) {
     marketCapRaw:         null,
     _source:              'etnet',
     _fetchedAt:           new Date().toISOString(),
+    _fetchStatus:         { status: 'success', reason: '', attempts: fetchResult.attempts || 1, timedOut: false },
+    _debug:               { selectorCandidates: [], extractedKeys: [] },
   };
 
   // 遍历页面所有表格行，按第一个 td 文本匹配字段
-  $('table tr').each((_, row) => {
+  const rows = collectCandidateRows($);
+  result._debug.selectorCandidates = SELECTOR_CANDIDATES.map(selector => ({ selector, count: $(selector).length }));
+  rows.forEach((row) => {
     const tds  = $(row).find('td');
     if (tds.length < 2) return;
     const key  = $(tds[0]).text().trim().replace(/\s+/g, '');
@@ -201,7 +250,12 @@ async function crawlIPODetail(code) {
     if (/市盈率|pe/i.test(key)) {
       result.sitePE = parsePE(val);
     }
+    result._debug.extractedKeys.push(key);
   });
+
+  if (!result.offerPriceMid || !result.totalShares || !result.industry) {
+    console.warn(`[etnet/ipoDetail] 容错提示: code=${code} missing=${[!result.offerPriceMid && 'offerPriceMid', !result.totalShares && 'totalShares', !result.industry && 'industry'].filter(Boolean).join(',') || 'none'}`);
+  }
 
   // 写入缓存
   try {

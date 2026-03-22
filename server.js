@@ -37,6 +37,8 @@ const { execSync } = require('child_process');
 const { crawlIPODetail }      = require('./crawlers/etnet/ipoDetail');
 const { buildIndustryCodeMap, resolveIndustryNatureCode } = require('./crawlers/etnet/industryCodeMap');
 const { getComparablePE }     = require('./crawlers/etnet/industryPE');
+const { getIPOStaticFieldCache, updateIPOStaticFieldCache } = require('./crawlers/etnet/ipoFieldCache');
+const { resolveFallbackPeerPE } = require('./crawlers/etnet/peFallbacks');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -2975,16 +2977,26 @@ async function scoreProspectus(rawText, stockCode) {
   // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
   let etnetData = null;
   let etnetFetchStatus = { status: 'not_requested', reason: '' };
+  const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
   try {
-    const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
     etnetData = await crawlIPODetail(fmtCode);
-    etnetFetchStatus = etnetData
-      ? { status: 'success', reason: '' }
-      : { status: 'network_error', reason: 'etnet IPO详情抓取失败' };
-    console.log(`[etnet] 数据获取${etnetData ? '成功' : '失败'}`);
+    if (etnetData?._fetchStatus?.status === 'network_error') {
+      etnetFetchStatus = {
+        status: 'network_error',
+        reason: etnetData._fetchStatus.reason || 'etnet IPO详情抓取失败',
+        attempts: etnetData._fetchStatus.attempts || null,
+      };
+    } else {
+      etnetFetchStatus = etnetData
+        ? { status: 'success', reason: '', attempts: etnetData?._fetchStatus?.attempts || 1 }
+        : { status: 'network_error', reason: 'etnet IPO详情抓取失败' };
+    }
+    etnetData = applyIPOStaticFieldFallback(fmtCode, etnetData, etnetFetchStatus);
+    console.log(`[etnet] 数据获取${etnetFetchStatus.status === 'success' ? '成功' : '失败/降级'}`);
   } catch (e) {
     etnetFetchStatus = { status: 'network_error', reason: e.message };
-    console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取`);
+    etnetData = applyIPOStaticFieldFallback(fmtCode, null, etnetFetchStatus);
+    console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取/静态缓存`);
   }
 
   // ── V5：绿鞋检测（展示项，不计分）──
@@ -4616,6 +4628,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     // 4. 同行 PE：通过 etnet 行业代码查询
     let peerMedianPE = null;
     const industry = etnetData?.industry || null;
+    let dataSourceLevel = 'none';
+    let fallbackUsed = [];
     let peerPEStatus = {
       status: industry ? 'industry_mapping_failed' : (etnetFetchStatus.status === 'network_error' ? 'network_error' : 'missing_industry'),
       reason: industry ? '行业未映射到natureCode' : (etnetFetchStatus.status === 'network_error' ? etnetFetchStatus.reason : '缺少行业信息'),
@@ -4655,6 +4669,26 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
               etnetFetchStatus,
             },
           };
+          if (Number.isFinite(peerMedianPE) && peerMedianPE > 0 && peerPEStatus.status === 'success') {
+            dataSourceLevel = 'etnet_industry_pe';
+          } else {
+            const fallbackPeerPE = resolveFallbackPeerPE(industry);
+            if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+              peerMedianPE = fallbackPeerPE.median;
+              dataSourceLevel = fallbackPeerPE.sourceLevel;
+              fallbackUsed.push(fallbackPeerPE.sourceLevel);
+              peerPEStatus = {
+                ...peerPEStatus,
+                status: 'fallback_success',
+                reason: `${peerPEStatus.reason || 'ETNet行业PE不可用'}，已降级到${fallbackPeerPE.sourceLevel}`,
+                median: peerMedianPE,
+                details: {
+                  ...peerPEStatus.details,
+                  fallback: fallbackPeerPE,
+                },
+              };
+            }
+          }
           console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         } else {
           peerPEStatus = {
@@ -4668,6 +4702,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
               etnetFetchStatus,
             },
           };
+          const fallbackPeerPE = resolveFallbackPeerPE(industry);
+          if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+            peerMedianPE = fallbackPeerPE.median;
+            dataSourceLevel = fallbackPeerPE.sourceLevel;
+            fallbackUsed.push(fallbackPeerPE.sourceLevel);
+            peerPEStatus = {
+              ...peerPEStatus,
+              status: 'fallback_success',
+              reason: `行业未映射到natureCode，已降级到${fallbackPeerPE.sourceLevel}`,
+              median: peerMedianPE,
+              details: {
+                ...peerPEStatus.details,
+                fallback: fallbackPeerPE,
+              },
+            };
+          }
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
           console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         }
@@ -4681,12 +4731,46 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           median: null,
           details: { errorName: e.name || 'Error', etnetFetchStatus },
         };
+        const fallbackPeerPE = resolveFallbackPeerPE(industry);
+        if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+          peerMedianPE = fallbackPeerPE.median;
+          dataSourceLevel = fallbackPeerPE.sourceLevel;
+          fallbackUsed.push(fallbackPeerPE.sourceLevel);
+          peerPEStatus = {
+            ...peerPEStatus,
+            status: 'fallback_success',
+            reason: `${e.message}，已降级到${fallbackPeerPE.sourceLevel}`,
+            median: peerMedianPE,
+            details: {
+              ...peerPEStatus.details,
+              fallback: fallbackPeerPE,
+            },
+          };
+        }
         console.warn(`[PE] 行业PE查询失败: ${e.message}`);
         console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
       }
     } else {
+      const fallbackPeerPE = resolveFallbackPeerPE(industry);
+      if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+        peerMedianPE = fallbackPeerPE.median;
+        dataSourceLevel = fallbackPeerPE.sourceLevel;
+        fallbackUsed.push(fallbackPeerPE.sourceLevel);
+        peerPEStatus = {
+          ...peerPEStatus,
+          status: 'fallback_success',
+          reason: industry ? `ETNet行业映射失败，已降级到${fallbackPeerPE.sourceLevel}` : '缺少行业信息',
+          median: peerMedianPE,
+          details: {
+            ...(peerPEStatus.details || {}),
+            fallback: fallbackPeerPE,
+          },
+        };
+      }
       console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
     }
+
+    if (!dataSourceLevel && Number.isFinite(peerMedianPE) && peerMedianPE > 0) dataSourceLevel = 'etnet_industry_pe';
 
     const etnetFieldsRaw = etnetData ? {
       offerPrice: etnetData.offerPrice || null,
@@ -4696,6 +4780,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       sitePE: etnetData.sitePE || null,
       marketCapRaw: etnetData.marketCapRaw || null,
       industry: etnetData.industry || null,
+      staticFieldCache: etnetData._staticFieldCache || null,
+      fetchStatus: etnetData._fetchStatus || null,
     } : {};
     console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
     const peDebug = {
@@ -4732,6 +4818,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       etnetFieldsRaw,
       sitePE: etnetData?.sitePE || null,
     };
+    const dataAvailabilityScore = computeDataAvailabilityScore({ offerPriceMid, totalShares, netProfitHKD, peerMedianPE });
+    if (etnetFetchStatus.status === 'network_error' && Array.isArray(etnetData?._staticFieldCache?.fallbackUsed) && etnetData._staticFieldCache.fallbackUsed.length) {
+      fallbackUsed = fallbackUsed.concat(etnetData._staticFieldCache.fallbackUsed.map(field => `ipo_static_cache:${field}`));
+    }
+    fallbackUsed = Array.from(new Set(fallbackUsed.filter(Boolean)));
+
     const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, {
       profitConfidence: profitResult.confidence || 'none',
       profitSource: profitResult.source || '未找到',
@@ -4745,6 +4837,10 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       peerPEIndustry: peerPEStatus.industry,
       peerPENatureCode: peerPEStatus.natureCode,
       peerPESampleSize: peerPEStatus.sampleSize,
+      dataAvailabilityScore,
+      dataSourceLevel: dataSourceLevel || 'none',
+      fallbackUsed,
+      staticFieldCacheStatus: etnetData?._staticFieldCache?.status || null,
     });
     peDebug.computedPE = peResult.evidence.computedPE ?? null;
     console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
@@ -4756,6 +4852,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     } else if (!offerPriceMid || !totalShares || !netProfitHKD) {
       peStatus = 'insufficient_data';
       peReason = 'PE：发行价/总股本/净利润数据不足，暂无法判断估值中性';
+      if (etnetFetchStatus.status === 'network_error' && etnetData?._staticFieldCache?.status === 'cache_missing') {
+        peReason = 'PE：实时抓取失败且静态缓存不存在，insufficient_data';
+      }
     } else if (peResult.evidence.warning === 'suspicious_low_pe') {
       peStatus = 'unknown';
       peReason = 'PE：结果偏低需人工复核';
@@ -5023,6 +5122,53 @@ function withTimeout(promise, ms, message = '操作超时') {
     timer = setTimeout(() => reject(new Error(message)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+
+function computeDataAvailabilityScore({ offerPriceMid, totalShares, netProfitHKD, peerMedianPE }) {
+  const weights = [
+    Number.isFinite(offerPriceMid) ? 25 : 0,
+    Number.isFinite(totalShares) ? 25 : 0,
+    Number.isFinite(netProfitHKD) ? 30 : 0,
+    Number.isFinite(peerMedianPE) && peerMedianPE > 0 ? 20 : 0,
+  ];
+  return weights.reduce((sum, value) => sum + value, 0);
+}
+
+function applyIPOStaticFieldFallback(stockCode, realtimeData, fetchStatus) {
+  const cacheEntry = getIPOStaticFieldCache(stockCode);
+  const fields = cacheEntry?.fields || {};
+  const fallbackUsed = [];
+  const merged = { ...(realtimeData || {}) };
+  const realtimeFailed = !realtimeData || fetchStatus?.status === 'network_error';
+
+  if (realtimeData && fetchStatus?.status !== 'network_error') {
+    const refreshed = updateIPOStaticFieldCache(stockCode, realtimeData);
+    if (refreshed) {
+      merged._staticFieldCache = {
+        status: 'refreshed',
+        cachedAt: refreshed.cachedAt,
+        fields: refreshed.fields,
+      };
+    }
+  }
+
+  if (realtimeFailed) {
+    for (const field of ['offerPriceMid', 'totalShares', 'industry']) {
+      if ((merged[field] === null || merged[field] === undefined || merged[field] === '') && fields[field] !== undefined) {
+        merged[field] = fields[field];
+        fallbackUsed.push(field);
+      }
+    }
+    merged._staticFieldCache = {
+      status: cacheEntry ? (fallbackUsed.length ? 'cache_fallback_used' : 'cache_available_unused') : 'cache_missing',
+      cachedAt: cacheEntry?.cachedAt || null,
+      fields,
+      fallbackUsed,
+    };
+  }
+
+  return merged;
 }
 
 // 自动保存评分记录到IPO列表（用户评分即数据）
