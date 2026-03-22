@@ -35,7 +35,7 @@ const { execSync } = require('child_process');
 
 // ==================== V5 新增：etnet 爬虫模块 ====================
 const { crawlIPODetail }      = require('./crawlers/etnet/ipoDetail');
-const { buildIndustryCodeMap } = require('./crawlers/etnet/industryCodeMap');
+const { buildIndustryCodeMap, resolveIndustryNatureCode } = require('./crawlers/etnet/industryCodeMap');
 const { getComparablePE }     = require('./crawlers/etnet/industryPE');
 
 const app = express();
@@ -4518,8 +4518,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     if (industry) {
       try {
         const codeMap = await buildIndustryCodeMap();
-        const natureCode = codeMap[industry];
-        console.log('[PE] industryMapping:', JSON.stringify({ industry, natureCode: natureCode || null }, null, 2));
+        const resolvedIndustry = resolveIndustryNatureCode(industry, codeMap);
+        const natureCode = resolvedIndustry.natureCode;
+        console.log('[PE] industryMapping:', JSON.stringify({
+          industry,
+          natureCode: natureCode || null,
+          matchLevel: resolvedIndustry.matchLevel,
+          debug: resolvedIndustry.debug,
+        }, null, 2));
         if (natureCode) {
           const peData = await getComparablePE(natureCode);
           peerMedianPE = peData.median;
@@ -4530,10 +4536,26 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
             natureCode,
             sampleSize: peData.sampleSize || 0,
             median: peData.median ?? null,
-            details: peData.details || {},
+            details: {
+              ...(peData.details || {}),
+              industryMapping: {
+                matchLevel: resolvedIndustry.matchLevel,
+                ...resolvedIndustry.debug,
+              },
+            },
           };
           console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         } else {
+          peerPEStatus = {
+            ...peerPEStatus,
+            reason: industry ? '行业未映射到natureCode' : '缺少行业信息',
+            details: {
+              industryMapping: {
+                matchLevel: resolvedIndustry.matchLevel,
+                ...resolvedIndustry.debug,
+              },
+            },
+          };
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
           console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         }
