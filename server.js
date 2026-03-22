@@ -739,10 +739,10 @@ function getClosestUnitContext(block, hitIndex, fallbackCurrency = '人民幣', 
   }
 
   if (best) {
-    return { currency: best.currency, unit: best.unit };
+    return { currency: best.currency, unit: best.unit, unitDistance: best.distance };
   }
 
-  return { currency: fallbackCurrency, unit: fallbackUnit };
+  return { currency: fallbackCurrency, unit: fallbackUnit, unitDistance: null };
 }
 
 function extractSnippet(text, index, radius = 80) {
@@ -2209,9 +2209,12 @@ function extractNetProfit(text, options = {}) {
   }
 
   function resolveContext(sectionText, hitIndex) {
-    const nearby = sectionText.slice(Math.max(0, hitIndex - 260), Math.min(sectionText.length, hitIndex + 260));
+    const nearbyStart = Math.max(0, hitIndex - 260);
+    const nearbyEnd = Math.min(sectionText.length, hitIndex + 260);
+    const nearby = sectionText.slice(nearbyStart, nearbyEnd);
+    const localHitIndex = Math.min(260, hitIndex - nearbyStart);
     const fallback = getLocalUnitContext(noSpace, null, null);
-    const close = getClosestUnitContext(nearby, Math.min(260, hitIndex), fallback.currency, fallback.unit);
+    const close = getClosestUnitContext(nearby, localHitIndex, fallback.currency, fallback.unit);
     const localUnit = detectUnit(nearby);
     const sectionUnit = detectUnit(sectionText.slice(0, Math.min(sectionText.length, 400)));
     const globalUnit = detectUnit(noSpace.slice(0, 1200));
@@ -2219,7 +2222,18 @@ function extractNetProfit(text, options = {}) {
     const resolvedCurrency = localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || null;
     const resolvedUnit = localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || null;
     const unitSource = localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'unresolved';
-    return { currency: resolvedCurrency, unit: resolvedUnit, unitSource };
+    const localUnitDistance = close?.unitDistance ?? null;
+    const hasStrongUnitLocality = unitSource === 'table_header'
+      || (close?.unit && localUnitDistance !== null && localUnitDistance <= 80);
+    return {
+      currency: resolvedCurrency,
+      unit: resolvedUnit,
+      unitSource,
+      localUnitDistance,
+      hasStrongUnitLocality,
+      unitResolved: !!resolvedUnit,
+      currencyResolved: !!resolvedCurrency,
+    };
   }
 
   function normalizeProfitCandidate(candidate) {
@@ -2227,6 +2241,9 @@ function extractNetProfit(text, options = {}) {
     if (!Number.isFinite(numericValue)) {
       return { ...candidate, normalizedValue: null, netProfitHKD: null, reason: 'invalid_number' };
     }
+
+    const resolvedUnit = hasResolvableUnit(candidate);
+    const resolvedCurrency = hasResolvableCurrency(candidate);
 
     let multiplier = 1;
     if (/千|'000/i.test(candidate.unit || '')) multiplier = 1e3;
@@ -2240,7 +2257,14 @@ function extractNetProfit(text, options = {}) {
 
     const normalizedValue = Math.round(numericValue * multiplier);
     const netProfitHKD = Math.round(normalizedValue * (FX_RATES[currencyCode] || 1));
-    return { ...candidate, currency: currencyCode, normalizedValue, netProfitHKD };
+    return {
+      ...candidate,
+      currency: currencyCode,
+      normalizedValue,
+      netProfitHKD,
+      unitResolved: resolvedUnit,
+      currencyResolved: resolvedCurrency,
+    };
   }
 
   function digitLength(rawValue) {
@@ -2263,6 +2287,7 @@ function extractNetProfit(text, options = {}) {
     const rejectFlags = [...(candidate.rejectFlags || [])];
     const rawValue = String(candidate.rawValue || '').trim();
     const numericValue = parseNumericValue(rawValue);
+    const absNumericValue = Math.abs(numericValue);
     const digits = digitLength(rawValue);
     const commaSegments = rawValue.split(/[,\uFF0C]/).filter(Boolean);
     const commaCount = Math.max(0, commaSegments.length - 1);
@@ -2271,43 +2296,77 @@ function extractNetProfit(text, options = {}) {
       && commaSegments.slice(1).some(segment => segment.replace(/\D/g, '').length !== 3);
     const mergedNumberDetected = hasMergedPattern
       || (digits > 15 && commaCount > 3)
-      || (commaCount > 3 && hasInvalidThousandsGrouping);
+      || (commaCount > 3 && hasInvalidThousandsGrouping)
+      || (digits >= 8 && /^20\d{2},20\d{2}/.test(rawValue));
 
     if (mergedNumberDetected) rejectFlags.push('merged_number_suspected');
 
     const isYearLikeValue = Number.isFinite(numericValue)
-      && Number.isInteger(Math.abs(numericValue))
-      && Math.abs(numericValue) >= 2000
-      && Math.abs(numericValue) <= new Date().getUTCFullYear() + 1;
+      && Number.isInteger(absNumericValue)
+      && absNumericValue >= 2000
+      && absNumericValue <= new Date().getUTCFullYear() + 1;
     if (isYearLikeValue) rejectFlags.push('year_value_suspected');
 
     const isSmallPlainNumber = Number.isFinite(numericValue)
-      && Math.abs(numericValue) <= 24
+      && absNumericValue <= 24
       && !hasResolvableUnit(candidate)
       && candidate.fieldTier <= 3;
     if (isSmallPlainNumber) rejectFlags.push('small_number_suspected');
 
-    const hasWeakUnitLocality = Number.isFinite(numericValue)
-      && Math.abs(numericValue) <= 99
+    const weakUnitLocalitySmallValue = Number.isFinite(numericValue)
+      && absNumericValue <= 99
       && candidate.fieldTier >= 2
-      && candidate.unitSource === 'paragraph';
-    if (hasWeakUnitLocality) rejectFlags.push('weak_unit_locality_small_value');
+      && !candidate.hasStrongUnitLocality;
+    if (weakUnitLocalitySmallValue) rejectFlags.push('weak_unit_locality_small_value');
 
-    const profitTooSmallForAnnual = candidate.periodType === 'annual'
+    const unresolvedUnitSuspicious = Number.isFinite(numericValue)
+      && !hasResolvableUnit(candidate)
+      && (
+        candidate.periodType === 'annual'
+        || candidate.label === '利潤'
+        || candidate.label === 'profit'
+        || candidate.fieldTier >= 3
+        || absNumericValue <= 9999
+      );
+    if (unresolvedUnitSuspicious) rejectFlags.push('unresolved_unit_suspected');
+
+    const genericProfitLabel = candidate.label === '利潤' || candidate.label === 'profit';
+    const profitTooSmallForAnnual = (candidate.periodType === 'annual' || genericProfitLabel)
       && Number.isFinite(candidate.netProfitHKD)
-      && Math.abs(candidate.netProfitHKD) > 0
-      && Math.abs(candidate.netProfitHKD) < 1e6;
+      && absNumericValue > 0
+      && (
+        Math.abs(candidate.netProfitHKD) < 1e6
+        || (!hasResolvableUnit(candidate) && absNumericValue < 1000)
+      );
     if (profitTooSmallForAnnual) rejectFlags.push('profit_too_small_for_annual');
+
+    const annualTinyPlainValue = (candidate.periodType === 'annual' || genericProfitLabel)
+      && Number.isFinite(numericValue)
+      && absNumericValue > 0
+      && absNumericValue <= 999
+      && (!hasResolvableUnit(candidate) || !candidate.hasStrongUnitLocality);
+    if (annualTinyPlainValue) rejectFlags.push('annual_profit_tiny_plain_value');
 
     const profitOutlier = digits > 15
       || (Number.isFinite(candidate.netProfitHKD) && Number.isFinite(marketCapHKD) && marketCapHKD > 0
         && Math.abs(candidate.netProfitHKD) > marketCapHKD * 50);
     if (profitOutlier) rejectFlags.push('profit_outlier');
 
+    const hardRejectFlags = [
+      'merged_number_suspected',
+      'year_value_suspected',
+      'weak_unit_locality_small_value',
+      'unresolved_unit_suspected',
+      'annual_profit_tiny_plain_value',
+    ];
+    const vetoFlags = ['profit_too_small_for_annual'];
+
     return {
       rejectFlags: Array.from(new Set(rejectFlags)),
       mergedNumberDetected,
       profitDigitLength: digits,
+      hardReject: hardRejectFlags.some(flag => rejectFlags.includes(flag)),
+      strongVeto: vetoFlags.some(flag => rejectFlags.includes(flag)),
     };
   }
 
@@ -2346,6 +2405,10 @@ function extractNetProfit(text, options = {}) {
             rejectFlag: false,
             isLoss,
             unitSource: context.unitSource,
+            localUnitDistance: context.localUnitDistance,
+            hasStrongUnitLocality: context.hasStrongUnitLocality,
+            unitResolved: context.unitResolved,
+            currencyResolved: context.currencyResolved,
           });
         }
       }
@@ -2390,7 +2453,8 @@ function extractNetProfit(text, options = {}) {
 
     const numericValidation = validateProfitNumericStructure(candidate, marketCapHKD);
     candidate.rejectFlags = Array.from(new Set([...(candidate.rejectFlags || []), ...numericValidation.rejectFlags]));
-    candidate.rejectFlag = candidate.rejectFlag || candidate.rejectFlags.length > 0;
+    candidate.rejectFlag = candidate.rejectFlag || numericValidation.hardReject || candidate.rejectFlags.length > 0;
+    candidate.strongVeto = !!numericValidation.strongVeto;
     candidate.mergedNumberDetected = numericValidation.mergedNumberDetected;
     candidate.profitDigitLength = numericValidation.profitDigitLength;
 
@@ -2417,15 +2481,22 @@ function extractNetProfit(text, options = {}) {
         ...(isCredibleProfitYear(candidate) ? [] : ['untrusted_year']),
         ...(!Number.isFinite(candidate.netProfitHKD) ? ['invalid_amount'] : []),
       ]));
+      const gatingRejectFlags = Array.from(new Set([
+        ...rejectFlags.filter(flag => !['unresolved_currency', 'untrusted_year'].includes(flag)),
+        ...(!candidate.unitResolved ? ['unresolved_unit'] : []),
+      ]));
       return {
         ...candidate,
         debugRejectFlags: rejectFlags,
+        gatingRejectFlags,
       };
     });
     const usableCandidates = debugCandidates.filter(c =>
-      c.debugRejectFlags.length === 0
+      c.gatingRejectFlags.length === 0
       && !c.mergedNumberDetected
+      && !c.strongVeto
       && Number.isFinite(c.netProfitHKD)
+      && c.unitResolved
     );
     const rejectedCandidates = debugCandidates.filter(c => !usableCandidates.includes(c));
     const rejectSummary = rejectedCandidates.reduce((acc, candidate) => {
