@@ -2568,6 +2568,7 @@ function extractNetProfit(text, options = {}) {
       candidateYears: [],
       selectedYear: null,
     };
+    const STRUCTURED_SOURCE_LEVELS = new Set(['table', 'section']);
     const isAnnualLikeCandidate = (candidate) => !!candidate
       && candidate.periodType !== 'interim'
       && Number.isFinite(candidate.year)
@@ -2643,7 +2644,9 @@ function extractNetProfit(text, options = {}) {
     }, {});
     const usableAnnual = usableCandidates.filter(c => c.periodType === 'annual');
     const valid = usableAnnual.length ? usableAnnual : usableCandidates;
-    if (!valid.length) {
+    const structuredValid = valid.filter(c => STRUCTURED_SOURCE_LEVELS.has(c.sourceLevel));
+    const gatedValid = structuredValid.length ? structuredValid : valid;
+    if (!gatedValid.length) {
       return {
         best: null,
         topCandidates: sorted.slice(0, 5),
@@ -2654,11 +2657,14 @@ function extractNetProfit(text, options = {}) {
         rejectSummary,
         winnerRunnerUp: { winner: null, runnerUp: null, scoreGap: null },
         reason: 'insufficient_data',
+        structuredCandidateCount: structuredValid.length,
+        winnerSourceLevel: null,
+        profitStructureConfidence: 'none',
       };
     }
 
-    const best = { ...valid[0] };
-    const runnerUp = valid[1] || null;
+    const best = { ...gatedValid[0] };
+    const runnerUp = gatedValid[1] || null;
     const annualTieCandidates = valid.filter(c =>
       isAnnualLikeCandidate(c)
       && !c.rejectFlag
@@ -2680,6 +2686,8 @@ function extractNetProfit(text, options = {}) {
     if (topGapTooSmall && !recentYearTieBreakEligible) reason.push('top_gap_too_small');
     if (best.netProfitHKD <= 0) reason.push('non_positive_profit');
 
+    best.profitStructureConfidence = best.sourceLevel === 'text_fallback' ? 'weak' : 'strong';
+    best.winnerSourceLevel = best.sourceLevel;
     best.confidence = best.sourceLevel === 'table' && best.fieldTier === 1 && !topGapTooSmall && best.periodType === 'annual'
       ? 'high'
       : (!topGapTooSmall && best.periodType === 'annual' ? 'medium' : 'low');
@@ -2729,11 +2737,14 @@ function extractNetProfit(text, options = {}) {
       },
       recentYearDecision,
       reason: best.reason,
+      structuredCandidateCount: structuredValid.length,
+      winnerSourceLevel: best.winnerSourceLevel,
+      profitStructureConfidence: best.profitStructureConfidence,
     };
   }
 
   const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
-  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, recentYearDecision, reason } = chooseBestProfitCandidate(candidates);
+  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, recentYearDecision, reason, structuredCandidateCount, winnerSourceLevel, profitStructureConfidence } = chooseBestProfitCandidate(candidates);
 
   if (debug) {
     const topSummary = topCandidates.map(c => ({
@@ -2801,6 +2812,9 @@ function extractNetProfit(text, options = {}) {
       winnerRunnerUp,
       recentYearDecision,
       winnerDiagnostics: null,
+      profitStructureConfidence,
+      winnerSourceLevel,
+      structuredCandidateCount,
     };
   }
 
@@ -2819,6 +2833,8 @@ function extractNetProfit(text, options = {}) {
     unit: best.unit,
     currency: best.currency,
     confidence: best.confidence,
+    profitStructureConfidence: best.profitStructureConfidence,
+    winnerSourceLevel: best.winnerSourceLevel,
     reason: best.reason,
     score: best.score,
     penalties: best.penalties,
@@ -2833,6 +2849,7 @@ function extractNetProfit(text, options = {}) {
     rejectSummary,
     winnerRunnerUp,
     recentYearDecision,
+    structuredCandidateCount,
     winnerDiagnostics: {
       score: best.score,
       semanticScore: best.semanticScore,
@@ -2848,6 +2865,9 @@ function extractNetProfit(text, options = {}) {
       fieldTier: best.fieldTier,
       attributable: !!best.attributable,
       penaltiesCount: Array.isArray(best.penalties) ? best.penalties.length : 0,
+      profitStructureConfidence: best.profitStructureConfidence,
+      winnerSourceLevel: best.winnerSourceLevel,
+      structuredCandidateCount,
     },
     debugCandidates,
     profitDigitLength: best.profitDigitLength || digitLength(best.rawValue),
@@ -2874,6 +2894,8 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
       : 'uncertain';
   evidence.profitPeriodType = profitPeriodType;
   evidence.peMethod = peMethod;
+  evidence.profitStructureConfidence = meta.profitStructureConfidence || 'unknown';
+  evidence.winnerSourceLevel = meta.winnerSourceLevel || meta.profitSourceLevel || 'unknown';
 
   // 亏损公司
   if (netProfitHKD !== null && netProfitHKD <= 0) {
@@ -2946,6 +2968,8 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
     };
   }
 
+  const weakProfitStructure = meta.profitStructureConfidence === 'weak';
+
   if (computedPE <= 0 || computedPE > 300 || netProfitHKD < 1e6) {
     return {
       score: 0,
@@ -2976,6 +3000,13 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = 
     score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
   }
 
+  if (weakProfitStructure) {
+    score = Math.max(-3, Math.min(3, score > 0 ? score - 1 : score < 0 ? score + 1 : 0));
+    reason = `${reason}（fallback利润）`;
+    details = `${details}；利润候选来自 text_fallback，PE 已计算但按低结构置信度降权`;
+    evidence.scoringAdjustment = 'weak_profit_structure';
+  }
+
   console.log(`[PE] ${reason}: ${details}`);
   return { score, reason, details, evidence };
 }
@@ -2992,6 +3023,9 @@ function computePEConfidence({ peStatus, sharesResult, profitResult, peerPEStatu
 
   const profitConfidenceDelta = { none: -36, low: -14, medium: 2, high: 8 };
   add(profitConfidenceDelta[profitResult?.confidence || 'none'] ?? -8, `profitConfidence:${profitResult?.confidence || 'none'}`);
+
+  if (profitResult?.profitStructureConfidence === 'weak') add(-18, 'profitStructure:weak');
+  else if (profitResult?.profitStructureConfidence === 'strong') add(4, 'profitStructure:strong');
 
   const sharesConfidenceDelta = { none: -22, low: -10, medium: 2, high: 8 };
   add(sharesConfidenceDelta[sharesResult?.confidence || 'none'] ?? -8, `sharesConfidence:${sharesResult?.confidence || 'none'}`);
@@ -3057,6 +3091,7 @@ function computePEConfidence({ peStatus, sharesResult, profitResult, peerPEStatu
   if (peStatus === 'insufficient_data') confidence = confidence === 'none' ? 'none' : 'low';
   if (peStatus === 'unknown' && confidence === 'high') confidence = 'medium';
   if (peStatus === 'not_applicable' && confidence === 'high' && (profitResult?.confidence || 'none') !== 'high') confidence = 'medium';
+  if (profitResult?.profitStructureConfidence === 'weak' && confidence !== 'none') confidence = 'low';
 
   return {
     confidence,
@@ -4957,6 +4992,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       profitConflict: !!profitResult.conflict,
       profitReason: profitResult.reason || '',
       profitTopGapTooSmall: !!profitResult.conflict,
+      profitStructureConfidence: profitResult.profitStructureConfidence || 'none',
+      winnerSourceLevel: profitResult.winnerSourceLevel || profitResult.sourceLevel || 'unknown',
       sitePE: etnetData?.sitePE || null,
       peerPEStatus: peerPEStatus.status,
       peerPEReason: peerPEStatus.reason,
@@ -5023,6 +5060,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         profitSource: profitResult.source,
         profitSourceLevel: profitResult.sourceLevel,
         profitConfidence: profitResult.confidence || 'none',
+        profitStructureConfidence: profitResult.profitStructureConfidence || 'none',
+        winnerSourceLevel: profitResult.winnerSourceLevel || profitResult.sourceLevel || 'unknown',
         profitSnippet: profitResult.snippet || '',
         profitLabel: profitResult.label,
         profitYear: profitResult.year,
