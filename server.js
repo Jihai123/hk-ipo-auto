@@ -5217,6 +5217,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
   console.log(`[评分] 各维度: 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score} PE${scores.pe.score} 募资${scores.ipoSize.score}`);
 
+  const display = buildIPOExtendedFields({
+    status: normalizeListingStatus(null, {
+      offer_start_date: null,
+      offer_end_date: null,
+      listing_date: etnetData?.listingDate || null,
+    }),
+    listingDate: etnetData?.listingDate || null,
+    lotSize: etnetData?.lotSize || null,
+    offerPrice: etnetData?.offerPrice || etnetData?.offerPriceMid || null,
+    offerPriceMid: etnetData?.offerPriceMid || null,
+    subscriptionMultiple: etnetData?.subscriptionMultiple || null,
+    updated_at: etnetData?._fetchedAt || new Date().toISOString(),
+    source_name: etnetData?._source || 'etnet',
+    source_url: null,
+  });
+
   return {
     stockCode:   formatStockCode(stockCode),
     totalScore,
@@ -5228,6 +5244,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       subscriptionMultiple: etnetData?.subscriptionMultiple || null,
       listingDate:          etnetData?.listingDate || null,
     },
+    ipoInfo: display,
     _version: 'v5',
   };
 }
@@ -5354,6 +5371,110 @@ function applyIPOStaticFieldFallback(stockCode, realtimeData, fetchStatus) {
   return merged;
 }
 
+
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const cleaned = String(value).replace(/[,%xX倍港元HKDhkd\s,]/g, '');
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractOfferPriceBounds(value) {
+  if (value === null || value === undefined || value === '') return { min: null, max: null, mid: null, raw: null };
+  if (typeof value === 'number') return { min: value, max: value, mid: value, raw: String(value) };
+  const matches = String(value).match(/\d+(?:\.\d+)?/g) || [];
+  const nums = matches.map(Number).filter(Number.isFinite);
+  if (!nums.length) return { min: null, max: null, mid: null, raw: String(value) };
+  const min = nums[0];
+  const max = nums.length > 1 ? nums[nums.length - 1] : nums[0];
+  return { min, max, mid: (min + max) / 2, raw: String(value) };
+}
+
+function parsePercentValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const match = String(value).match(/([+-]?\d+(?:\.\d+)?)/);
+  return match ? parseFloat(match[1]) : null;
+}
+
+function normalizeListingStatus(rawStatus, dates = {}) {
+  const map = {
+    subscribing: '招股中',
+    coming: '待上市',
+    listed: '已上市',
+    ended: '已结束',
+    scored: '已评分',
+    filed: '已递表',
+  };
+  if (rawStatus && map[rawStatus]) return map[rawStatus];
+
+  const today = new Date();
+  const offerStart = dates.offer_start_date ? new Date(dates.offer_start_date) : null;
+  const offerEnd = dates.offer_end_date ? new Date(dates.offer_end_date) : null;
+  const listingDate = dates.listing_date ? new Date(dates.listing_date) : null;
+
+  if (offerStart && offerEnd && today >= offerStart && today <= offerEnd) return '招股中';
+  if (listingDate && today < listingDate) return '待上市';
+  if (listingDate && today >= listingDate) return '已上市';
+  return rawStatus || '待公布';
+}
+
+function buildIPOExtendedFields(base = {}) {
+  const offer = extractOfferPriceBounds(base.offerPrice || base.offer_price || base.offerPriceRange || base.offer_price_range || base.offerPriceMid);
+  const lotSize = toNumber(base.lot_size ?? base.lotSize);
+  const offerPrice = toNumber(base.offer_price ?? base.offerPriceMid) ?? offer.mid;
+  const currentPrice = toNumber(base.current_price ?? base.currentPrice);
+  const firstDayChangePct = parsePercentValue(base.first_day_change_pct ?? base.firstDayChangePct ?? base.firstDayReturn);
+  const subscriptionMultiple = toNumber(base.subscription_multiple ?? base.subscriptionMultiple);
+  const allotmentRate = parsePercentValue(base.allotment_rate ?? base.allotmentRate);
+  const lotAmount = toNumber(base.lot_amount ?? base.lotAmount) ?? (Number.isFinite(lotSize) && Number.isFinite(offerPrice) ? lotSize * offerPrice : null);
+  const currentVsOfferPct = parsePercentValue(base.current_vs_offer_pct ?? base.currentVsOfferPct) ?? (Number.isFinite(currentPrice) && Number.isFinite(offerPrice) && offerPrice !== 0 ? ((currentPrice - offerPrice) / offerPrice) * 100 : null);
+  const firstDayLotProfit = toNumber(base.first_day_lot_profit ?? base.firstDayLotProfit) ?? (Number.isFinite(firstDayChangePct) && Number.isFinite(lotAmount) ? lotAmount * (firstDayChangePct / 100) : null);
+  const currentLotProfit = toNumber(base.current_lot_profit ?? base.currentLotProfit) ?? (Number.isFinite(currentPrice) && Number.isFinite(offerPrice) && Number.isFinite(lotSize) ? (currentPrice - offerPrice) * lotSize : null);
+  const breakEven = Number.isFinite(currentPrice) && Number.isFinite(offerPrice) ? currentPrice < offerPrice : (Number.isFinite(firstDayChangePct) ? firstDayChangePct < 0 : null);
+  const listingDate = base.listing_date || base.listingDate || null;
+  const offerStartDate = base.offer_start_date || base.subscriptionStart || null;
+  const offerEndDate = base.offer_end_date || base.subscriptionEnd || null;
+  const pricingDate = base.pricing_date || null;
+  const allotmentResultDate = base.allotment_result_date || null;
+  const refundDate = base.refund_date || null;
+
+  return {
+    listing_status: normalizeListingStatus(base.listing_status || base.status, {
+      offer_start_date: offerStartDate,
+      offer_end_date: offerEndDate,
+      listing_date: listingDate,
+    }),
+    listing_date: listingDate,
+    offer_start_date: offerStartDate,
+    offer_end_date: offerEndDate,
+    pricing_date: pricingDate,
+    allotment_result_date: allotmentResultDate,
+    refund_date: refundDate,
+    lot_size: lotSize,
+    lot_amount: lotAmount,
+    offer_price: offerPrice,
+    offer_price_range: offer.raw,
+    current_price: currentPrice,
+    current_vs_offer_pct: currentVsOfferPct,
+    first_day_change_pct: firstDayChangePct,
+    first_day_lot_profit: firstDayLotProfit,
+    current_lot_profit: currentLotProfit,
+    subscription_multiple: subscriptionMultiple,
+    allotment_rate: allotmentRate,
+    updated_at: base.updated_at || base.lastUpdate || base.updateTime || base._fetchedAt || new Date().toISOString(),
+    source_name: base.source_name || base.sourceName || base._source || '系统计算',
+    source_url: base.source_url || base.sourceUrl || base.prospectus?.link || null,
+    is_below_offer_price: breakEven,
+    is_breaking_issue: breakEven,
+  };
+}
+
+function attachExtendedIPOFields(record = {}) {
+  return { ...record, ...buildIPOExtendedFields(record) };
+}
+
 // 自动保存评分记录到IPO列表（用户评分即数据）
 function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
   try {
@@ -5378,15 +5499,18 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
     // 检查是否已存在（去重）
     let existingIPO = data.ipos.find(ipo => ipo.code === stockCode);
 
+    const ipoInfo = scoreResult.ipoInfo || {};
     if (existingIPO) {
       // 更新现有记录
       existingIPO.score = scoreResult.totalScore;
       existingIPO.rating = scoreResult.rating;
       existingIPO.scoreDetails = scoreResult.scores;
       existingIPO.lastUpdate = new Date().toISOString();
+      Object.assign(existingIPO, ipoInfo);
       if (prospectusInfo) {
         existingIPO.name = prospectusInfo.name || existingIPO.name;
       }
+      existingIPO.source_url = existingIPO.source_url || prospectusInfo?.link || null;
       console.log(`[保存] 更新现有记录: ${stockCode} - ${scoreResult.totalScore}分`);
     } else {
       // 添加新记录
@@ -5399,6 +5523,7 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
         rating: scoreResult.rating,
         scoreDetails: scoreResult.scores,
         lastUpdate: new Date().toISOString(),
+        ...ipoInfo,
         prospectus: prospectusInfo ? {
           title: prospectusInfo.title,
           link: prospectusInfo.link
@@ -5493,6 +5618,7 @@ app.get('/api/score/:code', async (req, res) => {
     const response = {
       success: true,
       ...scoreResult,
+      ...(scoreResult.ipoInfo || {}),
       elapsed: `${elapsed}s`,
     };
 
@@ -5537,9 +5663,9 @@ app.get('/api/ipo/current', (req, res) => {
         success: true,
         updateTime: data.updateTime,
         total: data.count,
-        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        listed: listed.slice(0, 5), // 最近5个
+        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)).map(attachExtendedIPOFields),
+        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)).map(attachExtendedIPOFields),
+        listed: listed.slice(0, 5).map(attachExtendedIPOFields), // 最近5个
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -5578,7 +5704,7 @@ app.get('/api/ipo/top', (req, res) => {
         success: true,
         count: topIPOs.length,
         total: data.ipos.length,
-        ipos: topIPOs
+        ipos: topIPOs.map(attachExtendedIPOFields)
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
