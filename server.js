@@ -2110,6 +2110,9 @@ function extractNetProfit(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
   const debug = options.debug !== false;
   const marketCapHKD = Number.isFinite(options.marketCapHKD) ? options.marketCapHKD : null;
+  const RECENT_YEAR_SEMANTIC_THRESHOLD = 999;
+  const RECENT_YEAR_UNIT_THRESHOLD = 999;
+  const RECENT_YEAR_SCORE_THRESHOLD = 8;
   const FX_RATES = { HKD: 1, RMB: 1.1, USD: 7.8 };
   const SOFT_PENALTY_RULES = [
     { re: /revenue|收益|收入/i, code: 'revenue_context', score: -35 },
@@ -2560,12 +2563,37 @@ function extractNetProfit(text, options = {}) {
   }
 
   function chooseBestProfitCandidate(candidates) {
+    const recentYearDecision = {
+      triggered: false,
+      candidateYears: [],
+      selectedYear: null,
+    };
+    const isAnnualLikeCandidate = (candidate) => !!candidate
+      && candidate.periodType !== 'interim'
+      && Number.isFinite(candidate.year)
+      && (candidate.periodType === 'annual' || candidate.periodType === 'unknown');
+    const canApplyRecentYearTieBreak = (a, b) => {
+      if (!a || !b) return false;
+      if (!isAnnualLikeCandidate(a) || !isAnnualLikeCandidate(b)) return false;
+      if (a.rejectFlag || b.rejectFlag || a.strongVeto || b.strongVeto) return false;
+      if (!Number.isFinite(a.year) || !Number.isFinite(b.year)) return false;
+      if (Math.abs((a.semanticScore || 0) - (b.semanticScore || 0)) >= RECENT_YEAR_SEMANTIC_THRESHOLD) return false;
+      if (Math.abs((a.unitScore || 0) - (b.unitScore || 0)) >= RECENT_YEAR_UNIT_THRESHOLD) return false;
+      return true;
+    };
+    const getRecentYearBonus = (candidate, peers = []) => {
+      if (!Number.isFinite(candidate?.year)) return 0;
+      const years = peers.map(item => item?.year).filter(Number.isFinite);
+      if (!years.length) return 0;
+      return candidate.year === Math.max(...years) ? 1 : 0;
+    };
     const sorted = [...candidates].sort((a, b) => {
       if ((a.rejectFlag ? 1 : 0) !== (b.rejectFlag ? 1 : 0)) return a.rejectFlag ? 1 : -1;
       if ((a.strongVeto ? 1 : 0) !== (b.strongVeto ? 1 : 0)) return a.strongVeto ? 1 : -1;
       if ((b.semanticPurityScore || 0) !== (a.semanticPurityScore || 0)) return (b.semanticPurityScore || 0) - (a.semanticPurityScore || 0);
       if ((b.unitScore || 0) !== (a.unitScore || 0)) return (b.unitScore || 0) - (a.unitScore || 0);
       if ((b.yearScore || 0) !== (a.yearScore || 0)) return (b.yearScore || 0) - (a.yearScore || 0);
+      if (canApplyRecentYearTieBreak(a, b) && a.year !== b.year) return b.year - a.year;
       if (a.periodType !== b.periodType) {
         if (a.periodType === 'annual') return -1;
         if (b.periodType === 'annual') return 1;
@@ -2573,6 +2601,7 @@ function extractNetProfit(text, options = {}) {
       if (a.fieldTier !== b.fieldTier) return a.fieldTier - b.fieldTier;
       if (b.score !== a.score) return b.score - a.score;
       if ((b.sourceScore || 0) !== (a.sourceScore || 0)) return (b.sourceScore || 0) - (a.sourceScore || 0);
+      if (canApplyRecentYearTieBreak(a, b)) return getRecentYearBonus(b, [a, b]) - getRecentYearBonus(a, [a, b]);
       return Math.abs(b.netProfitHKD || 0) - Math.abs(a.netProfitHKD || 0);
     });
 
@@ -2630,10 +2659,25 @@ function extractNetProfit(text, options = {}) {
 
     const best = { ...valid[0] };
     const runnerUp = valid[1] || null;
-    const topGapTooSmall = !!runnerUp && Math.abs(best.score - runnerUp.score) < 8;
+    const annualTieCandidates = valid.filter(c =>
+      isAnnualLikeCandidate(c)
+      && !c.rejectFlag
+      && !c.strongVeto
+      && Number.isFinite(c.year)
+    );
+    const topGapTooSmall = !!runnerUp && Math.abs(best.score - runnerUp.score) < RECENT_YEAR_SCORE_THRESHOLD;
+    const recentYearTieBreakEligible = topGapTooSmall
+      && annualTieCandidates.length > 1
+      && canApplyRecentYearTieBreak(best, runnerUp);
+    if (recentYearTieBreakEligible) {
+      recentYearDecision.triggered = true;
+      recentYearDecision.candidateYears = Array.from(new Set(annualTieCandidates.map(candidate => candidate.year))).sort((a, b) => b - a);
+      recentYearDecision.selectedYear = Math.max(...recentYearDecision.candidateYears);
+      best.recentYearBonus = getRecentYearBonus(best, annualTieCandidates);
+    }
     const reason = [];
     if (!usableAnnual.length && best.periodType === 'interim') reason.push('interim_only');
-    if (topGapTooSmall) reason.push('top_gap_too_small');
+    if (topGapTooSmall && !recentYearTieBreakEligible) reason.push('top_gap_too_small');
     if (best.netProfitHKD <= 0) reason.push('non_positive_profit');
 
     best.confidence = best.sourceLevel === 'table' && best.fieldTier === 1 && !topGapTooSmall && best.periodType === 'annual'
@@ -2652,6 +2696,7 @@ function extractNetProfit(text, options = {}) {
       best.reason = reason.length ? reason.join(',') : 'ok';
     }
     best.topGapTooSmall = topGapTooSmall;
+    best.recentYearDecision = recentYearDecision;
     best.runnerUpScore = runnerUp?.score ?? null;
     return {
       best,
@@ -2682,12 +2727,13 @@ function extractNetProfit(text, options = {}) {
         } : null,
         scoreGap: runnerUp ? best.score - runnerUp.score : null,
       },
+      recentYearDecision,
       reason: best.reason,
     };
   }
 
   const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
-  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, reason } = chooseBestProfitCandidate(candidates);
+  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, recentYearDecision, reason } = chooseBestProfitCandidate(candidates);
 
   if (debug) {
     const topSummary = topCandidates.map(c => ({
@@ -2723,6 +2769,7 @@ function extractNetProfit(text, options = {}) {
     })), null, 2));
     console.log('[netProfit] rejectSummary:', JSON.stringify(rejectSummary || {}, null, 2));
     console.log('[netProfit] winnerVsRunnerUp:', JSON.stringify(winnerRunnerUp || {}, null, 2));
+    console.log('[netProfit] recentYearDecision:', JSON.stringify(recentYearDecision || {}, null, 2));
   }
 
   if (!best) {
@@ -2752,6 +2799,7 @@ function extractNetProfit(text, options = {}) {
       rejectReasonMap,
       rejectSummary,
       winnerRunnerUp,
+      recentYearDecision,
       winnerDiagnostics: null,
     };
   }
@@ -2784,6 +2832,7 @@ function extractNetProfit(text, options = {}) {
     rejectReasonMap,
     rejectSummary,
     winnerRunnerUp,
+    recentYearDecision,
     winnerDiagnostics: {
       score: best.score,
       semanticScore: best.semanticScore,
@@ -4887,6 +4936,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       rejectReasonMap: profitResult.rejectReasonMap || {},
       rejectSummary: profitResult.rejectSummary || {},
       winnerRunnerUp: profitResult.winnerRunnerUp || null,
+      recentYearDecision: profitResult.recentYearDecision || null,
       peerPEStatus,
       computedPE: null,
       profitDigitLength: profitResult.profitDigitLength ?? null,
@@ -5006,6 +5056,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         rejectReasonMap: profitResult.rejectReasonMap || {},
         rejectSummary: profitResult.rejectSummary || {},
         winnerRunnerUp: profitResult.winnerRunnerUp || null,
+        recentYearDecision: profitResult.recentYearDecision || null,
         peerPEStatus,
         peerSelectionMethod: peerPEStatus.peerSelectionMethod || peerPEStatus.details?.peerSelectionMethod || null,
         peerCountUsed: peerPEStatus.peerCountUsed || peerPEStatus.details?.peerCountUsed || 0,
