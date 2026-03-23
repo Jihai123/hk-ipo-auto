@@ -1044,6 +1044,224 @@
       font-size: 12px;
     }
 
+
+    .ipo-overview {
+      padding: 0 28px 28px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.7) 0%, rgba(255,255,255,0) 100%);
+    }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .overview-card, .info-panel {
+      background: #fff;
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .overview-card {
+      padding: 18px;
+      min-height: 118px;
+    }
+
+    .overview-label, .metric-label, .heat-label {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .overview-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--color-text-primary);
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .overview-subtext {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    .overview-panels {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 16px;
+    }
+
+    .info-panel {
+      padding: 20px;
+    }
+
+    .info-panel--footer {
+      grid-column: 1 / -1;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .panel-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--color-accent-mid);
+      margin-bottom: 6px;
+    }
+
+    .panel-header h3 {
+      font-size: 18px;
+      line-height: 1.3;
+      color: var(--color-text-primary);
+    }
+
+    .panel-hint {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+
+    .metric-grid, .heat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric-card, .heat-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .metric-value, .heat-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--color-text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-note, .heat-note {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .timeline-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-top: 6px;
+      background: #cbd5e1;
+      box-shadow: 0 0 0 5px rgba(203, 213, 225, 0.24);
+    }
+
+    .timeline-item.active .timeline-dot {
+      background: var(--color-accent-mid);
+      box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.18);
+    }
+
+    .timeline-item.past .timeline-dot {
+      background: var(--color-success);
+      box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.14);
+    }
+
+    .timeline-content {
+      background: var(--color-bg);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      border: 1px solid var(--color-border-light);
+    }
+
+    .timeline-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin-bottom: 4px;
+    }
+
+    .timeline-date {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timeline-state {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    .status-chip, .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .status-chip.status-招股中 { background: #ecfdf5; color: #059669; border-color: rgba(16,185,129,0.18); }
+    .status-chip.status-待上市 { background: #eef2ff; color: #4f46e5; border-color: rgba(99,102,241,0.18); }
+    .status-chip.status-已上市 { background: #eff6ff; color: #2563eb; border-color: rgba(37,99,235,0.18); }
+    .status-chip.status-已结束, .status-chip.status-已评分 { background: #f8fafc; color: #64748b; border-color: rgba(148,163,184,0.2); }
+    .status-chip.status-待公布 { background: #fff7ed; color: #ea580c; border-color: rgba(234,88,12,0.18); }
+
+    .tag-hot { background: #fef2f2; color: #dc2626; border-color: rgba(220,38,38,0.16); }
+    .tag-warm { background: #fffbeb; color: #d97706; border-color: rgba(217,119,6,0.16); }
+    .tag-neutral { background: #f8fafc; color: #64748b; border-color: rgba(148,163,184,0.2); }
+    .tag-break { background: #fef2f2; color: #dc2626; border-color: rgba(220,38,38,0.16); }
+    .tag-safe { background: #ecfdf5; color: #059669; border-color: rgba(16,185,129,0.18); }
+
+    .positive-text { color: var(--color-success); }
+    .negative-text { color: var(--color-danger); }
+    .neutral-text { color: var(--color-text-secondary); }
+
+    .data-source {
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .data-source a {
+      color: var(--color-accent-mid);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .data-source a:hover {
+      text-decoration: underline;
+    }
+
     /* ===== SCORE DEMO SECTION ===== */
     .demo-section {
       max-width: 1200px;
@@ -1602,6 +1820,21 @@
         align-items: center;
       }
 
+      .overview-grid,
+      .overview-panels,
+      .metric-grid,
+      .heat-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel-header {
+        flex-direction: column;
+      }
+
+      .panel-hint {
+        white-space: normal;
+      }
+
       .result-section {
         padding: 0 16px;
       }
@@ -1622,6 +1855,18 @@
 
       .navbar-inner {
         padding: 0 16px;
+      }
+
+      .total-score,
+      .score-details,
+      .ipo-overview,
+      .prospectus-links {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .overview-value {
+        font-size: 22px;
       }
 
       .search-tips {
@@ -1827,6 +2072,51 @@
 
       <div class="score-details" id="scoreDetails">
         <!-- Dynamic -->
+      </div>
+
+      <div class="ipo-overview" id="ipoOverview">
+        <div class="overview-grid" id="overviewGrid"></div>
+        <div class="overview-panels">
+          <div class="info-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-eyebrow">关键信息补充区</div>
+                <h3>上市时间表</h3>
+              </div>
+              <span class="panel-hint">评分之后，优先查看节奏</span>
+            </div>
+            <div class="timeline" id="timelineList"></div>
+          </div>
+          <div class="info-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-eyebrow">散户视角</div>
+                <h3>打新门槛与收益测算</h3>
+              </div>
+              <span class="panel-hint">一手成本 / 盈亏 / 是否破发</span>
+            </div>
+            <div class="metric-grid" id="retailMetrics"></div>
+          </div>
+          <div class="info-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-eyebrow">热度信息</div>
+                <h3>认购热度</h3>
+              </div>
+              <span class="panel-hint">无数据时自动降级显示</span>
+            </div>
+            <div class="heat-grid" id="heatMetrics"></div>
+          </div>
+          <div class="info-panel info-panel--footer">
+            <div class="panel-header">
+              <div>
+                <div class="panel-eyebrow">数据说明</div>
+                <h3>数据来源与更新时间</h3>
+              </div>
+            </div>
+            <div class="data-source" id="dataSourceInfo"></div>
+          </div>
+        </div>
       </div>
 
       <div class="prospectus-links" id="prospectusLinks">
@@ -2059,46 +2349,113 @@
 
 <!-- JavaScript to load data -->
 <script>
+function formatDateValue(value) {
+  if (!value) return '暂无数据';
+  const normalized = String(value).replace(/\//g, '-');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatCurrencyValue(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '暂无数据';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  return `HK$${num.toLocaleString('zh-CN', { minimumFractionDigits: digits > 0 ? 0 : 0, maximumFractionDigits: digits })}`;
+}
+
+function formatPercentValue(value, digits = 1) {
+  if (value === null || value === undefined || value === '') return '暂无数据';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  const prefix = num > 0 ? '+' : '';
+  return `${prefix}${num.toFixed(digits)}%`;
+}
+
+function formatMultipleValue(value) {
+  if (value === null || value === undefined || value === '') return '暂无数据';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  return `${num.toFixed(1)}x`;
+}
+
+function formatPlainNumber(value) {
+  if (value === null || value === undefined || value === '') return '暂无数据';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value;
+  return num.toLocaleString('zh-CN');
+}
+
+function valueToneClass(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'neutral-text';
+  if (num > 0) return 'positive-text';
+  if (num < 0) return 'negative-text';
+  return 'neutral-text';
+}
+
+function getHeatTag(ipo) {
+  const sub = Number(ipo.subscription_multiple);
+  if (Number.isFinite(sub) && sub >= 50) return { label: '超热', className: 'tag-chip tag-hot' };
+  if (Number.isFinite(sub) && sub >= 15) return { label: '热门', className: 'tag-chip tag-warm' };
+  return { label: '待观察', className: 'tag-chip tag-neutral' };
+}
+
 // 加载Top IPO榜单
 async function loadTopIPOs() {
   try {
-    const response = await fetch('./api/ipo/top?limit=5');
+    const response = await fetch('./api/ipo/top?limit=6');
     const data = await response.json();
 
     const container = document.getElementById('topIPOList');
     if (data.success && data.ipos.length > 0) {
       container.innerHTML = data.ipos.map((ipo, index) => {
         const scoreColor = ipo.score >= 4 ? 'var(--color-success)' : ipo.score >= 2 ? 'var(--color-warning)' : ipo.score >= 0 ? 'var(--color-text-secondary)' : 'var(--color-danger)';
-        const icon = ipo.score >= 4 ? '🔥' : ipo.score >= 2 ? '👍' : '✓';
+        const changeClass = valueToneClass(ipo.current_vs_offer_pct ?? ipo.first_day_change_pct);
+        const heatTag = getHeatTag(ipo);
+        const statusClass = `status-chip status-${ipo.listing_status || '待公布'}`;
 
         return `
-          <div style="background: #fff; border-radius: 12px; padding: 20px; border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--color-accent-start)'" onmouseout="this.style.borderColor='var(--color-border)'" onclick="quickSearch('${ipo.code}')">
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <span style="font-size: 24px; font-weight: 800; color: #cbd5e1; width: 32px;">
-                #${index + 1}
-              </span>
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                  <span style="font-weight: 700; color: var(--color-text-primary);">${ipo.code}</span>
-                  <span style="color: var(--color-text-secondary);">${ipo.name}</span>
+          <div style="background:#fff; border-radius:20px; padding:24px; border:1px solid var(--color-border); box-shadow:var(--shadow-md); cursor:pointer; transition:all .2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='var(--color-accent-start)'" onmouseout="this.style.transform='translateY(0)';this.style.borderColor='var(--color-border)'" onclick="quickSearch('${ipo.code}')">
+            <div style="display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap;">
+              <div style="display:flex; gap:16px; align-items:flex-start;">
+                <span style="font-size:24px; font-weight:800; color:#cbd5e1; min-width:36px;">#${index + 1}</span>
+                <div>
+                  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+                    <span style="font-size:22px; font-weight:800; color:var(--color-text-primary);">${ipo.name}</span>
+                    <span style="font-family:'Courier New', monospace; color:var(--color-text-secondary);">${ipo.code}</span>
+                    <span class="${statusClass}">${ipo.listing_status || '待公布'}</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span style="font-size:14px; font-weight:700; color:${scoreColor};">${ipo.rating || '待评级'}</span>
+                    <span class="${heatTag.className}">${heatTag.label}</span>
+                    <span class="tag-chip ${ipo.is_breaking_issue ? 'tag-break' : 'tag-safe'}">${ipo.is_breaking_issue ? '破发风险' : '未破发'}</span>
+                  </div>
                 </div>
-                <span style="font-size: 13px; font-weight: 600; color: ${scoreColor};">
-                  ${ipo.rating || '待评级'}
-                </span>
+              </div>
+              <div style="text-align:right; min-width:120px;">
+                <div style="font-size:13px; color:var(--color-text-muted); margin-bottom:4px;">评分总分</div>
+                <div style="font-size:48px; line-height:1; font-weight:900; color:${scoreColor}; font-variant-numeric:tabular-nums;">${ipo.score ?? '—'}</div>
+                <div style="font-size:12px; color:var(--color-text-secondary); margin-top:8px;">评分仍为主决策依据</div>
               </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 24px;">${icon}</span>
-              <div style="font-size: 36px; font-weight: 800; color: ${scoreColor};">
-                ${ipo.score}
-              </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px;">
+              <div class="metric-card"><div class="metric-label">招股价</div><div class="metric-value">${formatCurrencyValue(ipo.offer_price)}</div><div class="metric-note">每手 ${formatPlainNumber(ipo.lot_size)} 股</div></div>
+              <div class="metric-card"><div class="metric-label">现价 / 最新价</div><div class="metric-value">${formatCurrencyValue(ipo.current_price)}</div><div class="metric-note ${changeClass}">${formatPercentValue(ipo.current_vs_offer_pct)}</div></div>
+              <div class="metric-card"><div class="metric-label">首日涨跌幅</div><div class="metric-value ${valueToneClass(ipo.first_day_change_pct)}">${formatPercentValue(ipo.first_day_change_pct)}</div><div class="metric-note">一手金额 ${formatCurrencyValue(ipo.lot_amount, 0)}</div></div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; font-size:13px; color:var(--color-text-secondary);">
+              <div><strong style="display:block; color:var(--color-text-muted); margin-bottom:4px;">上市日期</strong>${formatDateValue(ipo.listing_date)}</div>
+              <div><strong style="display:block; color:var(--color-text-muted); margin-bottom:4px;">认购倍数</strong>${formatMultipleValue(ipo.subscription_multiple)}</div>
+              <div><strong style="display:block; color:var(--color-text-muted); margin-bottom:4px;">中签率</strong>${formatPercentValue(ipo.allotment_rate)}</div>
+              <div><strong style="display:block; color:var(--color-text-muted); margin-bottom:4px;">数据更新时间</strong>${formatDateValue(ipo.updated_at)}</div>
             </div>
           </div>
         `;
       }).join('');
     } else {
       container.innerHTML = `
-        <div style="text-align: center; padding: 48px; color: var(--color-text-muted);">
+        <div style="text-align:center; padding:48px; color:var(--color-text-muted); background:#fff; border-radius:16px; border:1px dashed var(--color-border);">
           暂无评分数据，请运行评分脚本生成数据
         </div>
       `;
@@ -2603,6 +2960,93 @@ document.addEventListener('DOMContentLoaded', function() {
       }, 1000);
     }
 
+    function renderIPOOverview(data) {
+      const info = data.ipoInfo || data;
+      const overviewGrid = document.getElementById('overviewGrid');
+      const timelineList = document.getElementById('timelineList');
+      const retailMetrics = document.getElementById('retailMetrics');
+      const heatMetrics = document.getElementById('heatMetrics');
+      const dataSourceInfo = document.getElementById('dataSourceInfo');
+
+      const statusClass = `status-chip status-${info.listing_status || '待公布'}`;
+      const overviewCards = [
+        { label: '上市状态', value: `<span class="${statusClass}">${info.listing_status || '待公布'}</span>`, subtext: `上市日期：${formatDateValue(info.listing_date)}` },
+        { label: '招股价 / 现价', value: `${formatCurrencyValue(info.offer_price)} / ${formatCurrencyValue(info.current_price)}`, subtext: `较招股价 ${formatPercentValue(info.current_vs_offer_pct)}` },
+        { label: '一手门槛', value: formatCurrencyValue(info.lot_amount, 0), subtext: `每手 ${formatPlainNumber(info.lot_size)} 股` },
+        { label: '首日表现', value: `<span class="${valueToneClass(info.first_day_change_pct)}">${formatPercentValue(info.first_day_change_pct)}</span>`, subtext: `首日每手盈亏 ${formatCurrencyValue(info.first_day_lot_profit, 0)}` },
+      ];
+      overviewGrid.innerHTML = overviewCards.map(card => `
+        <div class="overview-card">
+          <div class="overview-label">${card.label}</div>
+          <div class="overview-value">${card.value}</div>
+          <div class="overview-subtext">${card.subtext}</div>
+        </div>
+      `).join('');
+
+      const timelineItems = [
+        { label: '招股开始', value: info.offer_start_date },
+        { label: '招股截止', value: info.offer_end_date },
+        { label: '定价日', value: info.pricing_date },
+        { label: '公布中签', value: info.allotment_result_date },
+        { label: '退款日', value: info.refund_date },
+        { label: '上市日', value: info.listing_date },
+      ];
+      const now = new Date();
+      const nextIndex = timelineItems.findIndex(item => item.value && new Date(String(item.value).replace(/\//g, '-')) >= now);
+      timelineList.innerHTML = timelineItems.map((item, index) => {
+        const hasDate = !!item.value;
+        const itemDate = hasDate ? new Date(String(item.value).replace(/\//g, '-')) : null;
+        const stateClass = !hasDate ? '' : itemDate < now ? 'past' : (index === nextIndex ? 'active' : '');
+        const stateText = !hasDate ? '暂无数据' : itemDate < now ? '已过节点' : (index === nextIndex ? '最近关键节点' : '待到来');
+        return `
+          <div class="timeline-item ${stateClass}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <div class="timeline-title">${item.label}</div>
+              <div class="timeline-date">${formatDateValue(item.value)}</div>
+              <div class="timeline-state">${stateText}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const retailCards = [
+        { label: '首日每手盈亏', value: formatCurrencyValue(info.first_day_lot_profit, 0), note: formatPercentValue(info.first_day_change_pct), tone: valueToneClass(info.first_day_lot_profit) },
+        { label: '当前每手盈亏', value: formatCurrencyValue(info.current_lot_profit, 0), note: formatPercentValue(info.current_vs_offer_pct), tone: valueToneClass(info.current_lot_profit) },
+        { label: '是否破发', value: info.is_breaking_issue === null || info.is_breaking_issue === undefined ? '暂无数据' : (info.is_breaking_issue ? '是' : '否'), note: info.is_breaking_issue ? '当前低于招股价' : '当前不低于招股价', tone: info.is_breaking_issue ? 'negative-text' : 'positive-text' },
+        { label: '每手股数', value: `${formatPlainNumber(info.lot_size)} 股`, note: `申购金额 ${formatCurrencyValue(info.lot_amount, 0)}`, tone: 'neutral-text' },
+      ];
+      retailMetrics.innerHTML = retailCards.map(card => `
+        <div class="metric-card">
+          <div class="metric-label">${card.label}</div>
+          <div class="metric-value ${card.tone}">${card.value}</div>
+          <div class="metric-note">${card.note}</div>
+        </div>
+      `).join('');
+
+      const heatTag = getHeatTag(info);
+      const heatCards = [
+        { label: '认购倍数', value: formatMultipleValue(info.subscription_multiple), note: '反映市场申购热度' },
+        { label: '中签率', value: formatPercentValue(info.allotment_rate), note: '已公布则优先展示' },
+        { label: '热度标签', value: `<span class="${heatTag.className}">${heatTag.label}</span>`, note: '根据认购倍数自动判断' },
+        { label: '超额认购', value: Number(info.subscription_multiple) >= 15 ? '明显' : '一般', note: Number.isFinite(Number(info.subscription_multiple)) ? '仅作辅助判断，不替代评分' : '暂无认购倍数数据' },
+      ];
+      heatMetrics.innerHTML = heatCards.map(card => `
+        <div class="heat-card">
+          <div class="heat-label">${card.label}</div>
+          <div class="heat-value">${card.value}</div>
+          <div class="heat-note">${card.note}</div>
+        </div>
+      `).join('');
+
+      dataSourceInfo.innerHTML = `
+        <div><strong>数据来源：</strong>${info.source_name || '系统计算'}</div>
+        <div><strong>最近同步：</strong>${formatDateValue(info.updated_at)}</div>
+        <div><strong>字段缺失说明：</strong>若交易所或抓取链路暂无该字段，则统一展示“暂无数据”，不会影响原有评分模块。</div>
+        <div><strong>原始链接：</strong>${info.source_url ? `<a href="${info.source_url}" target="_blank" rel="noreferrer">查看原始来源</a>` : '暂无数据'}</div>
+      `;
+    }
+
     // Display result
     function displayResult(data) {
       document.getElementById('stockName').textContent = data.prospectus?.name || '-';
@@ -2618,8 +3062,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const detailsHtml = generateScoreDetails(data.scores);
       document.getElementById('scoreDetails').innerHTML = detailsHtml;
+      renderIPOOverview(data);
 
-      const stockCode = data.stockCode;
       const hkexSearchUrl = `https://www.hkexnews.hk/listedco/listconews/advancedsearch/search_active_main_c.aspx`;
       let linksHtml = '';
 
