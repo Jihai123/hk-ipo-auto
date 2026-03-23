@@ -30,8 +30,30 @@ const HIGH_CONFIDENCE_ALIASES = {
   'semiconductor equipment': ['半导体设备', '半導體設備'],
   semicon: ['半导体', '半導體'],
   'healthcare equipment': ['医疗器械', '醫療器械'],
+  healthcare: ['醫療保健業', '医疗保健业', '醫療保健', '医疗保健'],
+  'medical and healthcare': ['醫療保健業', '医疗保健业', '醫療保健', '医疗保健'],
+  'software services': ['軟件服務', '软件服务'],
+  'software and services': ['軟件服務', '软件服务'],
+  'new energy': ['新能源'],
+  consumption: ['消費', '消费'],
+  consumer: ['消費', '消费'],
+  industrial: ['工業製品', '工业制品', '工業', '工业'],
+  manufacturing: ['工業製品', '工业制品', '工業製造', '工业制造'],
 };
 
+
+const HIGH_CONFIDENCE_NORMALIZED_ALIASES = {
+  医疗保健: ['醫療保健業', '医疗保健业', '醫療保健', '医疗保健'],
+  軟件服務: ['軟件服務', '软件服务'],
+  软件服务: ['軟件服務', '软件服务'],
+  半導體: ['半導體', '半导体'],
+  半导体: ['半導體', '半导体'],
+  新能源: ['新能源'],
+  消費: ['消費', '消费'],
+  消费: ['消費', '消费'],
+  工業製造: ['工業製品', '工业制品', '工業製造', '工业制造'],
+  工业制造: ['工業製品', '工业制品', '工業製造', '工业制造'],
+};
 function toHalfWidth(value = '') {
   return value
     .replace(FULLWIDTH_RE, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
@@ -98,6 +120,19 @@ function createIndustryCodeMapFromRaw(rawMap = {}) {
     for (const target of targets) {
       const targetKey = normalizeIndustryName(target);
       const code = normalizedIndex[targetKey] || map[target] || map[targetKey];
+      if (code) {
+        addVariant(aliasIndex, aliasKey, code);
+        addVariant(map, aliasKey, code);
+        break;
+      }
+    }
+  }
+
+  for (const [alias, targets] of Object.entries(HIGH_CONFIDENCE_NORMALIZED_ALIASES)) {
+    const aliasKey = normalizeIndustryName(alias);
+    for (const target of targets) {
+      const targetKey = normalizeIndustryName(target);
+      const code = normalizedIndex[targetKey] || aliasIndex[targetKey] || map[target] || map[targetKey];
       if (code) {
         addVariant(aliasIndex, aliasKey, code);
         addVariant(map, aliasKey, code);
