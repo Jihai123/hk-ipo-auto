@@ -2213,6 +2213,54 @@ function extractNetProfit(text, options = {}) {
     return null;
   }
 
+  function resolveTableUnitContext(sectionText, hitIndex) {
+    if (!sectionText || hitIndex === null || hitIndex === undefined) return null;
+    const scanStart = Math.max(0, hitIndex - 2400);
+    const scanEnd = Math.min(sectionText.length, hitIndex + 240);
+    const tableWindow = sectionText.slice(scanStart, scanEnd);
+    const hitWindow = sectionText.slice(Math.max(0, hitIndex - 520), Math.min(sectionText.length, hitIndex + 220));
+    const tableStructureScore = [
+      /(股份溢價|留存利潤|法定盈餘儲備|總計|權益|儲備變動)/.test(tableWindow) ? 1 : 0,
+      /(於20\d{2}年\d{1,2}月\d{1,2}日|截至20\d{2}年|年內利潤及其他全面收益|期內利潤及其他全面收益|轉撥|確認為分派的股息)/.test(tableWindow) ? 1 : 0,
+      ((tableWindow.match(/\d{1,3},\d{3}/g) || []).length >= 8) ? 1 : 0,
+      !/[。；:：]{2,}/.test(hitWindow) && !/(增加|減少|上調|下調|基點|敏感度|風險)/.test(hitWindow) ? 1 : 0,
+    ].reduce((sum, item) => sum + item, 0);
+    if (tableStructureScore < 3) return null;
+
+    const unitPatterns = [
+      /(?:單位[：:]?|[（(])\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)?\s*([千百萬億万千百万元亿元]+|million)?\s*(?:,?百分比除外)?\s*[）)]?/g,
+      /(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)\s*([千百萬億万千百万元亿元]+|million)/g,
+      /([千百萬億万千百万元亿元]+|million)\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)/g,
+    ];
+
+    let best = null;
+    for (const re of unitPatterns) {
+      let match;
+      while ((match = re.exec(tableWindow)) !== null) {
+        const tokenA = match[1] || null;
+        const tokenB = match[2] || null;
+        const currency = /(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)/i.test(tokenA || '') ? tokenA : tokenB;
+        const unit = currency === tokenA ? tokenB : tokenA;
+        if (!unit && !currency) continue;
+        const absoluteIndex = scanStart + match.index;
+        const distance = Math.abs(hitIndex - absoluteIndex);
+        const isPreceding = absoluteIndex <= hitIndex;
+        const score = tableStructureScore * 20 + (isPreceding ? 40 : 0) - Math.min(distance / 10, 120);
+        if (!best || score > best.score) {
+          best = {
+            currency: currency || null,
+            unit: unit || null,
+            unitDistance: distance,
+            score,
+          };
+        }
+      }
+    }
+
+    if (!best || !best.unit) return null;
+    return best;
+  }
+
   function resolveContext(sectionText, hitIndex) {
     const nearbyStart = Math.max(0, hitIndex - 260);
     const nearbyEnd = Math.min(sectionText.length, hitIndex + 260);
@@ -2221,15 +2269,16 @@ function extractNetProfit(text, options = {}) {
     const fallback = getLocalUnitContext(noSpace, null, null);
     const close = getClosestUnitContext(nearby, localHitIndex, fallback.currency, fallback.unit);
     const localUnit = detectUnit(nearby);
+    const tableUnit = resolveTableUnitContext(sectionText, hitIndex);
     const sectionUnit = detectUnit(sectionText.slice(0, Math.min(sectionText.length, 400)));
     const globalUnit = detectUnit(noSpace.slice(0, 1200));
 
-    const resolvedCurrency = localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || null;
-    const resolvedUnit = localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || null;
-    const unitSource = localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'unresolved';
-    const localUnitDistance = close?.unitDistance ?? null;
+    const resolvedCurrency = tableUnit?.currency || localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || null;
+    const resolvedUnit = tableUnit?.unit || localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || null;
+    const unitSource = tableUnit?.unit ? 'table_header' : localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'unresolved';
+    const localUnitDistance = tableUnit?.unitDistance ?? close?.unitDistance ?? null;
     const hasStrongUnitLocality = unitSource === 'table_header'
-      || (close?.unit && localUnitDistance !== null && localUnitDistance <= 80);
+      || (close?.unit && close.unitDistance !== null && close.unitDistance <= 80);
     return {
       currency: resolvedCurrency,
       unit: resolvedUnit,
