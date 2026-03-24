@@ -7,9 +7,9 @@
   <style>
     body{font-family:Arial,sans-serif;background:#f5f7fb;margin:0;color:#1f2937} .wrap{max-width:1200px;margin:0 auto;padding:20px}
     .grid{display:grid;gap:16px}.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
-    h1,h2,h3{margin:0 0 10px}.muted{color:#6b7280}.input{display:flex;gap:8px;margin:12px 0}.input input{flex:1;padding:10px}.btn{background:#4f46e5;color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
+    h1,h2,h3{margin:0 0 10px}.muted{color:#6b7280}.input{display:flex;gap:8px;margin:12px 0}.input input,.input select{flex:1;padding:10px}.btn{background:#4f46e5;color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
     .list{display:grid;gap:10px}.row{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;font-size:13px;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
-    .top3 .row{grid-template-columns:repeat(7,1fr)} .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.metric{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .top3 .row{grid-template-columns:repeat(7,1fr)} .timeline{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}.metric{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
     .skeleton{height:48px;background:linear-gradient(90deg,#f1f5f9,#e2e8f0,#f1f5f9);border-radius:8px;animation:sh 1.2s infinite}@keyframes sh{0%{opacity:.7}50%{opacity:1}100%{opacity:.7}}
     details{background:#fff;border-radius:12px;padding:12px}
     @media(max-width:960px){.hero{grid-template-columns:1fr}.row,.top3 .row{grid-template-columns:1fr 1fr}.timeline,.metric{grid-template-columns:1fr 1fr}}
@@ -20,7 +20,7 @@
   <section class="hero">
     <div class="card">
       <h1>港股打新量化评分系统</h1>
-      <p class="muted">保留原评分内核，通过真实 IPO 数据实时生成首页决策信息。</p>
+      <p class="muted">保留评分内核，以 ETNet IPO 板块真实数据增强决策。</p>
       <form class="input" id="scoreForm"><input id="codeInput" placeholder="输入股票代码，如 03355" /><button class="btn" type="submit">立即评分</button></form>
       <p class="muted">示例代码：03355 / 02526 / 09660</p>
       <pre id="scoreResult" class="muted"></pre>
@@ -33,7 +33,7 @@
 
   <section class="card">
     <h2>当前新股评分榜</h2>
-    <div class="input"><select id="sortBy"><option value="score">score</option><option value="listing_date">listing_date</option><option value="subscription_close">subscription_close</option><option value="lot_cost">lot_cost</option><option value="first_day_return">first_day_return</option><option value="current_return">current_return</option></select><button class="btn" id="reloadBtn">刷新</button></div>
+    <div class="input"><select id="sortBy"><option value="score">score</option><option value="listing_date">listing_date</option><option value="offer_end_date">offer_end_date</option><option value="lot_cost">lot_cost</option><option value="cumulative_return">cumulative_return</option></select><button class="btn" id="reloadBtn">刷新</button></div>
     <div id="leaderboard"></div>
   </section>
 
@@ -54,7 +54,7 @@
 
   <details>
     <summary><strong>评分规则（折叠）</strong></summary>
-    <p>评分内核保留：旧股发售、保荐人、基石、Pre-IPO、行业五维度，总分映射评级。</p>
+    <p>评分内核保留：旧股发售、保荐人、基石、Pre-IPO、行业等维度；本次仅增强 IPO 数据层与展示层，前端暂不展示 PE 相关内容。</p>
   </details>
 </div>
 <script>
@@ -62,10 +62,34 @@
     top3: document.getElementById('top3'), leaderboard: document.getElementById('leaderboard'), timeline: document.getElementById('timeline'), market: document.getElementById('market'), validation: document.getElementById('validation')
   };
   function skeleton(el,n=3){el.innerHTML=Array.from({length:n}).map(()=>'<div class="skeleton"></div>').join('');}
-  function safe(v){return (v===undefined||v===null||v==='')?'--':v}
+  function safe(v){return (v===undefined||v===null||v===''||Number.isNaN(v))?'暂无数据':v}
+  function pct(v){return (v===undefined||v===null||v===''||Number.isNaN(v))?'暂无数据':`${v}%`}
+  function offerText(i){
+    if(i.offer_price_range && i.offer_price_range!=='暂无数据') return i.offer_price_range;
+    return safe(i.offer_price);
+  }
   function rowTop(i){return `<div class="row"><div>${safe(i.code)}</div><div>${safe(i.name)}</div><div>${safe(i.score)}</div><div>${safe(i.rating)}</div><div>${safe(i.status_label)}</div><div>${safe(i.lot_cost)}</div><div>${safe(i.listing_date)}</div></div>`}
-  function rowBoard(i){return `<div class="row"><div>${safe(i.code)} ${safe(i.name)}</div><div>总分:${safe(i.score)} / ${safe(i.rating)}</div><div>五维:${safe(i.score)}</div><div>${safe(i.status_label)}</div><div>${safe(i.listing_date)}</div><div>${safe(i.offer_price)}</div><div>${safe(i.lot_size)}股/${safe(i.lot_cost)}</div><div>现价:${safe(i.current_price)} 当前:${safe(i.current_return)}% 首日:${safe(i.first_day_return)}% 倍数:${safe(i.subscription_multiple)} 中签:${safe(i.success_rate)}%</div></div>`}
+  function rowBoard(i){
+    const grey=i.grey_market_top_quote&&i.grey_market_top_quote.broker?`暗盘:${safe(i.grey_market_top_quote.broker)} ${safe(i.grey_market_top_quote.grey_price)}`:'暗盘:暂无数据';
+    return `<div class="row"><div>${safe(i.code)} ${safe(i.name)}</div><div>总分:${safe(i.score)} / ${safe(i.rating)}</div><div>${safe(i.status_label)}</div><div>${safe(i.listing_date)}</div><div>招股价:${offerText(i)}</div><div>每手:${safe(i.lot_size)} / 入场:${safe(i.lot_cost)}</div><div>认购:${safe(i.subscription_multiple)}x 中签:${pct(i.success_rate)}</div><div>现价:${safe(i.current_price)} 累计:${pct(i.cumulative_return)} ${grey}</div></div>`
+  }
   function kv(k,v){return `<div class="card"><div class="muted">${k}</div><div><strong>${safe(v)}</strong></div></div>`}
+
+  async function loadDashboardFallback(){
+    try{
+      const [topRes,currentRes]=await Promise.all([fetch('/api/ipo/top?limit=3'),fetch('/api/ipo/current')]);
+      const topData=await topRes.json();
+      const currentData=await currentRes.json();
+      const topItems=(topData.ipos||[]).map(i=>({
+        code:i.code,name:i.name,score:i.score??'暂无数据',rating:i.rating??'暂无数据',status_label:safe(i.listing_status||i.status),lot_cost:i.lot_amount||i.lot_cost,listing_date:i.listing_date||i.listingDate
+      }));
+      const board=[...(currentData.subscribing||[]),...(currentData.coming||[]),...(currentData.listed||[])].map(i=>({
+        code:i.code,name:i.name,score:i.score??'暂无数据',rating:i.rating??'暂无数据',status_label:safe(i.listing_status||i.status),listing_date:i.listing_date||i.listingDate,offer_price:i.offer_price||i.offerPrice,offer_price_range:i.offer_price_range||i.offerPrice,lot_size:i.lot_size||i.lotSize,lot_cost:i.lot_amount||i.lot_cost,subscription_multiple:i.subscription_multiple,success_rate:i.allotment_rate||i.success_rate,current_price:i.current_price,cumulative_return:i.current_vs_offer_pct
+      }));
+      dashboardEl.top3.innerHTML=(topItems||[]).map(rowTop).join('')||'<p class="muted">暂无数据</p>';;
+      dashboardEl.leaderboard.innerHTML=(board||[]).map(rowBoard).join('')||'<p class="muted">暂无数据</p>';;
+    }catch(e){console.warn('fallback failed',e);}
+  }
 
   async function loadDashboard(){
     Object.values(dashboardEl).forEach((el)=>skeleton(el,2));
@@ -73,18 +97,20 @@
     const r=await fetch(`/api/dashboard?sort=${sort}`); const d=await r.json();
     dashboardEl.top3.innerHTML=(d.top3||[]).map(rowTop).join('')||'<p class="muted">暂无数据</p>';
     dashboardEl.leaderboard.innerHTML=(d.leaderboard||[]).map(rowBoard).join('')||'<p class="muted">暂无数据</p>';
+    if(!(d.top3||[]).length && !(d.leaderboard||[]).length){
+      await loadDashboardFallback();
+      return;
+    }
     const t=d.timeline||{};
-    dashboardEl.timeline.innerHTML=[['招股中',t.subscribing?.length],['今日截止',t.closing_today?.length],['即将中签',t.allotment_soon?.length],['即将退款',t.refund_soon?.length],['即将上市',t.listing_soon?.length]].map(([k,v])=>kv(k,v)).join('');
+    dashboardEl.timeline.innerHTML=[['招股中',t.subscribing?.length],['即将截止认购',t.closing_soon?.length],['即将公布结果',t.allotment_soon?.length],['即将退款',t.refund_soon?.length],['即将上市',t.listing_soon?.length],['今日上市',t.listed_today?.length],['明天上市',t.listed_tomorrow?.length]].map(([k,v])=>kv(k,v)).join('');
     const m=d.market_temperature||{};
-    dashboardEl.market.innerHTML=[['近7天首日平均涨幅',m.avg_first_day_return_7d],['近30天破发率',m.break_rate_30d],['本周招股数量',m.subscribing_count_week],['本周上市数量',m.listing_count_week]].map(([k,v])=>kv(k,v)).join('');
+    dashboardEl.market.innerHTML=[['近7天首日平均涨幅',pct(m.avg_first_day_return_7d)],['近30天破发率',pct(m.break_rate_30d)],['本周招股数量',m.subscribing_count_week],['本周上市数量',m.listing_count_week]].map(([k,v])=>kv(k,v)).join('');
     const v=d.validation_summary||{};
-    dashboardEl.validation.innerHTML=[['最近样本数',v.sample_size],['高分上涨率',v.high_score_up_rate],['低分破发率',v.low_score_break_rate]].map(([k,val])=>kv(k,val)).join('');
-    const pageText=document.body.innerText;
-    if(pageText.includes('undefined')||pageText.includes('null')) console.warn('页面出现 undefined/null');
+    dashboardEl.validation.innerHTML=[['最近样本数',v.sample_size],['高分股上涨率',pct(v.high_score_up_rate)],['低分股破发率',pct(v.low_score_break_rate)]].map(([k,val])=>kv(k,val)).join('');
   }
 
   document.getElementById('reloadBtn').addEventListener('click',loadDashboard);
-  document.getElementById('scoreForm').addEventListener('submit',async(e)=>{e.preventDefault();const code=document.getElementById('codeInput').value.trim();if(!code)return;const r=await fetch(`/api/score/${code}`);const d=await r.json();document.getElementById('scoreResult').textContent=JSON.stringify({success:d.success,totalScore:d.totalScore,rating:d.rating,ipoInfo:d.ipoInfo||{}},null,2)});
+  document.getElementById('scoreForm').addEventListener('submit',async(e)=>{e.preventDefault();const code=document.getElementById('codeInput').value.trim();if(!code)return;const out=document.getElementById('scoreResult');out.textContent='评分中...';try{const r=await fetch(`/api/score/${code}`);const d=await r.json();if(!d.success){out.textContent=`评分失败：${safe(d.error)}`;return;}out.textContent=JSON.stringify({success:d.success,totalScore:d.totalScore,rating:d.rating,ipoInfo:d.ipoInfo||{}},null,2);}catch(err){out.textContent=`评分失败：${err.message}`;}});
   loadDashboard();
 </script>
 </body>
