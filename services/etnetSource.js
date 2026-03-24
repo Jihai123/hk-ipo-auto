@@ -62,6 +62,36 @@ async function fetchStockCodesFromPage(url = DEFAULT_LIST_URL, verbose = false) 
   };
 }
 
+async function fetchNameFromListByCode(code, { verbose = false } = {}) {
+  const normalizedCode = normalizeCode(code);
+  if (!normalizedCode) return null;
+
+  const res = await axios.get(DEFAULT_LIST_URL, {
+    timeout: 15000,
+    headers: cfg.headers,
+    validateStatus: () => true,
+  });
+  if (res.status >= 400) return null;
+
+  const $ = cheerio.load(res.data);
+  let foundName = null;
+  $('a[href*="code="]').each((_, a) => {
+    if (foundName) return;
+    const href = $(a).attr('href') || '';
+    const m = href.match(/code=(\d{1,5})/);
+    if (!m) return;
+    const linkCode = normalizeCode(m[1]);
+    if (linkCode !== normalizedCode) return;
+    const txt = String($(a).text() || '').trim();
+    if (txt) foundName = txt;
+  });
+
+  if (verbose && foundName) {
+    console.log(`[etnetSource] list fallback name hit ${normalizedCode}: ${foundName}`);
+  }
+  return foundName;
+}
+
 function mapDetailToDashboard(detail) {
   const lotSize = toNumber(detail.lotSize);
   const offerPrice = toNumber(detail.offerPriceMid || detail.offerPrice);
@@ -92,6 +122,21 @@ function loadFixtureData() {
 async function fetchIPODetailRecord(code, { verbose = false, noCache = false } = {}) {
   const normalizedCode = normalizeCode(code);
   const detail = await crawlIPODetail(normalizedCode, { noCache });
+
+  if (!detail.name) {
+    const listName = await fetchNameFromListByCode(normalizedCode, { verbose });
+    if (listName) {
+      detail.name = listName;
+      detail._debug = detail._debug || {};
+      detail._debug.fieldEvidence = detail._debug.fieldEvidence || {};
+      detail._debug.fieldEvidence.name = detail._debug.fieldEvidence.name || {
+        matchedLabel: 'ipo_list_name',
+        rawValue: listName,
+        parserRule: 'list_page_name_fallback',
+      };
+    }
+  }
+
   const record = mapDetailToDashboard(detail);
   if (verbose) {
     console.log(`[etnetSource] detail ${normalizedCode}`, record);
