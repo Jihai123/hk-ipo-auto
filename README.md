@@ -90,14 +90,6 @@ Fixture 文件：
 - `tests/fixtures/etnet/listed-today.html`
 - `tests/fixtures/etnet/subscribing.html`
 
-### 3) 一键自检脚本（推荐）
-
-```bash
-bash scripts/one-click-check.sh 03355
-```
-
-作用：自动安装依赖、启动服务、探活 `/api/dashboard`、`/api/score/:code`、`/api/ipo/top`、`/api/ipo/current`、`/api/market/stats`，并输出汇总结果。
-
 ---
 
 ## 快速部署

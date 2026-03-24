@@ -304,53 +304,6 @@ function buildFusionRecord(code, grouped, detail, sourceUrl) {
   return record;
 }
 
-
-function loadLocalFallbackRecords(limit = 20) {
-  const localPath = path.join(__dirname, '../data/ipo-list.json');
-  if (!fs.existsSync(localPath)) return [];
-  try {
-    const raw = JSON.parse(fs.readFileSync(localPath, 'utf-8'));
-    return (raw.ipos || []).slice(0, limit).map((x) => ({
-      code: normalizeCode(x.code),
-      name: x.name || null,
-      status: normalizeStatus(x.status || inferStatusByTimeline({ offer_end_date: parseDate(x.subscriptionEnd || x.offer_end_date), listing_date: parseDate(x.listingDate || x.listing_date) })),
-      listing_date: parseDate(x.listingDate || x.listing_date),
-      offer_end_date: parseDate(x.subscriptionEnd || x.offer_end_date),
-      offer_price: toNumber(x.offer_price) || toNumber(x.offerPrice),
-      offer_price_range: x.offerPrice || x.offer_price_range || null,
-      lot_size: toNumber(x.lot_size || x.lotSize),
-      lot_cost: toNumber(x.lot_amount),
-      subscription_multiple: toNumber(x.subscription_multiple),
-      success_rate: toNumber(x.allotment_rate),
-      current_price: toNumber(x.current_price),
-      cumulative_return: toNumber(x.current_vs_offer_pct),
-      grey_market_top_quote: null,
-      industry: x.industry || null,
-      market: x.market || null,
-      ipo_source_meta: [{
-        code: normalizeCode(x.code),
-        source_section: 'local_fallback',
-        source_url: localPath,
-        fetched_at: new Date().toISOString(),
-        parser_version: PARSER_VERSION,
-      }],
-      _source: {
-        field_sources: { name: 'local_fallback', status: 'local_fallback' },
-        status_evidence: 'local_fallback',
-        name_evidence: 'local_fallback',
-        source_sections: ['local_fallback'],
-        list_source: localPath,
-        detail_source: null,
-        fallback_source: 'local_file',
-      },
-      data_completeness: 0,
-      source_coverage: 1,
-    })).filter((x) => x.code);
-  } catch (error) {
-    return [];
-  }
-}
-
 function loadFixtureData() {
   const fixtureDir = path.join(__dirname, '../tests/fixtures/etnet');
   const boardFiles = {
@@ -394,23 +347,10 @@ async function fetchIPOBatch({ limit = 20, verbose = false } = {}) {
     sourceUrl = fixture.fixtureDir;
     listMeta = { url: fixture.fixtureDir, status: 200 };
   } else {
-    try {
-      const board = await fetchBoardHtml({ verbose });
-      parsed = parseBoardSectionsFromHtml(board.html, { sourceUrl: board.url });
-      sourceUrl = board.url;
-      listMeta = { url: board.url, status: board.status };
-    } catch (error) {
-      const fallbackItems = loadLocalFallbackRecords(limit);
-      return {
-        mode,
-        fetched_at: new Date().toISOString(),
-        list_meta: { url: 'local_fallback', status: 200, warning: error.message },
-        total_codes: fallbackItems.length,
-        section_counts: { local_fallback: fallbackItems.length },
-        items: fallbackItems,
-        warnings: [{ code: '*', message: `board_fetch_failed:${error.message}` }],
-      };
-    }
+    const board = await fetchBoardHtml({ verbose });
+    parsed = parseBoardSectionsFromHtml(board.html, { sourceUrl: board.url });
+    sourceUrl = board.url;
+    listMeta = { url: board.url, status: board.status };
   }
 
   const codeSet = new Set(parsed.all.map((x) => x.code).filter(Boolean));
