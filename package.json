@@ -10,7 +10,12 @@
     "add": "node scripts/manual-add-ipo.js",
     "score": "node scripts/auto-crawler.js --only-score",
     "init": "node scripts/init-history-data.js",
-    "test": "node scripts/run-qa-tests.js"
+    "test": "node scripts/run-qa-tests.js",
+    "build": "npm --prefix client run build",
+    "test:etnet:live": "node scripts/test-etnet-live.js --code=03355",
+    "test:dashboard:live": "node scripts/test-dashboard-live.js",
+    "test:etnet:fixture": "node scripts/test-etnet-fixture.js",
+    "test:dashboard:fixture": "node scripts/test-dashboard-fixture.js"
   },
   "dependencies": {
     "express": "^4.18.2",

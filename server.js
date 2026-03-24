@@ -39,6 +39,7 @@ const { buildIndustryCodeMap, resolveIndustryNatureCode } = require('./crawlers/
 const { getComparablePE }     = require('./crawlers/etnet/industryPE');
 const { getIPOStaticFieldCache, updateIPOStaticFieldCache } = require('./crawlers/etnet/ipoFieldCache');
 const { resolveFallbackPeerPE } = require('./crawlers/etnet/peFallbacks');
+const { buildDashboard, startDashboardSyncJob } = require('./services/dashboardService');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -5795,12 +5796,27 @@ app.get('/api/market/stats', (req, res) => {
   }
 });
 
+
+// Dashboard API（首页真实数据）
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const sortBy = req.query.sort || 'score';
+    const forceRefresh = String(req.query.refresh || '').toLowerCase() === '1';
+    const data = await buildDashboard({ sortBy, forceRefresh });
+    res.json({ success: true, ...data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 静态文件
-app.get('/', (req, res) => {
+app.get(['/', '/hk', '/hk/'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ==================== 启动服务 ====================
+
+startDashboardSyncJob();
 
 app.listen(PORT, () => {
   console.log(`\n${'═'.repeat(60)}`);
