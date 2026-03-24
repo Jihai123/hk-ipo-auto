@@ -126,17 +126,6 @@ function addFieldEvidence(result, field, { label, value, rule }) {
   }
 }
 
-function parseStatus(raw) {
-  if (!raw) return null;
-  const v = String(raw).replace(/\s+/g, '');
-  if (/招股中|公開發售中|公开发售中|申購中|认购中/.test(v)) return 'subscribing';
-  if (/待上市|即將上市|即将上市|上市前/.test(v)) return 'coming';
-  if (/已上市|掛牌|挂牌/.test(v)) return 'listed';
-  if (/已截止|截止認購|截止认购|已結束|已结束/.test(v)) return 'closed';
-  if (/公布中籤|公布中签|分配結果|分配结果/.test(v)) return 'allotted';
-  return null;
-}
-
 function extractLabelValuePairs($, rows) {
   const pairs = [];
   rows.forEach((row) => {
@@ -247,6 +236,28 @@ function parseMarketCap(raw) {
   return Number.isFinite(value) ? Math.round(value) : null;
 }
 
+
+function normalizeDateString(raw) {
+  if (!raw) return null;
+  const t = String(raw).replace(/\s+/g, ' ').trim();
+  const m = t.match(/(\d{4})[.\/-年]\s*(\d{1,2})[.\/-月]\s*(\d{1,2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${String(y).padStart(4, '0')}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function inferStatusByTimeline({ subscriptionEndDate, listingDate }) {
+  if (!listingDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (subscriptionEndDate && today < subscriptionEndDate) return 'subscribing';
+  if (today < listingDate) return 'allotted';
+  return 'listed';
+}
+
 /**
  * 爬取并解析 etnet IPO详情页
  * @param {string} code - 5位股票代码字符串，如 "06809"
@@ -336,9 +347,6 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
     _debug:               { selectorCandidates: [], extractedKeys: [] },
   };
 
-  const titleText = cleanCellText($('title').first().text());
-  const bodyText = cleanCellText($('body').text());
-
   // 遍历页面所有表格行，支持多种表格布局与标签提取方式
   const rows = collectCandidateRows($);
   result._debug.selectorCandidates = SELECTOR_CANDIDATES.map(selector => ({ selector, count: $(selector).length }));
@@ -346,103 +354,87 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
   const labelValuePairs = extractLabelValuePairs($, rows);
   result._debug.labelValuePairs = labelValuePairs;
 
+  let subscriptionEndDate = null;
+
   labelValuePairs.forEach(({ label: key, value: val, rule }) => {
     if (!key || !val) return;
 
-    // 基本资料
-    if (/股份名稱|股份名称|名稱|名称|公司名稱|公司名称/.test(key) && !result.name) {
+    // 股票名称：仅允许来自详情页 label，缺失时在后续用列表页兜底
+    if (/股票名稱|股票名称|公司名稱|公司名称|上市公司/.test(key) && !result.name) {
       result.name = val.replace(/\(\d{4,5}\)|\d{4,5}\.HK/ig, '').trim() || val;
       addFieldEvidence(result, 'name', { label: key, value: val, rule });
     }
-    if (/狀態|状态|上市狀態|上市状态|招股狀態|招股状态/.test(key)) {
-      const parsedStatus = parseStatus(val) || val;
-      result.status = parsedStatus;
-      addFieldEvidence(result, 'status', { label: key, value: val, rule });
-    }
-    if (/行業|行业/.test(key)) result.industry = val;
-    if (/市場|市场/.test(key)) result.market   = val;
-    if (/買賣單位|买卖单位/.test(key)) result.lotSize  = parseInt(val.replace(/,/g, ''), 10) || null;
 
-    // 售股统计数字
-    if (/發售價|发售价/.test(key)) {
-      result.offerPrice    = val;
-      result.offerPriceMid = parseOfferPrice(val);
+    // 仅保留业务允许的 label 语义字段
+    if (/行業|行业/.test(key) && !result.industry) {
+      result.industry = val;
+      addFieldEvidence(result, 'industry', { label: key, value: val, rule });
     }
+
+    if (/買賣單位|买卖单位/.test(key) && !result.lotSize) {
+      result.lotSize = parseInt(val.replace(/,/g, ''), 10) || null;
+      addFieldEvidence(result, 'lotSize', { label: key, value: val, rule });
+    }
+
+    if (/發售價|发售价/.test(key) && !result.offerPrice) {
+      result.offerPrice = val;
+      result.offerPriceMid = parseOfferPrice(val);
+      addFieldEvidence(result, 'offerPriceMid', { label: key, value: val, rule });
+    }
+
+    if (/發售股份數目|发售股份数目/.test(key) && !result.totalOfferingShares) {
+      result.totalOfferingShares = val;
+      result.totalSharesRaw = val;
+      result.totalShares = parseShares(val);
+      addFieldEvidence(result, 'totalShares', { label: key, value: val, rule });
+    }
+
+    if (/上市日期/.test(key) && !result.listingDate) {
+      result.listingDate = val;
+      addFieldEvidence(result, 'listingDate', { label: key, value: val, rule });
+    }
+
+    if (/招股截止|截止認購|截止认购|認購截止|认购截止/.test(key) && !subscriptionEndDate) {
+      subscriptionEndDate = normalizeDateString(val);
+      addFieldEvidence(result, 'subscriptionEndDate', { label: key, value: val, rule });
+    }
+
     if (/市值/.test(key)) {
       if (!result.marketCapH) result.marketCapH = val;
       if (!result.marketCapRaw) result.marketCapRaw = val;
+      addFieldEvidence(result, 'marketCapRaw', { label: key, value: val, rule });
     }
-    if (/市值（?上限）?|上限市值/.test(key)) {
+    if (/市值（?上限）?|上限市值/.test(key) && !Number.isFinite(result.marketCapUpper)) {
       result.marketCapUpper = parseMarketCap(val);
       if (!result.marketCapRaw) result.marketCapRaw = val;
+      addFieldEvidence(result, 'marketCapUpper', { label: key, value: val, rule });
     }
-    if (/市值（?下限）?|下限市值/.test(key)) {
+    if (/市值（?下限）?|下限市值/.test(key) && !Number.isFinite(result.marketCapLower)) {
       result.marketCapLower = parseMarketCap(val);
       if (!result.marketCapRaw) result.marketCapRaw = val;
+      addFieldEvidence(result, 'marketCapLower', { label: key, value: val, rule });
     }
 
-    // 全球发售 - 保荐人（可能是多行合并或换行）
-    if (/保薦人|保荐人/.test(key)) {
-      // 逗号/顿号/及 分隔多个保荐人
-      const sponsors = val.split(/[,，、及\n]+/).map(s => s.trim()).filter(Boolean);
-      result.sponsors = sponsors;
-    }
-
-    // 发售股份总数
-    if (/發售股份數目|发售股份数目/.test(key)) result.totalOfferingShares = val;
-    if (/上市後已發行股份|上市后已发行股份|已發行股份總數|已发行股份总数|總股本|总股本/.test(key)) {
-      result.totalSharesRaw = val;
-      result.totalShares = parseShares(val);
-    }
-
-    // 时间表
-    if (/上市日期/.test(key) && !result.listingDate) result.listingDate = val;
-
-    // 认购结果（配售后才有）
-    if (/認購倍數|认购倍数|超額認購|超额认购/.test(key)) {
-      result.subscriptionMultiple = parseMultiple(val);
-      addFieldEvidence(result, 'subscriptionMultiple', { label: key, value: val, rule });
-    }
-    if (/中籤率|中签率|一手中籤率|一手中签率|配發結果|配发结果/.test(key)) {
-      result.allotmentRate = parseMultiple(val);
-      addFieldEvidence(result, 'allotmentRate', { label: key, value: val, rule });
-    }
-    if (/首日收市|首日收盤|首日收盘|收市價|收盘价|首日表現|首日表现/.test(key)) {
-      result.firstDayClose = parseOfferPrice(val);
-      addFieldEvidence(result, 'firstDayClose', { label: key, value: val, rule });
-    }
-
-    // 募资净额（粗提）
-    if (/所得款項凈額|所得款项净额|募集資金|募集资金/.test(key)) {
-      result.ipoProceeds = parseProceeds(val);
-    }
-
-    if (/市盈率|pe/i.test(key)) {
+    if (/市盈率|pe/i.test(key) && !result.sitePE) {
       result.sitePE = parsePE(val);
     }
+
     result._debug.extractedKeys.push(`${key}=>${val}`);
   });
 
-  if (!result.name && titleText) {
-    const titleMatch = titleText.match(/([^\-|｜|]+?)(?:新股|IPO|上市|詳情|详情)/i);
-    if (titleMatch && titleMatch[1]) {
-      result.name = cleanCellText(titleMatch[1]);
-      addFieldEvidence(result, 'name', { label: 'title', value: titleText, rule: 'title_regex_company_name' });
-    }
+  const normalizedListingDate = normalizeDateString(result.listingDate);
+  if (normalizedListingDate) {
+    result.status = inferStatusByTimeline({
+      subscriptionEndDate,
+      listingDate: normalizedListingDate,
+    });
+    addFieldEvidence(result, 'status', {
+      label: subscriptionEndDate ? '招股截止+上市日期' : '上市日期',
+      value: subscriptionEndDate ? `${subscriptionEndDate} -> ${normalizedListingDate}` : normalizedListingDate,
+      rule: subscriptionEndDate ? 'timeline_inference_subscription_end_and_listing_date' : 'timeline_inference_listing_date_only',
+    });
   }
 
-  if (!result.status) {
-    const statusFromTitle = parseStatus(titleText);
-    const statusFromBody = parseStatus(bodyText);
-    if (statusFromTitle || statusFromBody) {
-      result.status = statusFromTitle || statusFromBody;
-      addFieldEvidence(result, 'status', {
-        label: statusFromTitle ? 'title' : 'body_text',
-        value: statusFromTitle ? titleText : bodyText.slice(0, 120),
-        rule: statusFromTitle ? 'title_status_keyword' : 'body_status_keyword',
-      });
-    }
-  }
 
   if (Number.isFinite(result.marketCapUpper) && Number.isFinite(result.marketCapLower)) {
     result.marketCapMid = Math.round((result.marketCapUpper + result.marketCapLower) / 2);
