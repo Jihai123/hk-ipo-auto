@@ -28,19 +28,34 @@ if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
  */
 async function fetchWithRetry(url, retries = cfg.maxRetries) {
   let lastError = null;
+  let lastStatus = null;
+  let lastHtml = null;
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`[etnet/ipoDetail] fetch attempt=${attempt}/${retries} timeout=${cfg.timeout}ms url=${url}`);
       const res = await axios.get(url, {
         headers: cfg.headers,
         timeout: cfg.timeout,
+        validateStatus: () => true,
       });
-      return {
-        html: res.data,
-        error: null,
-        attempts: attempt,
-        timedOut: false,
-      };
+
+      lastStatus = res.status;
+      lastHtml = res.data;
+
+      if (res.status === 200) {
+        return {
+          html: res.data,
+          statusCode: res.status,
+          httpError: false,
+          error: null,
+          attempts: attempt,
+          timedOut: false,
+        };
+      }
+
+      console.warn(`[etnet/ipoDetail] HTTP非200(第${attempt}次): status=${res.status} url=${url}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, cfg.requestDelay * attempt));
     } catch (err) {
       lastError = err;
       const timedOut = err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '');
@@ -51,7 +66,26 @@ async function fetchWithRetry(url, retries = cfg.maxRetries) {
       }
     }
   }
-  return { html: null, error: lastError, attempts: retries, timedOut: !!(lastError && (lastError.code === 'ECONNABORTED' || /timeout/i.test(lastError.message || ''))) };
+
+  if (lastStatus !== null) {
+    return {
+      html: lastHtml,
+      statusCode: lastStatus,
+      httpError: true,
+      error: null,
+      attempts: retries,
+      timedOut: false,
+    };
+  }
+
+  return {
+    html: null,
+    statusCode: null,
+    httpError: false,
+    error: lastError,
+    attempts: retries,
+    timedOut: !!(lastError && (lastError.code === 'ECONNABORTED' || /timeout/i.test(lastError.message || ''))),
+  };
 }
 
 function collectCandidateRows($) {
@@ -161,17 +195,25 @@ function parseMarketCap(raw) {
  * @param {string} code - 5位股票代码字符串，如 "06809"
  * @returns {Object} 结构化IPO数据
  */
-async function crawlIPODetail(code) {
+async function crawlIPODetail(code, { noCache = false } = {}) {
   const cacheFile = path.join(CACHE_DIR, `ipo_${code}.json`);
 
   // 读取本地缓存（7天内有效）
-  if (fs.existsSync(cacheFile)) {
+  if (!noCache && fs.existsSync(cacheFile)) {
     const stat = fs.statSync(cacheFile);
     if (Date.now() - stat.mtimeMs < CACHE_TTL_MS) {
       try {
         const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
         console.log(`[etnet/ipoDetail] 命中缓存: ${code}`);
-        return cached;
+        return {
+          ...cached,
+          _dataSource: 'cache',
+          _cacheHit: true,
+          _fetchStatus: {
+            ...(cached._fetchStatus || {}),
+            fromCache: true,
+          },
+        };
       } catch (_) { /* 缓存损坏，重新爬取 */ }
     }
   }
@@ -186,12 +228,14 @@ async function crawlIPODetail(code) {
     return {
       code,
       _source: 'etnet',
+      _dataSource: 'fallback',
       _fetchedAt: new Date().toISOString(),
       _fetchStatus: {
         status: 'network_error',
         reason: fetchResult.error ? fetchResult.error.message : 'unknown_error',
         attempts: fetchResult.attempts || cfg.maxRetries,
         timedOut: !!fetchResult.timedOut,
+        httpStatus: fetchResult.statusCode || null,
       },
     };
   }
@@ -218,8 +262,16 @@ async function crawlIPODetail(code) {
     sitePE:               null,   // 页面展示PE，仅用于debug
     marketCapRaw:         null,
     _source:              'etnet',
+    _dataSource:          'live_http',
     _fetchedAt:           new Date().toISOString(),
-    _fetchStatus:         { status: 'success', reason: '', attempts: fetchResult.attempts || 1, timedOut: false },
+    _fetchStatus:         {
+      status: fetchResult.httpError ? 'http_error' : 'success',
+      reason: fetchResult.httpError ? `HTTP ${fetchResult.statusCode}` : '',
+      attempts: fetchResult.attempts || 1,
+      timedOut: false,
+      httpStatus: fetchResult.statusCode || null,
+      fromCache: false,
+    },
     _debug:               { selectorCandidates: [], extractedKeys: [] },
   };
 
@@ -230,7 +282,7 @@ async function crawlIPODetail(code) {
     const tds  = $(row).find('td');
     if (tds.length < 2) return;
     const key  = $(tds[0]).text().trim().replace(/\s+/g, '');
-    const val  = $(tds[1]).text().trim().replace(/\u00a0/g, ' ').trim();
+    const val  = $(tds[1]).text().trim().replace(/ /g, ' ').trim();
 
     if (!key || !val) return;
 

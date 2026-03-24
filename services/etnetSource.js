@@ -89,9 +89,9 @@ function loadFixtureData() {
   return { codes, fixtureDir };
 }
 
-async function fetchIPODetailRecord(code, { verbose = false } = {}) {
+async function fetchIPODetailRecord(code, { verbose = false, noCache = false } = {}) {
   const normalizedCode = normalizeCode(code);
-  const detail = await crawlIPODetail(normalizedCode);
+  const detail = await crawlIPODetail(normalizedCode, { noCache });
   const record = mapDetailToDashboard(detail);
   if (verbose) {
     console.log(`[etnetSource] detail ${normalizedCode}`, record);
