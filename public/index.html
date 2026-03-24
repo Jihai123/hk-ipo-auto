@@ -75,12 +75,32 @@
   }
   function kv(k,v){return `<div class="card"><div class="muted">${k}</div><div><strong>${safe(v)}</strong></div></div>`}
 
+  async function loadDashboardFallback(){
+    try{
+      const [topRes,currentRes]=await Promise.all([fetch('/api/ipo/top?limit=3'),fetch('/api/ipo/current')]);
+      const topData=await topRes.json();
+      const currentData=await currentRes.json();
+      const topItems=(topData.ipos||[]).map(i=>({
+        code:i.code,name:i.name,score:i.score??'暂无数据',rating:i.rating??'暂无数据',status_label:safe(i.listing_status||i.status),lot_cost:i.lot_amount||i.lot_cost,listing_date:i.listing_date||i.listingDate
+      }));
+      const board=[...(currentData.subscribing||[]),...(currentData.coming||[]),...(currentData.listed||[])].map(i=>({
+        code:i.code,name:i.name,score:i.score??'暂无数据',rating:i.rating??'暂无数据',status_label:safe(i.listing_status||i.status),listing_date:i.listing_date||i.listingDate,offer_price:i.offer_price||i.offerPrice,offer_price_range:i.offer_price_range||i.offerPrice,lot_size:i.lot_size||i.lotSize,lot_cost:i.lot_amount||i.lot_cost,subscription_multiple:i.subscription_multiple,success_rate:i.allotment_rate||i.success_rate,current_price:i.current_price,cumulative_return:i.current_vs_offer_pct
+      }));
+      dashboardEl.top3.innerHTML=(topItems||[]).map(rowTop).join('')||'<p class="muted">暂无数据</p>';;
+      dashboardEl.leaderboard.innerHTML=(board||[]).map(rowBoard).join('')||'<p class="muted">暂无数据</p>';;
+    }catch(e){console.warn('fallback failed',e);}
+  }
+
   async function loadDashboard(){
     Object.values(dashboardEl).forEach((el)=>skeleton(el,2));
     const sort=document.getElementById('sortBy').value;
     const r=await fetch(`/api/dashboard?sort=${sort}`); const d=await r.json();
     dashboardEl.top3.innerHTML=(d.top3||[]).map(rowTop).join('')||'<p class="muted">暂无数据</p>';
     dashboardEl.leaderboard.innerHTML=(d.leaderboard||[]).map(rowBoard).join('')||'<p class="muted">暂无数据</p>';
+    if(!(d.top3||[]).length && !(d.leaderboard||[]).length){
+      await loadDashboardFallback();
+      return;
+    }
     const t=d.timeline||{};
     dashboardEl.timeline.innerHTML=[['招股中',t.subscribing?.length],['即将截止认购',t.closing_soon?.length],['即将公布结果',t.allotment_soon?.length],['即将退款',t.refund_soon?.length],['即将上市',t.listing_soon?.length],['今日上市',t.listed_today?.length],['明天上市',t.listed_tomorrow?.length]].map(([k,v])=>kv(k,v)).join('');
     const m=d.market_temperature||{};
@@ -90,7 +110,7 @@
   }
 
   document.getElementById('reloadBtn').addEventListener('click',loadDashboard);
-  document.getElementById('scoreForm').addEventListener('submit',async(e)=>{e.preventDefault();const code=document.getElementById('codeInput').value.trim();if(!code)return;const r=await fetch(`/api/score/${code}`);const d=await r.json();document.getElementById('scoreResult').textContent=JSON.stringify({success:d.success,totalScore:d.totalScore,rating:d.rating,ipoInfo:d.ipoInfo||{}},null,2)});
+  document.getElementById('scoreForm').addEventListener('submit',async(e)=>{e.preventDefault();const code=document.getElementById('codeInput').value.trim();if(!code)return;const out=document.getElementById('scoreResult');out.textContent='评分中...';try{const r=await fetch(`/api/score/${code}`);const d=await r.json();if(!d.success){out.textContent=`评分失败：${safe(d.error)}`;return;}out.textContent=JSON.stringify({success:d.success,totalScore:d.totalScore,rating:d.rating,ipoInfo:d.ipoInfo||{}},null,2);}catch(err){out.textContent=`评分失败：${err.message}`;}});
   loadDashboard();
 </script>
 </body>
