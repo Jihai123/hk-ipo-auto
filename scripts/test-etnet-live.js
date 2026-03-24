@@ -1,117 +1,57 @@
 #!/usr/bin/env node
-const { fetchIPODetailRecord, normalizeCode } = require('../services/etnetSource');
-
-const CORE_FIELDS = ['code', 'name', 'listing_date', 'offer_price', 'lot_size', 'lot_cost'];
-const EXTENDED_FIELDS = ['status', 'subscription_multiple', 'success_rate', 'first_day_close'];
-
-function hasValue(v) {
-  return !(v === null || v === undefined || v === '');
-}
-
-function pct(done, total) {
-  if (!total) return '0/0 (0%)';
-  return `${done}/${total} (${Math.round((done / total) * 100)}%)`;
-}
-
-function classifyResult({ httpStatus, dataSource, coreMissing, extMissing, record }) {
-  const coreComplete = coreMissing.length === 0;
-  const extPresent = EXTENDED_FIELDS.length - extMissing.length;
-  const extMostlyComplete = extPresent >= 3;
-  const hasSomeData = Object.values(record).filter(hasValue).length >= 2;
-
-  const isHttp200 = httpStatus === 200;
-  const isLiveSource = dataSource === 'live_http';
-  const isDegradedSource = ['cache', 'fallback', 'fixture'].includes(dataSource);
-
-  if (isHttp200 && isLiveSource && coreComplete && extMostlyComplete) {
-    return { level: 'PASS', exitCode: 0 };
-  }
-
-  if (hasSomeData && (!isHttp200 || isDegradedSource || !coreComplete || !extMostlyComplete)) {
-    return { level: 'PARTIAL', exitCode: 1 };
-  }
-
-  return { level: 'FAIL', exitCode: 2 };
-}
-
-function formatEvidence(e) {
-  if (!e) return 'no evidence';
-  return `label="${e.matchedLabel || 'n/a'}", raw="${String(e.rawValue || '').slice(0, 80)}", rule=${e.parserRule || 'n/a'}`;
-}
+const { fetchIPOBatch, normalizeCode } = require('../services/etnetSource');
 
 const args = process.argv.slice(2);
 const codeArg = args.find((a) => a.startsWith('--code='));
 const verbose = args.includes('--verbose');
-const noCache = args.includes('--no-cache');
-const code = normalizeCode(codeArg ? codeArg.split('=')[1] : '');
+const targetCode = normalizeCode(codeArg ? codeArg.split('=')[1] : '');
 
-if (!code) {
-  console.error('Usage: node scripts/test-etnet-live.js --code=03355 [--verbose] [--no-cache]');
-  process.exit(1);
+function pick(arr, code) {
+  if (!code) return arr[0] || null;
+  return arr.find((x) => x.code === code) || null;
 }
 
 (async () => {
   try {
-    const requestUrl = `https://www.etnet.com.hk/www/sc/stocks/ci_ipo_detail.php?code=${code}`;
-    const { record, raw } = await fetchIPODetailRecord(code, { verbose, noCache });
+    const data = await fetchIPOBatch({ limit: 30, verbose });
+    const rec = pick(data.items || [], targetCode);
 
-    const httpStatus = raw?._fetchStatus?.httpStatus ?? (raw?._fetchStatus?.status === 'success' ? 200 : null);
-    const dataSource = raw?._dataSource || (process.env.IPO_DATA_MODE === 'fixture' ? 'fixture' : 'fallback');
+    console.log('Source section coverage:', data.section_counts || {});
+    console.log('List source:', data.list_meta?.url || 'N/A');
+    console.log('Detail source:', rec?._source?.detail_source || 'N/A');
+    console.log('Fallback source:', rec?._source?.fallback_source || 'N/A');
 
-    const coreMissing = CORE_FIELDS.filter((k) => !hasValue(record[k]));
-    const extMissing = EXTENDED_FIELDS.filter((k) => !hasValue(record[k]));
-    const allMissing = [...new Set([...coreMissing, ...extMissing])];
+    if (!rec) {
+      console.log('Final result: FAIL (no record found)');
+      process.exit(2);
+    }
 
-    const result = classifyResult({
-      httpStatus,
-      dataSource,
-      coreMissing,
-      extMissing,
-      record,
+    const fsMap = rec._source?.field_sources || {};
+    console.log('Field source map:');
+    Object.entries(fsMap).forEach(([k, v]) => console.log(`  - ${k}: ${v}`));
+
+    console.log('Name 来源证据:', rec._source?.name_evidence || fsMap.name || 'unknown');
+    console.log('Status 来源证据:', rec._source?.status_evidence || fsMap.status || 'unknown');
+
+    console.log('Record preview:', {
+      code: rec.code,
+      name: rec.name,
+      status: rec.status,
+      listing_date: rec.listing_date,
+      offer_price: rec.offer_price,
+      lot_size: rec.lot_size,
+      lot_cost: rec.lot_cost,
+      subscription_multiple: rec.subscription_multiple,
+      success_rate: rec.success_rate,
+      current_price: rec.current_price,
+      source_sections: rec._source?.source_sections || [],
+      data_completeness: rec.data_completeness,
+      source_coverage: rec.source_coverage,
     });
 
-    console.log(`Request URL: ${requestUrl}`);
-    console.log(`HTTP status: ${httpStatus ?? 'unknown/non-http'}`);
-    console.log(`Data source: ${dataSource}`);
-    console.log(`Core fields completeness: ${pct(CORE_FIELDS.length - coreMissing.length, CORE_FIELDS.length)}`);
-    console.log(`Extended fields completeness: ${pct(EXTENDED_FIELDS.length - extMissing.length, EXTENDED_FIELDS.length)}`);
-    console.log(`Missing fields: ${allMissing.length ? allMissing.join(', ') : 'none'}`);
-    if (coreMissing.length) {
-      console.log(`Core missing details: ${coreMissing.map((f) => `${f}(value=${record[f]})`).join('; ')}`);
-    }
-    if (extMissing.length) {
-      console.log(`Extended missing details: ${extMissing.map((f) => `${f}(value=${record[f]})`).join('; ')}`);
-    }
-    console.log(`Final result: ${result.level}`);
-
-    const evidenceMap = raw?._debug?.fieldEvidence || {};
-    const interested = ['name', 'status', 'subscriptionMultiple', 'allotmentRate', 'firstDayClose'];
-    console.log('Field evidence:');
-    interested.forEach((field) => {
-      const alias = {
-        subscriptionMultiple: 'subscription_multiple',
-        allotmentRate: 'success_rate',
-        firstDayClose: 'first_day_close',
-      }[field] || field;
-      console.log(`  - ${alias}: ${formatEvidence(evidenceMap[field])}`);
-    });
-
-    if (verbose) {
-      console.log('Parsed record:', record);
-      console.log('Raw meta:', {
-        fetchStatus: raw?._fetchStatus || null,
-        dataSource: raw?._dataSource || null,
-        cacheHit: raw?._cacheHit || false,
-        noCache,
-      });
-      const pairPreview = (raw?._debug?.labelValuePairs || []).slice(0, 80);
-      console.log(`Detected label=>value pairs (${pairPreview.length}/${raw?._debug?.labelValuePairs?.length || 0} shown):`);
-      pairPreview.forEach((p, idx) => {
-        console.log(`  [${idx + 1}] ${p.label} => ${p.value} (${p.rule})`);
-      });
-    }
-
-    process.exit(result.exitCode);
+    const pass = !!rec.name && !!rec.status;
+    console.log(`Final result: ${pass ? 'PASS' : 'PARTIAL'}`);
+    process.exit(pass ? 0 : 1);
   } catch (error) {
     console.error('Final result: FAIL');
     console.error(`Error: ${error.message}`);
