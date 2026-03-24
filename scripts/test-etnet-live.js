@@ -34,6 +34,11 @@ function classifyResult({ httpStatus, dataSource, coreMissing, extMissing, recor
   return { level: 'FAIL', exitCode: 2 };
 }
 
+function formatEvidence(e) {
+  if (!e) return 'no evidence';
+  return `label="${e.matchedLabel || 'n/a'}", raw="${String(e.rawValue || '').slice(0, 80)}", rule=${e.parserRule || 'n/a'}`;
+}
+
 const args = process.argv.slice(2);
 const codeArg = args.find((a) => a.startsWith('--code='));
 const verbose = args.includes('--verbose');
@@ -71,7 +76,25 @@ if (!code) {
     console.log(`Core fields completeness: ${pct(CORE_FIELDS.length - coreMissing.length, CORE_FIELDS.length)}`);
     console.log(`Extended fields completeness: ${pct(EXTENDED_FIELDS.length - extMissing.length, EXTENDED_FIELDS.length)}`);
     console.log(`Missing fields: ${allMissing.length ? allMissing.join(', ') : 'none'}`);
+    if (coreMissing.length) {
+      console.log(`Core missing details: ${coreMissing.map((f) => `${f}(value=${record[f]})`).join('; ')}`);
+    }
+    if (extMissing.length) {
+      console.log(`Extended missing details: ${extMissing.map((f) => `${f}(value=${record[f]})`).join('; ')}`);
+    }
     console.log(`Final result: ${result.level}`);
+
+    const evidenceMap = raw?._debug?.fieldEvidence || {};
+    const interested = ['name', 'status', 'subscriptionMultiple', 'allotmentRate', 'firstDayClose'];
+    console.log('Field evidence:');
+    interested.forEach((field) => {
+      const alias = {
+        subscriptionMultiple: 'subscription_multiple',
+        allotmentRate: 'success_rate',
+        firstDayClose: 'first_day_close',
+      }[field] || field;
+      console.log(`  - ${alias}: ${formatEvidence(evidenceMap[field])}`);
+    });
 
     if (verbose) {
       console.log('Parsed record:', record);
@@ -80,6 +103,11 @@ if (!code) {
         dataSource: raw?._dataSource || null,
         cacheHit: raw?._cacheHit || false,
         noCache,
+      });
+      const pairPreview = (raw?._debug?.labelValuePairs || []).slice(0, 80);
+      console.log(`Detected label=>value pairs (${pairPreview.length}/${raw?._debug?.labelValuePairs?.length || 0} shown):`);
+      pairPreview.forEach((p, idx) => {
+        console.log(`  [${idx + 1}] ${p.label} => ${p.value} (${p.rule})`);
       });
     }
 

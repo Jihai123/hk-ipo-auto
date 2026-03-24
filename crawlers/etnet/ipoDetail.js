@@ -103,6 +103,63 @@ function collectCandidateRows($) {
   return rows;
 }
 
+function cleanCellText(raw) {
+  return String(raw || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[：:]\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLabel(raw) {
+  return cleanCellText(raw).replace(/\s+/g, '');
+}
+
+function addFieldEvidence(result, field, { label, value, rule }) {
+  if (!field || !value) return;
+  if (!result._debug.fieldEvidence[field]) {
+    result._debug.fieldEvidence[field] = {
+      matchedLabel: label || null,
+      rawValue: value,
+      parserRule: rule,
+    };
+  }
+}
+
+function parseStatus(raw) {
+  if (!raw) return null;
+  const v = String(raw).replace(/\s+/g, '');
+  if (/招股中|公開發售中|公开发售中|申購中|认购中/.test(v)) return 'subscribing';
+  if (/待上市|即將上市|即将上市|上市前/.test(v)) return 'coming';
+  if (/已上市|掛牌|挂牌/.test(v)) return 'listed';
+  if (/已截止|截止認購|截止认购|已結束|已结束/.test(v)) return 'closed';
+  if (/公布中籤|公布中签|分配結果|分配结果/.test(v)) return 'allotted';
+  return null;
+}
+
+function extractLabelValuePairs($, rows) {
+  const pairs = [];
+  rows.forEach((row) => {
+    const cells = $(row).find('th,td').toArray();
+    if (cells.length < 2) return;
+    for (let i = 0; i < cells.length - 1; i += 2) {
+      const label = normalizeLabel($(cells[i]).text());
+      const value = cleanCellText($(cells[i + 1]).text());
+      if (label && value) {
+        pairs.push({ label, value, rule: `row_pair_${i}->${i + 1}` });
+      }
+    }
+
+    // 兜底：防止奇数列布局导致错位，至少保留首对
+    const firstLabel = normalizeLabel($(cells[0]).text());
+    const firstValue = cleanCellText($(cells[1]).text());
+    if (firstLabel && firstValue && !pairs.some((p) => p.label === firstLabel && p.value === firstValue)) {
+      pairs.push({ label: firstLabel, value: firstValue, rule: 'row_first_two_cells' });
+    }
+  });
+  return pairs;
+}
+
 /**
  * 解析发售价字符串，返回中值（港元）
  * 示例: "$42.00 - $48.00" → 45.0
@@ -243,6 +300,8 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
   const $ = cheerio.load(html);
   const result = {
     code,
+    name:                 null,
+    status:               null,
     industry:             null,
     market:               null,
     lotSize:              null,
@@ -256,6 +315,8 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
     totalOfferingShares:  null,
     listingDate:          null,
     subscriptionMultiple: null,
+    allotmentRate:        null,
+    firstDayClose:        null,
     ipoProceeds:          null,   // 募资净额（港元）
     totalShares:          null,   // 页面可得的总股本/上市后股份数
     totalSharesRaw:       null,
@@ -275,21 +336,32 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
     _debug:               { selectorCandidates: [], extractedKeys: [] },
   };
 
-  // 遍历页面所有表格行，按第一个 td 文本匹配字段
+  const titleText = cleanCellText($('title').first().text());
+  const bodyText = cleanCellText($('body').text());
+
+  // 遍历页面所有表格行，支持多种表格布局与标签提取方式
   const rows = collectCandidateRows($);
   result._debug.selectorCandidates = SELECTOR_CANDIDATES.map(selector => ({ selector, count: $(selector).length }));
-  rows.forEach((row) => {
-    const tds  = $(row).find('td');
-    if (tds.length < 2) return;
-    const key  = $(tds[0]).text().trim().replace(/\s+/g, '');
-    const val  = $(tds[1]).text().trim().replace(/ /g, ' ').trim();
+  result._debug.fieldEvidence = {};
+  const labelValuePairs = extractLabelValuePairs($, rows);
+  result._debug.labelValuePairs = labelValuePairs;
 
+  labelValuePairs.forEach(({ label: key, value: val, rule }) => {
     if (!key || !val) return;
 
     // 基本资料
-    if (/行業|行业/.test(key))              result.industry = val;
-    if (/市場|市场/.test(key))              result.market   = val;
-    if (/買賣單位|买卖单位/.test(key))      result.lotSize  = parseInt(val.replace(/,/g, ''), 10) || null;
+    if (/股份名稱|股份名称|名稱|名称|公司名稱|公司名称/.test(key) && !result.name) {
+      result.name = val.replace(/\(\d{4,5}\)|\d{4,5}\.HK/ig, '').trim() || val;
+      addFieldEvidence(result, 'name', { label: key, value: val, rule });
+    }
+    if (/狀態|状态|上市狀態|上市状态|招股狀態|招股状态/.test(key)) {
+      const parsedStatus = parseStatus(val) || val;
+      result.status = parsedStatus;
+      addFieldEvidence(result, 'status', { label: key, value: val, rule });
+    }
+    if (/行業|行业/.test(key)) result.industry = val;
+    if (/市場|市场/.test(key)) result.market   = val;
+    if (/買賣單位|买卖单位/.test(key)) result.lotSize  = parseInt(val.replace(/,/g, ''), 10) || null;
 
     // 售股统计数字
     if (/發售價|发售价/.test(key)) {
@@ -327,7 +399,18 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
     if (/上市日期/.test(key) && !result.listingDate) result.listingDate = val;
 
     // 认购结果（配售后才有）
-    if (/認購倍數|认购倍数/.test(key)) result.subscriptionMultiple = parseMultiple(val);
+    if (/認購倍數|认购倍数|超額認購|超额认购/.test(key)) {
+      result.subscriptionMultiple = parseMultiple(val);
+      addFieldEvidence(result, 'subscriptionMultiple', { label: key, value: val, rule });
+    }
+    if (/中籤率|中签率|一手中籤率|一手中签率|配發結果|配发结果/.test(key)) {
+      result.allotmentRate = parseMultiple(val);
+      addFieldEvidence(result, 'allotmentRate', { label: key, value: val, rule });
+    }
+    if (/首日收市|首日收盤|首日收盘|收市價|收盘价|首日表現|首日表现/.test(key)) {
+      result.firstDayClose = parseOfferPrice(val);
+      addFieldEvidence(result, 'firstDayClose', { label: key, value: val, rule });
+    }
 
     // 募资净额（粗提）
     if (/所得款項凈額|所得款项净额|募集資金|募集资金/.test(key)) {
@@ -337,8 +420,29 @@ async function crawlIPODetail(code, { noCache = false } = {}) {
     if (/市盈率|pe/i.test(key)) {
       result.sitePE = parsePE(val);
     }
-    result._debug.extractedKeys.push(key);
+    result._debug.extractedKeys.push(`${key}=>${val}`);
   });
+
+  if (!result.name && titleText) {
+    const titleMatch = titleText.match(/([^\-|｜|]+?)(?:新股|IPO|上市|詳情|详情)/i);
+    if (titleMatch && titleMatch[1]) {
+      result.name = cleanCellText(titleMatch[1]);
+      addFieldEvidence(result, 'name', { label: 'title', value: titleText, rule: 'title_regex_company_name' });
+    }
+  }
+
+  if (!result.status) {
+    const statusFromTitle = parseStatus(titleText);
+    const statusFromBody = parseStatus(bodyText);
+    if (statusFromTitle || statusFromBody) {
+      result.status = statusFromTitle || statusFromBody;
+      addFieldEvidence(result, 'status', {
+        label: statusFromTitle ? 'title' : 'body_text',
+        value: statusFromTitle ? titleText : bodyText.slice(0, 120),
+        rule: statusFromTitle ? 'title_status_keyword' : 'body_status_keyword',
+      });
+    }
+  }
 
   if (Number.isFinite(result.marketCapUpper) && Number.isFinite(result.marketCapLower)) {
     result.marketCapMid = Math.round((result.marketCapUpper + result.marketCapLower) / 2);
