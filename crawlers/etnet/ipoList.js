@@ -300,13 +300,7 @@ async function crawlIPOListFromETNet() {
 
   const html = await fetchWithRetry(url);
   if (!html) {
-    return {
-      subscribing: [],
-      listingSoon: [],
-      recentListed: [],
-      source: 'etnet',
-      fetchedAt: new Date().toISOString(),
-    };
+    throw new Error(`抓取失败，未拿到页面HTML: ${url}`);
   }
 
   const $ = cheerio.load(html);
