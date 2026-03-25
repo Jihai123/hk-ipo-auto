@@ -4146,6 +4146,9 @@ function normalizeCurrentIpoData(raw) {
       listingDate: item.listingDate || null,
       offerPrice: item.offerPrice || null,
       offerPriceRange: item.offerPriceRange || null,
+      subscriptionMultiple: item.subscriptionMultiple || null,
+      allotmentRate: item.allotmentRate || null,
+      firstDayChangePct: item.firstDayChangePct || null,
       lotSize: item.lotSize || null,
       lotAmount: item.lotAmount || null,
     })),
@@ -4165,6 +4168,14 @@ function toLegacyCurrentFields(currentData, updatedAt) {
 async function rebuildCurrentIpoData() {
   const etnetData = await crawlIPOListFromETNet();
   const normalized = normalizeCurrentIpoData(etnetData);
+
+  const totalItems = (normalized.subscribing?.length || 0)
+    + (normalized.listingSoon?.length || 0)
+    + (normalized.recentListed?.length || 0);
+  if (totalItems === 0) {
+    throw new Error('ETNet current IPO 解析结果为空，已拒绝覆盖缓存');
+  }
+
   const updatedAt = new Date().toISOString();
 
   const payload = {
@@ -4362,6 +4373,7 @@ app.get('/api/ipo/current', async (req, res) => {
       data: current.data,
       updatedAt: current.updatedAt,
       stale: current.stale,
+      fromCache: current.fromCache,
       // 兼容旧字段
       ...legacy,
     });
