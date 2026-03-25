@@ -14,6 +14,8 @@ const STATUS_MAP = {
   recentListed: 'recentListed',
 };
 
+const MAX_NAME_LENGTH = 40;
+
 function normalizeCode(raw = '') {
   const code = String(raw).replace(/[^0-9]/g, '');
   if (!code) return null;
@@ -44,7 +46,10 @@ function parsePriceRange(raw = '') {
 }
 
 function parseLotSize(raw = '') {
-  const m = String(raw).replace(/,/g, '').match(/(\d+)/);
+  const text = String(raw).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const m = text.match(/(?:每手(?:股數|股数)?|一手)\s*[:：]?\s*(\d{1,6})\b/i)
+    || text.match(/\b(\d{1,6})\s*(?:股|shares?)\b/i);
   if (!m) return null;
   const v = parseInt(m[1], 10);
   return Number.isNaN(v) ? null : v;
@@ -65,7 +70,7 @@ function normalizeItem(item, status) {
 
   return {
     code,
-    name: item.name || `股票${code}`,
+    name: sanitizeName(item.name) || `股票${code}`,
     status: STATUS_MAP[status] || status,
     listingDate: normalizeDate(item.listingDate),
     offerPrice,
@@ -75,28 +80,99 @@ function normalizeItem(item, status) {
   };
 }
 
-function extractFromRows($, rows, status) {
+function sanitizeName(raw = '') {
+  const text = String(raw).replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+
+  // 清理常见括号股票代码，避免与name拼接
+  const noCode = text
+    .replace(/\((?:HK|hk)?\s*[:：]?\s*\d{4,5}\)/g, '')
+    .replace(/\b\d{4,5}\b/g, '')
+    .trim();
+
+  // 仅保留首段名称，防止整页说明文字拼进来
+  const firstSegment = noCode.split(/[|｜\/\n\r]/)[0].split(/\s{2,}/)[0].trim();
+  if (!firstSegment) return null;
+  if (firstSegment.length > MAX_NAME_LENGTH) return firstSegment.slice(0, MAX_NAME_LENGTH).trim();
+  return firstSegment;
+}
+
+function normalizeHeader(raw = '') {
+  return String(raw).replace(/\s+/g, '').toLowerCase();
+}
+
+function detectColumnIndex(headers = [], patterns = []) {
+  if (!headers.length) return -1;
+  return headers.findIndex((h) => patterns.some((p) => p.test(h)));
+}
+
+function getPrimaryText(raw = '') {
+  return String(raw).replace(/\s+/g, ' ').trim().split(/\s{2,}/)[0].trim();
+}
+
+function parseRowByHeader(columns = [], headerIndexes = {}) {
+  const byIndex = (key) => {
+    const idx = headerIndexes[key];
+    if (typeof idx !== 'number' || idx < 0 || idx >= columns.length) return null;
+    return columns[idx] || null;
+  };
+
+  const codeCandidate = byIndex('code')
+    || columns.find(c => /\b\d{4,5}\b/.test(c))
+    || null;
+  const nameCandidate = byIndex('name')
+    || null;
+  const listingDateCandidate = byIndex('listingDate')
+    || columns.find(c => /\d{4}[\/.\-年]\d{1,2}/.test(c))
+    || null;
+  const priceCandidate = byIndex('offerPrice')
+    || null;
+  // lotSize 严格只从「每手股数」列读取，禁止跨列拼接
+  const lotSizeCandidate = byIndex('lotSize');
+  const lotAmountCandidate = byIndex('lotAmount')
+    || null;
+
+  return {
+    code: codeCandidate?.match(/\d{4,5}/)?.[0] || null,
+    name: getPrimaryText(nameCandidate || ''),
+    listingDate: listingDateCandidate,
+    offerPriceRaw: priceCandidate,
+    lotSize: lotSizeCandidate,
+    lotAmount: lotAmountCandidate,
+  };
+}
+
+function extractFromRows($, table, status, debug = false) {
   const list = [];
-  rows.each((_, row) => {
+  const rows = table.find('tr');
+  if (!rows || rows.length === 0) return list;
+
+  const headerRow = rows.first();
+  const headers = headerRow.find('th,td').map((_, cell) => normalizeHeader($(cell).text())).get();
+  const hasHeader = headers.some(h => /代號|代码|編號|编号|名稱|名称|上市|招股|每手|入場|入场|發售|发售/.test(h));
+
+  const headerIndexes = {
+    code: detectColumnIndex(headers, [/代號|代码|編號|编号|股份代號|股份代码|stockcode|code/]),
+    name: detectColumnIndex(headers, [/簡稱|简称|名稱|名称|公司|股份|stockname|name/]),
+    listingDate: detectColumnIndex(headers, [/上市日|上市日期|挂牌|listing/]),
+    offerPrice: detectColumnIndex(headers, [/招股價|招股价|發售價|发售价|定價|定价|price/]),
+    lotSize: detectColumnIndex(headers, [/每手股數|每手股数|一手股數|一手股数|每手/]),
+    lotAmount: detectColumnIndex(headers, [/入場費|入场费|一手入場|一手入场|min|認購額|认购额/]),
+  };
+
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  dataRows.each((rowIndex, row) => {
     const tds = $(row).find('td');
     if (tds.length < 2) return;
 
     const columns = tds.map((i, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
-    const code = columns.find(c => /\b\d{4,5}\b/.test(c))?.match(/\d{4,5}/)?.[0] || null;
-    const name = columns[1] || columns[0] || null;
-    const listingDate = columns.find(c => /\d{4}[\/.\-年]\d{1,2}/.test(c)) || null;
-    const priceCol = columns.find(c => /\$|HK\$|港元|\d+\.?\d*\s*[-~]\s*\d+\.?\d*/i.test(c)) || null;
-    const lotSizeCol = columns.find(c => /股|手/.test(c) && /\d/.test(c)) || null;
-    const lotAmountCol = columns.find(c => /(入场费|一手|认购额|HK\$|\$)/i.test(c) && /\d/.test(c)) || null;
+    const parsedRow = parseRowByHeader(columns, headerIndexes);
+    const normalized = normalizeItem(parsedRow, status);
 
-    const normalized = normalizeItem({
-      code,
-      name,
-      listingDate,
-      offerPriceRaw: priceCol,
-      lotSize: lotSizeCol,
-      lotAmount: lotAmountCol,
-    }, status);
+    if (debug) {
+      console.log(`[ipoList][debug][${status}] row#${rowIndex + 1} raw=`, columns);
+      console.log(`[ipoList][debug][${status}] row#${rowIndex + 1} parsed=`, normalized);
+    }
 
     if (normalized) list.push(normalized);
   });
@@ -166,14 +242,16 @@ async function crawlIPOListFromETNet() {
 
     const table = $(el).nextAll('table').first();
     if (!table || table.length === 0) return;
-    const items = extractFromRows($, table.find('tr'), status);
+    const items = extractFromRows($, table, status);
     result[status] = result[status].concat(items);
   });
 
   // 解析策略2：全页兜底（若策略1拿不到）
   if (result.subscribing.length + result.listingSoon.length + result.recentListed.length === 0) {
     const allRows = $('table tr');
-    const all = extractFromRows($, allRows, 'subscribing');
+    const tempTable = $('<table></table>');
+    tempTable.append(allRows.clone());
+    const all = extractFromRows($, tempTable, 'subscribing');
     // 克制策略：兜底时默认放入 subscribing，后续由日期归类
     result.subscribing = result.subscribing.concat(all);
   }
@@ -187,6 +265,43 @@ async function crawlIPOListFromETNet() {
   return result;
 }
 
+async function debugRun() {
+  const url = cfg.baseURL + cfg.urls.ipoList;
+  console.log(`[etnet/ipoList][debug] 爬取: ${url}`);
+  const html = await fetchWithRetry(url);
+  if (!html) {
+    console.log('[etnet/ipoList][debug] 抓取失败');
+    return [];
+  }
+
+  const $ = cheerio.load(html);
+  const debugItems = [];
+
+  $('table').each((tableIdx, table) => {
+    const rows = $(table).find('tr');
+    if (rows.length === 0) return;
+    const items = extractFromRows($, $(table), 'subscribing', true);
+    if (items.length > 0) {
+      console.log(`[etnet/ipoList][debug] table#${tableIdx + 1} items=${items.length}`);
+      debugItems.push(...items);
+    }
+  });
+
+  const clean = uniqByCode(debugItems)
+    .map(item => ({
+      code: item.code,
+      name: item.name,
+      listingDate: item.listingDate,
+      lotSize: item.lotSize,
+    }))
+    .filter(item => item.code && item.name && item.lotSize && item.listingDate)
+    .slice(0, 5);
+
+  console.log('[etnet/ipoList][debug] sample(>=5 expected)=', clean);
+  return clean;
+}
+
 module.exports = {
   crawlIPOListFromETNet,
+  debugRun,
 };
