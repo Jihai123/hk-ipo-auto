@@ -110,7 +110,74 @@
   }
 
   document.getElementById('reloadBtn').addEventListener('click',loadDashboard);
-  document.getElementById('scoreForm').addEventListener('submit',async(e)=>{e.preventDefault();const code=document.getElementById('codeInput').value.trim();if(!code)return;const out=document.getElementById('scoreResult');out.textContent='评分中...';try{const r=await fetch(`/api/score/${code}`);const d=await r.json();if(!d.success){out.textContent=`评分失败：${safe(d.error)}`;return;}out.textContent=JSON.stringify({success:d.success,totalScore:d.totalScore,rating:d.rating,ipoInfo:d.ipoInfo||{}},null,2);}catch(err){out.textContent=`评分失败：${err.message}`;}});
+  document.getElementById('scoreForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('codeInput').value.trim();
+    if (!code) return;
+
+    const out = document.getElementById('scoreResult');
+    out.textContent = '评分中...';
+
+    const candidates = [`/api/score/${code}`, `/hk/api/score/${code}`];
+    const debug = [];
+
+    for (const url of candidates) {
+      try {
+        const r = await fetch(url, { method: 'GET' });
+        const raw = await r.text();
+        const bodyPreview = raw.slice(0, 200);
+        let d = null;
+        let jsonParseError = null;
+
+        try {
+          d = raw ? JSON.parse(raw) : null;
+        } catch (parseErr) {
+          jsonParseError = parseErr;
+        }
+
+        const item = {
+          url,
+          status: r.status,
+          is404: r.status === 404,
+          bodyPreview,
+          jsonParseFailed: !!jsonParseError,
+          networkError: false,
+        };
+        debug.push(item);
+
+        if (r.ok && d?.success) {
+          out.textContent = JSON.stringify({
+            success: d.success,
+            totalScore: d.totalScore,
+            rating: d.rating,
+            ipoInfo: d.ipoInfo || {},
+          }, null, 2);
+          return;
+        }
+      } catch (err) {
+        debug.push({
+          url,
+          status: 'N/A',
+          is404: false,
+          bodyPreview: err?.message || 'network error',
+          jsonParseFailed: false,
+          networkError: true,
+        });
+      }
+    }
+
+    const first = debug[0] || {};
+    out.textContent = `评分失败：请求未命中有效评分接口
+URL: ${first.url || 'N/A'}
+状态码: ${first.status || 'N/A'}
+是否404: ${first.is404 ? '是' : '否'}
+是否网络错误: ${first.networkError ? '是' : '否'}
+是否JSON解析失败: ${first.jsonParseFailed ? '是' : '否'}
+响应摘要: ${first.bodyPreview || '无'}
+
+调试详情:
+${JSON.stringify(debug, null, 2)}`;
+  });
   loadDashboard();
 </script>
 </body>
