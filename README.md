@@ -1,77 +1,138 @@
 # 港股新股自动评分系统 v3.0
 
-## 本次页面增强改造
+## 本次改造重点（评分内核不变）
 
-本次改造遵循“**评分主导 + 信息增强**”原则：
+- 保留 `/api/score/:code` 接口路径与评分主流程，不改评分维度、权重、算法和历史验证链路。
+- 首页真实入口继续是 `server.js + public/index.html`，本次改造只落在该生效层。
+- ETNet IPO 数据源重构为：**板块/列表页主源 + detail 页补源**。
+- 前端已下线 PE 展示（仅展示总分与评级），后端 PE 逻辑保留，便于后续继续修复。
 
-- **评分模块完全保留且仍是第一视觉核心**：保留原有总分、评级、维度分数、评分逻辑、评分展示区与交互位置。
-- **首页 / 列表页增强**：在评分榜卡片中新增上市状态、上市日期、一手金额、每手股数、招股价、现价/较招股价涨跌幅、首日涨跌幅、认购倍数、中签率、数据更新时间等辅助字段。
-- **详情区增强**：在原评分结果下方新增关键信息补充卡、上市时间表、打新门槛与收益测算、热度信息、数据来源与更新时间模块。
-- **后端增量扩展字段**：接口在保持兼容的前提下新增 `listing_status`、`listing_date`、`offer_start_date`、`offer_end_date`、`pricing_date`、`allotment_result_date`、`refund_date`、`lot_size`、`lot_amount`、`offer_price`、`current_price`、`current_vs_offer_pct`、`first_day_change_pct`、`first_day_lot_profit`、`current_lot_profit`、`subscription_multiple`、`allotment_rate`、`updated_at`、`source_name`、`source_url` 等字段。
-- **衍生逻辑统一后端计算**：一手金额、较招股价涨跌幅、首日/当前每手盈亏、破发判断统一在后端生成，前端只负责展示。
-- **缺失字段优雅降级**：无数据时统一展示“暂无数据”，不影响原有评分功能与页面稳定性。
+---
 
-> 注意：不要重做成普通股票页，评分区必须仍然是第一视觉核心。新增信息是辅助增强，用来填充空白和提升完成度。
+## ETNet IPO 多源融合说明
 
-## 新特性
-- ✅ SQLite数据库存储保荐人历史数据
-- ✅ 爬虫自动从AAStocks获取真实数据
-- ✅ etnet 静态字段补充与后端衍生字段计算
-- ✅ 首页卡片与评分详情区信息密度增强
-- ✅ 响应式优化，移动端仍保持评分优先
+### 1) 字段主源：ETNet IPO 板块页 / 列表页
+
+主源板块包含：
+
+- 暗盘区（grey market）
+- 今日上市区（listed today）
+- 上市时间表（timetable）
+- 招股中（subscribing）
+- 即将上市（listing soon）
+- 新股信息（ipo info）
+- 申请上市（通过聆讯，hearing passed）
+
+在融合层中优先取板块字段：
+
+- `name`, `status`, `listing_date`, `offer_price`, `offer_price_range`, `lot_size`, `lot_cost`
+- `subscription_multiple`, `guaranteed_lot`, `success_rate`
+- `current_price`, `cumulative_return`, `grey_market_top_quote`
+
+### 2) 字段补源：ETNet detail 页
+
+detail 页仅用于补充：
+
+- `industry`, `market`, `sponsor`, `underwriters`
+- `offer_price_mid`, `lot_size`（主源缺失时）
+- timeline 明细、`market_cap`、`nav_per_share`、`offered_shares`
+
+### 3) 为什么 `name` 不应从 detail 页取
+
+- detail 页经常受页面模板、缓存和文案变化影响。
+- 首页榜单需要与板块列表一致的公司名，避免出现空名或不一致命名。
+- 因此优先使用板块页列表名，detail 仅在**明确标签提取**时兜底，不用 `<title>`/`body` 猜测。
+
+### 4) 为什么 `status` 优先由板块位置决定
+
+- 板块即业务状态（招股中/暗盘/今日上市）本身，语义最稳定。
+- 当板块状态缺失时才回退到时间线推断，避免 body keyword 猜测导致误判。
+
+---
+
+## 前端 PE 下线说明
+
+- 本次仅移除前端面向用户的 PE 展示字段和文案。
+- Dashboard 面向前端输出不再包含 `pe*` 展示字段。
+- 后端评分内核中的 PE 计算和证据链仍保留（不删除），后续可继续修复和恢复展示。
+
+---
+
+## Live / Fixture 测试方法
+
+> 以下命令均可在你的服务器目录执行（例如 `/www/wwwroot/zhibeimao.com/hk-ipo-auto/`）。
+
+### 1) Live 测试
+
+```bash
+node scripts/test-etnet-live.js --code=03355
+node scripts/test-dashboard-live.js
+```
+
+输出将包含：
+
+- source section coverage
+- 每个字段来源（list / detail / fallback）
+- `name` 与 `status` 来源证据
+- dashboard 各状态条数、top3 完整度、PE 字段泄漏检查
+
+### 2) Fixture 测试
+
+```bash
+IPO_DATA_MODE=fixture node scripts/test-etnet-fixture.js
+IPO_DATA_MODE=fixture node scripts/test-dashboard-fixture.js
+```
+
+Fixture 文件：
+
+- `tests/fixtures/etnet/ipo-board.html`
+- `tests/fixtures/etnet/grey-market.html`
+- `tests/fixtures/etnet/listed-today.html`
+- `tests/fixtures/etnet/subscribing.html`
+
+### 3) 一键自检脚本（推荐）
+
+```bash
+bash scripts/one-click-check.sh 03355
+```
+
+作用：自动安装依赖、启动服务、探活 `/api/dashboard`、`/api/score/:code`、`/api/ipo/top`、`/api/ipo/current`、`/api/market/stats`，并输出汇总结果。
+
+### 4) 全量质量检查工具（前端+后端+数据完整度）
+
+```bash
+node scripts/full-system-check.js --code=03355
+# 或
+npm run test:full
+
+# 线上域名检查（推荐，能发现 Nginx 路由前缀问题）
+BASE_URL=https://zhibeimao.com ENTRY_PATH=/hk/ API_BASE=/api node scripts/full-system-check.js --auto_start=0
+```
+
+检查范围：
+
+- 后端核心接口可用性：`/api/dashboard`、`/api/score/:code`、`/api/ipo/top`、`/api/ipo/current`、`/api/market/stats`
+- 路由探针：同时检测 `API_BASE` 与 `ENTRY_PATH/api`，用于识别前端页面路径与 API 转发前缀不一致（如 `/api` 未转发但 `/hk/api` 可用）
+- 前端页面结构与样式关键点：标题、评分表单、Top3/榜单/时间表容器、核心 CSS 类、响应式样式
+- 前端 PE 暴露检查：HTML 与 dashboard payload 不应出现 PE 展示字段
+- 数据完整度：Top3 与榜单字段完整度、`name` 空值统计、状态分布
+
+输出：
+
+- 控制台摘要（PASS / PASS_WITH_WARNINGS / FAIL）
+- `artifacts/full-system-check-*.json` 详细报告，可用于是否“废弃项目”的决策记录
+
+---
 
 ## 快速部署
 
-### 1. 上传文件到服务器
-将以下文件/文件夹上传到 `/www/wwwroot/zhibeimao.com/hk-ipo-auto/`:
-- server.js
-- package.json
-- scripts/
-- public/
-- crawlers/
-
-### 2. 安装依赖
 ```bash
-cd /www/wwwroot/zhibeimao.com/hk-ipo-auto/
 npm install
-```
-
-### 3. 初始化数据
-```bash
-node scripts/init-history-data.js
-node scripts/crawler-ipo-list.js
-```
-
-如需同时为列表新股评分：
-```bash
-node scripts/crawler-ipo-list.js --score
-```
-
-### 4. 启动服务
-```bash
 npm start
 ```
 
-## API接口
+可访问：
 
-| 接口 | 说明 |
-|------|------|
-| GET /api/health | 健康检查 |
-| GET /api/score/:code | 评分详情 + 增量扩展字段 |
-| GET /api/ipo/top | 首页评分榜卡片数据 |
-| GET /api/ipo/current | 当前IPO列表（带扩展字段） |
-| GET /api/ipo/history | 历史表现 |
-| GET /api/market/stats | 市场环境统计 |
-| GET /api/sponsors | 获取所有保荐人数据 |
-| GET /api/sponsors/top | 获取TOP保荐人 |
-| GET /api/cache/clear/:code | 清除股票缓存 |
-
-## 数据来源
-- 保荐人数据：AAStocks
-- 招股书：港交所披露易
-- IPO静态字段：etnet 页面抓取 / 本地缓存 / 列表脚本 mock 数据
-
-## 注意事项
-1. 原有评分逻辑与评分接口兼容保留。
-2. 若交易所或抓取链路未提供某些字段，接口会返回空值并由前端显示“暂无数据”。
-3. `scripts/crawler-ipo-list.js` 目前仍包含 mock 列表数据示例，便于本地验证新增字段展示。
+- 首页：`/hk/`
+- 评分：`/api/score/:code`
+- Dashboard：`/api/dashboard`

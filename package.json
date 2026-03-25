@@ -15,7 +15,8 @@
     "test:etnet:live": "node scripts/test-etnet-live.js --code=03355",
     "test:dashboard:live": "node scripts/test-dashboard-live.js",
     "test:etnet:fixture": "node scripts/test-etnet-fixture.js",
-    "test:dashboard:fixture": "node scripts/test-dashboard-fixture.js"
+    "test:dashboard:fixture": "node scripts/test-dashboard-fixture.js",
+    "test:full": "node scripts/full-system-check.js --code=03355"
   },
   "dependencies": {
     "express": "^4.18.2",
