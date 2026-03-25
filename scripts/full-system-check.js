@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 /*
- * 全量系统检查：前端页面结构/样式/数据完整度 + 后端核心接口可用性
- * Usage:
- *   node scripts/full-system-check.js --code=03355 --port=3010
- *   BASE_URL=http://127.0.0.1:3010 node scripts/full-system-check.js
+ * 全量系统检查（v3）
+ * Node 作为总入口，Python Selenium 负责真实浏览器诊断。
  */
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -22,9 +20,14 @@ const SCORE_CODE = argMap.code || '03355';
 const PORT = Number(argMap.port || process.env.PORT || 3010);
 const BASE_URL = process.env.BASE_URL || `http://127.0.0.1:${PORT}`;
 const AUTO_START = (argMap.auto_start || '1') !== '0';
-const TIMEOUT = Number(argMap.timeout || 20000);
+const TIMEOUT = Number(argMap.timeout || 30000);
+
 const REPORT_DIR = path.join(process.cwd(), 'artifacts');
-const REPORT_PATH = path.join(REPORT_DIR, `full-system-check-${Date.now()}.json`);
+const RUN_ID = Date.now();
+const RUN_DIR = path.join(REPORT_DIR, `full-system-check-${RUN_ID}`);
+const JSON_REPORT_PATH = path.join(RUN_DIR, 'report.json');
+const MD_REPORT_PATH = path.join(RUN_DIR, 'report.md');
+const PY_BROWSER_OUT = path.join(RUN_DIR, 'browser-check.json');
 
 let serverProc = null;
 
@@ -32,60 +35,51 @@ function now() {
   return new Date().toISOString();
 }
 
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function httpGet(url, options = {}) {
-  return axios.get(url, {
-    timeout: TIMEOUT,
-    validateStatus: () => true,
-    ...options,
-  });
+  return axios.get(url, { timeout: TIMEOUT, validateStatus: () => true, ...options });
 }
 
 function normalizeMissing(v) {
   return v === null || v === undefined || v === '' || v === '暂无数据' || Number.isNaN(v);
 }
 
-function checkRequiredFields(items = [], fields = []) {
-  if (!Array.isArray(items) || !items.length) {
-    return {
-      count: 0,
-      rows_with_missing: 0,
-      completeness_avg: 0,
-      missing_by_field: Object.fromEntries(fields.map((f) => [f, 0])),
-    };
-  }
-
-  const missingByField = Object.fromEntries(fields.map((f) => [f, 0]));
-  let rowsWithMissing = 0;
-  let totalCompleteness = 0;
-
-  for (const row of items) {
-    let filled = 0;
-    let rowMissing = false;
-    for (const field of fields) {
-      if (normalizeMissing(row[field])) {
-        missingByField[field] += 1;
-        rowMissing = true;
-      } else {
-        filled += 1;
-      }
-    }
-    if (rowMissing) rowsWithMissing += 1;
-    totalCompleteness += filled / fields.length;
-  }
-
-  return {
-    count: items.length,
-    rows_with_missing: rowsWithMissing,
-    completeness_avg: Number(((totalCompleteness / items.length) * 100).toFixed(2)),
-    missing_by_field: missingByField,
-  };
+function addIssue(report, issue) {
+  report.issues.push({ id: `ISSUE-${String(report.issues.length + 1).padStart(3, '0')}`, ...issue });
 }
 
-async function waitServerAlive(maxRetries = 30) {
+function summarizeSeverity(issues) {
+  const stat = { critical: 0, major: 0, minor: 0 };
+  for (const i of issues) stat[i.level] += 1;
+  return stat;
+}
+
+function startServerIfNeeded() {
+  if (!AUTO_START) return;
+  serverProc = spawn('node', ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(PORT) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const ws = fs.createWriteStream(path.join(RUN_DIR, 'server.log'), { flags: 'a' });
+  serverProc.stdout.pipe(ws);
+  serverProc.stderr.pipe(ws);
+}
+
+function stopServerIfStarted() {
+  if (serverProc) {
+    try { process.kill(serverProc.pid, 'SIGTERM'); } catch (_) { /* ignore */ }
+  }
+}
+
+async function waitServerAlive(maxRetries = 40) {
   for (let i = 0; i < maxRetries; i += 1) {
     try {
       const r = await httpGet(`${BASE_URL}/`, { timeout: 2000 });
@@ -98,214 +92,333 @@ async function waitServerAlive(maxRetries = 30) {
   return false;
 }
 
-function startServerIfNeeded() {
-  if (!AUTO_START) return;
-  serverProc = spawn('node', ['server.js'], {
-    cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT) },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const logPath = '/tmp/hk-ipo-auto-full-check.log';
-  const ws = fs.createWriteStream(logPath, { flags: 'a' });
-  serverProc.stdout.pipe(ws);
-  serverProc.stderr.pipe(ws);
+function extractApiPathsFromFrontend(html) {
+  const paths = new Set();
+  for (const m of html.matchAll(/fetch\((['"`])([^'"`]+)\1/g)) {
+    if (m[2].startsWith('/api/')) paths.add(m[2].split('?')[0]);
+  }
+  return [...paths];
 }
 
-function stopServerIfStarted() {
-  if (serverProc) {
-    try { process.kill(serverProc.pid, 'SIGTERM'); } catch (_) { /* ignore */ }
+function extractApiPathsFromServer(serverCode) {
+  const paths = new Set();
+  for (const m of serverCode.matchAll(/app\.(?:get|post|put|delete|patch)\((['"`])([^'"`]+)\1/g)) {
+    if (m[2].startsWith('/api/')) paths.add(m[2]);
+  }
+  return [...paths];
+}
+
+function pathMatchesRoute(apiPath, routePath) {
+  const rx = new RegExp(`^${routePath.replace(/:[^/]+/g, '[^/]+')}$`);
+  return rx.test(apiPath);
+}
+
+function runPythonBrowserCheck(report) {
+  const cmd = ['scripts/browser-check.py', `--url=${BASE_URL}`, `--code=${SCORE_CODE}`, `--out=${PY_BROWSER_OUT}`, `--artifacts=${RUN_DIR}`];
+  const r = spawnSync('python3', cmd, { cwd: process.cwd(), encoding: 'utf-8', timeout: TIMEOUT * 4 });
+
+  report.modules.browser_env.command = `python3 ${cmd.join(' ')}`;
+  report.modules.browser_env.exit_code = r.status;
+  report.modules.browser_env.stdout = (r.stdout || '').slice(0, 2000);
+  report.modules.browser_env.stderr = (r.stderr || '').slice(0, 2000);
+
+  if (r.error) {
+    addIssue(report, {
+      level: 'critical',
+      module: '浏览器诊断环境',
+      location: 'python3 scripts/browser-check.py',
+      phenomenon: '无法执行 Python 浏览器诊断脚本。',
+      suspected_root_cause: 'python3 运行失败或超时。',
+      evidence: r.error.message,
+      suggestion: '确认 python3 可执行，且 scripts/browser-check.py 可读可执行。',
+    });
+    return null;
+  }
+
+  if (!fs.existsSync(PY_BROWSER_OUT)) {
+    addIssue(report, {
+      level: 'critical',
+      module: '浏览器诊断环境',
+      location: PY_BROWSER_OUT,
+      phenomenon: '浏览器诊断结果文件未生成。',
+      suspected_root_cause: 'Python 脚本异常退出或写文件失败。',
+      evidence: `exit=${r.status}; stderr=${(r.stderr || '').slice(0, 300)}`,
+      suggestion: '检查 browser-check.py 错误输出，确保 --out 路径可写。',
+    });
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(PY_BROWSER_OUT, 'utf-8'));
+  } catch (err) {
+    addIssue(report, {
+      level: 'critical',
+      module: '浏览器诊断环境',
+      location: PY_BROWSER_OUT,
+      phenomenon: '浏览器诊断结果 JSON 解析失败。',
+      suspected_root_cause: 'Python 输出不是合法 JSON。',
+      evidence: err.message,
+      suggestion: '校验 browser-check.py 输出结构。',
+    });
+    return null;
   }
 }
 
-function gradeReport(report) {
-  const issues = [];
-  const warnings = [];
+function moduleStatusFromIssues(moduleName, issues) {
+  const relevant = issues.filter((x) => x.module === moduleName);
+  if (!relevant.length) return 'PASS';
+  if (relevant.some((x) => x.level === 'critical')) return 'FAIL';
+  return 'WARN';
+}
 
-  // backend hard checks
-  for (const api of report.backend.apis) {
-    if (!api.ok) issues.push(`API_FAIL:${api.path}`);
+function determineOverall(report, browserExecuted) {
+  const sev = summarizeSeverity(report.issues);
+  if (!browserExecuted) return 'FAIL';
+  if (sev.critical > 0) return 'FAIL';
+  if (sev.major > 0) return 'WARN';
+  return 'PASS';
+}
+
+function buildMarkdown(report) {
+  const sev = summarizeSeverity(report.issues);
+  const lines = [
+    '# 全量系统可用性诊断报告',
+    '',
+    `- 结论: **${report.summary.status}**`,
+    `- 基准地址: ${report.meta.base_url}`,
+    `- 时间: ${report.meta.started_at} ~ ${report.meta.finished_at}`,
+    `- 问题统计: critical=${sev.critical}, major=${sev.major}, minor=${sev.minor}`,
+    '',
+    '## 分模块结果',
+  ];
+
+  for (const [k, v] of Object.entries(report.module_status)) lines.push(`- **${k}**: ${v}`);
+
+  lines.push('', '## 问题明细');
+  if (!report.issues.length) {
+    lines.push('- 无问题。');
+  } else {
+    for (const i of report.issues) {
+      lines.push(`### ${i.id} [${i.level}] ${i.module}`);
+      lines.push(`- 位置: ${i.location}`);
+      lines.push(`- 现象: ${i.phenomenon}`);
+      lines.push(`- 推测根因: ${i.suspected_root_cause}`);
+      lines.push(`- 证据: ${i.evidence}`);
+      lines.push(`- 建议修复方向: ${i.suggestion}`);
+      lines.push('');
+    }
   }
 
-  // frontend hard checks
-  for (const c of report.frontend.structure_checks) {
-    if (!c.ok) issues.push(`FRONT_STRUCTURE:${c.name}`);
+  lines.push('## Artifacts');
+  for (const [k, v] of Object.entries(report.artifacts.files)) lines.push(`- ${k}: ${v}`);
+  if (report.artifacts.browser) {
+    for (const [k, v] of Object.entries(report.artifacts.browser)) lines.push(`- ${k}: ${v}`);
   }
 
-  for (const c of report.frontend.style_checks) {
-    if (!c.ok) issues.push(`FRONT_STYLE:${c.name}`);
-  }
-
-  // data checks
-  if (report.data_quality.top3.count === 0) issues.push('TOP3_EMPTY');
-  if (report.data_quality.leaderboard.count === 0) issues.push('LEADERBOARD_EMPTY');
-  if (report.data_quality.top3.completeness_avg < 60) warnings.push(`TOP3_LOW_COMPLETENESS:${report.data_quality.top3.completeness_avg}`);
-  if (report.data_quality.leaderboard.completeness_avg < 55) warnings.push(`LEADERBOARD_LOW_COMPLETENESS:${report.data_quality.leaderboard.completeness_avg}`);
-  if (report.data_quality.name_null_count > 0) issues.push(`NAME_NULL:${report.data_quality.name_null_count}`);
-  if (report.data_quality.pe_exposed) issues.push('PE_EXPOSED_TO_FRONTEND');
-
-  const status = issues.length ? 'FAIL' : (warnings.length ? 'PASS_WITH_WARNINGS' : 'PASS');
-  return { status, issues, warnings };
+  return `${lines.join('\n')}\n`;
 }
 
 async function main() {
+  ensureDir(RUN_DIR);
+
   const report = {
     meta: {
       started_at: now(),
+      finished_at: null,
       base_url: BASE_URL,
       port: PORT,
       score_code: SCORE_CODE,
       auto_start: AUTO_START,
       timeout_ms: TIMEOUT,
-      checker_version: 'full-check-v1',
+      checker_version: 'full-check-v3-node+selenium',
     },
-    backend: {
-      apis: [],
+    module_status: {
+      '后端接口层': 'PENDING',
+      '前端静态结构层': 'PENDING',
+      '前端真实渲染层': 'PENDING',
+      '前后端联动层': 'PENDING',
+      '核心评分链路': 'PENDING',
+      '数据完整度': 'PENDING',
+      '浏览器诊断环境': 'PENDING',
+      '页面可用性判定': 'PENDING',
     },
-    frontend: {
-      structure_checks: [],
-      style_checks: [],
-      notes: [],
+    modules: {
+      backend: { apis: [] },
+      frontend_static: {},
+      integration: {},
+      data_quality: {},
+      browser_env: {},
+      browser_check: null,
     },
-    data_quality: {},
+    issues: [],
+    artifacts: {
+      files: {
+        json_report: JSON_REPORT_PATH,
+        markdown_report: MD_REPORT_PATH,
+        browser_json: PY_BROWSER_OUT,
+      },
+      browser: null,
+    },
+    summary: { status: 'PENDING', basis: [] },
   };
 
   startServerIfNeeded();
-
   const alive = await waitServerAlive();
+
   if (!alive) {
-    report.summary = { status: 'FAIL', issues: ['SERVER_NOT_REACHABLE'], warnings: [] };
-    finalize(report);
-    return;
-  }
+    addIssue(report, {
+      level: 'critical', module: '后端接口层', location: BASE_URL,
+      phenomenon: '服务不可达。', suspected_root_cause: '服务未启动或端口冲突。',
+      evidence: `BASE_URL=${BASE_URL}`, suggestion: '检查 server.js 启动日志与端口占用。',
+    });
+  } else {
+    const apiTargets = ['/api/dashboard?sort=score', `/api/score/${SCORE_CODE}`, '/api/ipo/top?limit=3', '/api/ipo/current', '/api/market/stats'];
+    const apiPayload = {};
+    for (const p of apiTargets) {
+      try {
+        const r = await httpGet(`${BASE_URL}${p}`);
+        const isJson = String(r.headers['content-type'] || '').includes('application/json');
+        const body = isJson ? r.data : null;
+        apiPayload[p] = body;
+        const ok = r.status < 400 && isJson;
+        report.modules.backend.apis.push({ path: p, status: r.status, ok, success_field: body?.success ?? null, error: body?.error ?? null });
+        if (!ok) {
+          addIssue(report, {
+            level: 'major', module: '后端接口层', location: p,
+            phenomenon: '接口返回异常。', suspected_root_cause: '状态码异常或非 JSON。',
+            evidence: `status=${r.status}, type=${r.headers['content-type']}`, suggestion: '校正接口返回。',
+          });
+        }
+      } catch (err) {
+        addIssue(report, {
+          level: 'critical', module: '后端接口层', location: p,
+          phenomenon: '接口请求失败。', suspected_root_cause: '服务异常。', evidence: err.message,
+          suggestion: '检查后端日志。',
+        });
+      }
+    }
 
-  // 1) backend api probes
-  const apiTargets = [
-    `/api/dashboard?sort=score`,
-    `/api/score/${SCORE_CODE}`,
-    '/api/ipo/top?limit=3',
-    '/api/ipo/current',
-    '/api/market/stats',
-  ];
+    const htmlResp = await httpGet(`${BASE_URL}/hk/`);
+    const html = String(htmlResp.data || '');
+    const $ = cheerio.load(html);
+    report.modules.frontend_static = {
+      has_score_form: $('#scoreForm').length > 0,
+      has_top3: $('#top3').length > 0,
+      has_leaderboard: $('#leaderboard').length > 0,
+      has_timeline: $('#timeline').length > 0,
+      has_market: $('#market').length > 0,
+      has_validation: $('#validation').length > 0,
+    };
 
-  const apiPayload = {};
-  for (const p of apiTargets) {
-    try {
-      const r = await httpGet(`${BASE_URL}${p}`);
-      const isJson = String(r.headers['content-type'] || '').includes('application/json');
-      const body = isJson ? r.data : null;
-      const ok = r.status < 500 && isJson && body && (body.success !== false);
-      report.backend.apis.push({
-        path: p,
-        status: r.status,
-        ok,
-        success_field: body ? body.success : null,
-        error: body?.error || null,
+    for (const [k, v] of Object.entries(report.modules.frontend_static)) {
+      if (!v) {
+        addIssue(report, {
+          level: 'major', module: '前端静态结构层', location: '/hk/',
+          phenomenon: `关键容器缺失: ${k}`,
+          suspected_root_cause: '模板结构缺失。', evidence: `${k}=false`, suggestion: '补齐页面结构。',
+        });
+      }
+    }
+
+    const frontendApiPaths = extractApiPathsFromFrontend(html);
+    const serverRoutes = extractApiPathsFromServer(fs.readFileSync(path.join(process.cwd(), 'server.js'), 'utf-8'));
+    const unmatched = frontendApiPaths.filter((f) => !f.includes('${') && !serverRoutes.some((s) => pathMatchesRoute(f, s)));
+    report.modules.integration = { frontend_api_paths: frontendApiPaths, unmatched_frontend_calls: unmatched };
+    if (unmatched.length) {
+      addIssue(report, {
+        level: 'critical', module: '前后端联动层', location: '前端 fetch 路径',
+        phenomenon: '前端调用路径与后端不一致。', suspected_root_cause: '接口路径漂移。',
+        evidence: unmatched.join(', '), suggestion: '统一 API 常量并做 CI 校验。',
       });
-      apiPayload[p] = body;
-    } catch (error) {
-      report.backend.apis.push({ path: p, status: 0, ok: false, success_field: null, error: error.message });
+    }
+
+    const dashboard = apiPayload['/api/dashboard?sort=score'] || {};
+    const top3 = Array.isArray(dashboard.top3) ? dashboard.top3 : [];
+    const leaderboard = Array.isArray(dashboard.leaderboard) ? dashboard.leaderboard : [];
+    const top3Valid = top3.filter((x) => !normalizeMissing(x.code) && !normalizeMissing(x.name) && !normalizeMissing(x.score));
+    const boardValid = leaderboard.filter((x) => !normalizeMissing(x.code) && !normalizeMissing(x.name) && !normalizeMissing(x.score));
+
+    report.modules.data_quality = {
+      top3_count: top3.length,
+      top3_valid_count: top3Valid.length,
+      leaderboard_count: leaderboard.length,
+      leaderboard_valid_count: boardValid.length,
+      has_timeline_data: !!dashboard.timeline,
+      has_market_data: !!dashboard.market_temperature,
+      has_validation_data: !!dashboard.validation_summary,
+    };
+
+    if (top3Valid.length === 0) {
+      addIssue(report, {
+        level: 'critical', module: '数据完整度', location: '/api/dashboard.top3',
+        phenomenon: 'TOP3 无有效业务数据。', suspected_root_cause: '数据源为空或映射失败。',
+        evidence: JSON.stringify(top3.slice(0, 2)), suggestion: '检查 dashboard 数据聚合。',
+      });
+    }
+    if (boardValid.length === 0) {
+      addIssue(report, {
+        level: 'critical', module: '数据完整度', location: '/api/dashboard.leaderboard',
+        phenomenon: '评分榜无有效业务数据。', suspected_root_cause: '数据源为空或映射失败。',
+        evidence: JSON.stringify(leaderboard.slice(0, 2)), suggestion: '检查 dashboard 数据聚合。',
+      });
+    }
+
+    const browserResult = runPythonBrowserCheck(report);
+    report.modules.browser_check = browserResult;
+
+    if (browserResult && browserResult.artifacts) {
+      report.artifacts.browser = browserResult.artifacts;
+    }
+
+    if (browserResult && Array.isArray(browserResult.issues)) {
+      for (const issue of browserResult.issues) addIssue(report, issue);
     }
   }
 
-  // 2) frontend page checks
-  try {
-    const page = await httpGet(`${BASE_URL}/hk/`);
-    const html = String(page.data || '');
-    const $ = cheerio.load(html);
+  const browserExecuted = !!(report.modules.browser_check && report.modules.browser_check.executed);
 
-    const structureChecks = [
-      { name: 'title_exists', ok: $('title').text().trim().length > 0 },
-      { name: 'hero_heading', ok: $('h1').first().text().includes('评分') },
-      { name: 'score_form', ok: $('#scoreForm').length > 0 },
-      { name: 'top3_container', ok: $('#top3').length > 0 },
-      { name: 'leaderboard_container', ok: $('#leaderboard').length > 0 },
-      { name: 'timeline_container', ok: $('#timeline').length > 0 },
-      { name: 'market_container', ok: $('#market').length > 0 },
-      { name: 'validation_container', ok: $('#validation').length > 0 },
-    ];
+  report.module_status['后端接口层'] = moduleStatusFromIssues('后端接口层', report.issues);
+  report.module_status['前端静态结构层'] = moduleStatusFromIssues('前端静态结构层', report.issues);
+  report.module_status['前后端联动层'] = moduleStatusFromIssues('前后端联动层', report.issues);
+  report.module_status['核心评分链路'] = moduleStatusFromIssues('核心评分链路', report.issues);
+  report.module_status['数据完整度'] = moduleStatusFromIssues('数据完整度', report.issues);
+  report.module_status['浏览器诊断环境'] = moduleStatusFromIssues('浏览器诊断环境', report.issues);
 
-    const styleText = $('style').map((_, el) => $(el).text()).get().join('\n');
-    const styleChecks = [
-      { name: 'has_card_style', ok: styleText.includes('.card') },
-      { name: 'has_row_style', ok: styleText.includes('.row') },
-      { name: 'has_btn_style', ok: styleText.includes('.btn') },
-      { name: 'has_responsive_style', ok: styleText.includes('@media') },
-      { name: 'pe_metric_hidden', ok: !/pe_score|pe_reason|pe_details|市盈率|PE：|估值PE/i.test(html) },
-    ];
+  const frontRenderIssues = report.issues.filter((x) => ['前端真实渲染层', '浏览器诊断环境'].includes(x.module));
+  if (!frontRenderIssues.length) report.module_status['前端真实渲染层'] = 'PASS';
+  else if (frontRenderIssues.some((x) => x.level === 'critical')) report.module_status['前端真实渲染层'] = 'FAIL';
+  else report.module_status['前端真实渲染层'] = 'WARN';
 
-    report.frontend.structure_checks = structureChecks;
-    report.frontend.style_checks = styleChecks;
+  report.summary.status = determineOverall(report, browserExecuted);
+  report.module_status['页面可用性判定'] = report.summary.status;
 
-    // script sanity
-    const scriptText = $('script').map((_, el) => $(el).text()).get().join('\n');
-    const expects = ['loadDashboard', 'loadDashboardFallback', 'safe(', 'pct(', '/api/dashboard'];
-    report.frontend.notes.push({
-      script_key_functions_present: Object.fromEntries(expects.map((k) => [k, scriptText.includes(k)])),
-    });
-  } catch (error) {
-    report.frontend.structure_checks.push({ name: 'frontend_fetch', ok: false, error: error.message });
-  }
+  const sev = summarizeSeverity(report.issues);
+  report.summary.basis = [
+    `critical=${sev.critical}`,
+    `major=${sev.major}`,
+    `minor=${sev.minor}`,
+    `browser_executed=${browserExecuted}`,
+    '真实浏览器未执行时，不允许 PASS。',
+  ];
 
-  // 3) data quality checks
-  const dashboard = apiPayload['/api/dashboard?sort=score'] || {};
-  const top3 = Array.isArray(dashboard.top3) ? dashboard.top3 : [];
-  const leaderboard = Array.isArray(dashboard.leaderboard) ? dashboard.leaderboard : [];
-
-  const top3Fields = ['code', 'name', 'score', 'rating', 'status', 'lot_cost', 'listing_date'];
-  const boardFields = ['code', 'name', 'score', 'rating', 'status', 'listing_date', 'offer_price', 'lot_size', 'lot_cost'];
-
-  const top3Comp = checkRequiredFields(top3, top3Fields);
-  const boardComp = checkRequiredFields(leaderboard, boardFields);
-
-  const nameNullCount = leaderboard.filter((x) => normalizeMissing(x.name)).length;
-  const peExposed = leaderboard.some((x) => ['pe', 'pe_score', 'pe_reason', 'pe_details', 'pe_explain'].some((k) => Object.prototype.hasOwnProperty.call(x, k)));
-
-  const statusCounts = leaderboard.reduce((acc, row) => {
-    const key = row.status || 'unknown';
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-
-  report.data_quality = {
-    top3: top3Comp,
-    leaderboard: boardComp,
-    name_null_count: nameNullCount,
-    pe_exposed: peExposed,
-    status_counts: statusCounts,
-  };
-
-  report.summary = gradeReport(report);
-  finalize(report);
-}
-
-function finalize(report) {
   report.meta.finished_at = now();
-  if (!fs.existsSync(REPORT_DIR)) fs.mkdirSync(REPORT_DIR, { recursive: true });
-  fs.writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2), 'utf-8');
+  fs.writeFileSync(JSON_REPORT_PATH, JSON.stringify(report, null, 2), 'utf-8');
+  fs.writeFileSync(MD_REPORT_PATH, buildMarkdown(report), 'utf-8');
 
-  const { status, issues, warnings } = report.summary;
-  console.log('\n================ 全量检查报告 ================');
-  console.log(`状态: ${status}`);
-  console.log(`报告文件: ${REPORT_PATH}`);
-  console.log('后端接口:');
-  report.backend.apis.forEach((x) => {
-    console.log(`  - ${x.path}: status=${x.status}, ok=${x.ok}, success=${x.success_field}, error=${x.error || ''}`);
-  });
-  console.log(`前端结构检查通过: ${report.frontend.structure_checks.filter((x) => x.ok).length}/${report.frontend.structure_checks.length}`);
-  console.log(`前端样式检查通过: ${report.frontend.style_checks.filter((x) => x.ok).length}/${report.frontend.style_checks.length}`);
-  console.log(`Top3 完整度: ${report.data_quality.top3.completeness_avg}% (${report.data_quality.top3.count} 条)`);
-  console.log(`榜单完整度: ${report.data_quality.leaderboard.completeness_avg}% (${report.data_quality.leaderboard.count} 条)`);
-  console.log(`name 为空数量: ${report.data_quality.name_null_count}`);
-  console.log(`PE 前端暴露: ${report.data_quality.pe_exposed}`);
-  if (issues.length) console.log(`Issues: ${issues.join(', ')}`);
-  if (warnings.length) console.log(`Warnings: ${warnings.join(', ')}`);
+  console.log('\n================ 全量可用性诊断报告 ================');
+  console.log(`状态: ${report.summary.status}`);
+  console.log(`JSON: ${JSON_REPORT_PATH}`);
+  console.log(`Markdown: ${MD_REPORT_PATH}`);
+  console.log(`浏览器诊断执行: ${browserExecuted}`);
+  console.log('分模块结果:');
+  Object.entries(report.module_status).forEach(([k, v]) => console.log(`  - ${k}: ${v}`));
 
   stopServerIfStarted();
-  process.exit(status === 'FAIL' ? 2 : 0);
+  process.exit(report.summary.status === 'FAIL' ? 2 : 0);
 }
 
-main().catch((error) => {
-  console.error('[full-system-check] fatal:', error.message);
+main().catch((err) => {
+  console.error('[full-system-check] fatal:', err.stack || err.message);
   stopServerIfStarted();
   process.exit(2);
 });
