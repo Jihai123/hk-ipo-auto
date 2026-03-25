@@ -46,7 +46,7 @@ export default function NewHeroSection() {
       if (data.success) {
         setSearchResult(data);
       } else {
-        setError(data.message || '评分失败，请重试');
+        setError(data.error || data.message || '评分失败，请重试');
       }
     } catch (err) {
       setError('网络错误，请检查连接');

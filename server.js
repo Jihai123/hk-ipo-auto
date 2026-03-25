@@ -57,7 +57,8 @@ const IPO_SPONSORS_JSON = path.join(DATA_DIR, 'ipo-sponsors.json');
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const REACT_DIST_DIR = path.join(__dirname, 'client', 'dist');
 
 // ==================== 保荐人数据 ====================
 
@@ -5809,10 +5810,28 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
-// 静态文件
-app.get(['/', '/hk', '/hk/'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// ==================== 前端静态入口 ====================
+// 1) 保留 public 回退页入口：/legacy
+app.use('/legacy', express.static(PUBLIC_DIR));
+app.get(['/legacy', '/legacy/'], (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
+
+// 2) 默认入口切回 React（Vite 构建产物：client/dist）
+if (fs.existsSync(REACT_DIST_DIR)) {
+  app.use(express.static(REACT_DIST_DIR));
+  app.get('*', (req, res, next) => {
+    // 避免吞掉 API 与 legacy 回退入口
+    if (req.path.startsWith('/api/')) return next();
+    if (req.path === '/legacy' || req.path.startsWith('/legacy/')) return next();
+    res.sendFile(path.join(REACT_DIST_DIR, 'index.html'));
+  });
+} else {
+  console.warn(`[前端] 未找到 React 构建产物: ${REACT_DIST_DIR}，回退到 /legacy 页面`);
+  app.get(['/', '/hk', '/hk/'], (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+}
 
 // ==================== 启动服务 ====================
 
@@ -5823,6 +5842,8 @@ app.listen(PORT, () => {
   console.log(`🚀 港股新股自动评分系统 v3.0`);
   console.log(`${'═'.repeat(60)}`);
   console.log(`📍 服务地址: http://localhost:${PORT}`);
+  console.log(`🖥️  默认前端: ${fs.existsSync(REACT_DIST_DIR) ? 'React(client/dist)' : 'Legacy(public)'}`);
+  console.log(`🆘 回退入口: http://localhost:${PORT}/legacy`);
   console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
   console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
   console.log(`📂 数据来源: ${fs.existsSync(SPONSORS_JSON) ? 'JSON文件' : '内置数据'}`);
