@@ -35,8 +35,11 @@ const { execSync } = require('child_process');
 
 // ==================== V5 新增：etnet 爬虫模块 ====================
 const { crawlIPODetail }      = require('./crawlers/etnet/ipoDetail');
-const { buildIndustryCodeMap } = require('./crawlers/etnet/industryCodeMap');
+const { buildIndustryCodeMap, resolveIndustryNatureCode } = require('./crawlers/etnet/industryCodeMap');
 const { getComparablePE }     = require('./crawlers/etnet/industryPE');
+const { getIPOStaticFieldCache, updateIPOStaticFieldCache } = require('./crawlers/etnet/ipoFieldCache');
+const { resolveFallbackPeerPE } = require('./crawlers/etnet/peFallbacks');
+const { buildDashboard, startDashboardSyncJob } = require('./services/dashboardService');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -693,6 +696,63 @@ function normalizeText(text) {
  * @param {string} sponsorName - 保荐人名称
  * @returns {boolean}
  */
+
+function getLocalUnitContext(block, fallbackCurrency = '人民幣', fallbackUnit = '千元') {
+  if (!block) return { currency: fallbackCurrency, unit: fallbackUnit };
+
+  const hints = [
+    /（?(人民幣|港幣|港元|美元|RMB|HKD|USD)\s*([千百萬億万千百万元亿元]+)?）?/,
+    /單位[：:]?(人民幣|港幣|港元|美元|RMB|HKD|USD)\s*([千百萬億万千百万元亿元]+)?/,
+  ];
+
+  for (const re of hints) {
+    const m = re.exec(block);
+    if (m) {
+      return {
+        currency: m[1],
+        unit: m[2] || fallbackUnit,
+      };
+    }
+  }
+
+  return { currency: fallbackCurrency, unit: fallbackUnit };
+}
+
+function getClosestUnitContext(block, hitIndex, fallbackCurrency = '人民幣', fallbackUnit = '千元') {
+  if (!block) return { currency: fallbackCurrency, unit: fallbackUnit };
+
+  const hints = [
+    /(?:單位[：:]?|[（(])\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)\s*([千百萬億万千百万元亿元]+)?\s*[）)]?/g,
+    /(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)\s*([千百萬億万千百万元亿元]+)\s*[）)]?/g,
+  ];
+
+  let best = null;
+
+  for (const re of hints) {
+    let m;
+    while ((m = re.exec(block)) !== null) {
+      const currency = m[1];
+      const unit = m[2] || fallbackUnit;
+      const distance = hitIndex === undefined || hitIndex === null ? 0 : Math.abs(m.index - hitIndex);
+
+      if (!best || distance < best.distance) {
+        best = { currency, unit, distance };
+      }
+    }
+  }
+
+  if (best) {
+    return { currency: best.currency, unit: best.unit, unitDistance: best.distance };
+  }
+
+  return { currency: fallbackCurrency, unit: fallbackUnit, unitDistance: null };
+}
+
+function extractSnippet(text, index, radius = 80) {
+  if (!text || index === undefined || index === null || index < 0) return '';
+  return text.slice(Math.max(0, index - radius), Math.min(text.length, index + radius)).replace(/\s+/g, ' ').trim();
+}
+
 function matchSponsorName(searchText, sponsorName) {
   // 直接匹配
   if (searchText.includes(sponsorName)) return true;
@@ -1804,7 +1864,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
   }
 
   // ===== 1️⃣ 定位表格区域 =====
-  const anchorMatch = cornerstoneSection.match(/下表載列基石配售的詳情[:：]?/);
+  const anchorMatch = cornerstoneSection.match(/下表載列基石(?:配售|投資)的詳情[:：]?/);
   if (!anchorMatch) {
     console.log('[表格定位] ❌ 没找到表格锚点');
     return [];
@@ -1812,45 +1872,139 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
 
   let tableText = cornerstoneSection.slice(anchorMatch.index, anchorMatch.index + 10000);
 
+  const cleanupInvestorName = (rawName) => {
+    if (!rawName) return '';
+
+    let name = rawName
+      .replace(/\u000c/g, ' ')
+      .replace(/^[\-–—•·,;:，；：\s]+/, '')
+      .replace(/\.{2,}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    name = name
+      .replace(/^(?:[)）]|基石投資者|基石投资者|認購金額|认购金额|數目|数目|百分比|發售股份|发售股份|股份概約|股份概约|股本概約|股本概约)+/g, '')
+      .replace(/^[^A-Za-z\u4e00-\u9fa5（(]+/, '')
+      .trim();
+
+    // 仅删除明显噪音型括号说明；保留机构名中的正常中英文括号内容
+    name = name
+      .replace(/[（(]([^）)]*(?:附註|附注|附表|見附註|见附注|有關|有关|相關|相关|掉期|假設|假设|按發售價|按发售价|超額配股權|超额配股权)[^）)]*)[）)]/g, '')
+      .replace(/[（(]\d+[）)]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // 去掉尾部明显残片
+    name = name
+      .replace(/[，,;；:：·\-–—\s]+$/g, '')
+      .replace(/(?:認購金額|认购金额|數目|数目|百分比|發售股份|发售股份|股份概約|股份概约|股本概約|股本概约).*$/g, '')
+      .trim();
+
+    return name;
+  };
+
+  const isNoisyInvestorName = (name) => {
+    if (!name) return true;
+    if (/^(總計|合計|小計|百萬美元|百万美元|百萬港元|百万港元|美元|港元|人民幣|人民币)$/.test(name)) return true;
+    if (/^[（(][^）)]+[）)]$/.test(name)) return true;
+    if (/^(資本|资本|投資|投资|基金|管理|控股|集團|集团)$/.test(name)) return true;
+    if (/(百分比|認購金額|认购金额|股本概約|股本概约|股份概約|股份概约|發售股份|发售股份|將予認購|将予认购)/.test(name)) return true;
+    if (!/[A-Za-z\u4e00-\u9fa5]/.test(name)) return true;
+    return false;
+  };
+
+  const pushInvestor = (list, seenNames, rawName, amountRaw, sharesRaw, percentRaw) => {
+    const cleanedName = cleanupInvestorName(rawName);
+    if (isNoisyInvestorName(cleanedName)) return;
+
+    const normalizedKey = cleanedName.replace(/\s+/g, '').toLowerCase();
+    if (seenNames.has(normalizedKey)) return;
+
+    const investor = {
+      name: cleanedName,
+      amount: parseFloat(amountRaw),
+      shares: parseInt(String(sharesRaw).replace(/,/g, ''), 10),
+      percent: parseFloat(percentRaw),
+    };
+
+    if (!investor.name || !Number.isFinite(investor.amount) || !Number.isFinite(investor.shares) || !Number.isFinite(investor.percent)) {
+      return;
+    }
+
+    seenNames.add(normalizedKey);
+    list.push(investor);
+  };
+
+  const investors = [];
+  const seenNames = new Set();
+  const rawTableText = tableText;
+
+  // ===== 2️⃣.1 优先按行提取，保留多行机构全名 =====
+  const lines = rawTableText
+    .replace(/–\s*\d+\s*–/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/\u000c/g, '').trim())
+    .filter(Boolean);
+
+  const lineRegex = /(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s+((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s+(\d+\.\d+)%/;
+  let pendingNameParts = [];
+
+  for (const line of lines) {
+    if (/^基石投資者$|^基於發售價|^假設超額配股權|^總計/.test(line)) {
+      pendingNameParts = [];
+      continue;
+    }
+
+    const match = line.match(lineRegex);
+    if (!match) {
+      if (!/^(認購金額|數目|百分比|將予認購的|發售股份|股份概約|股本概約)/.test(line)) {
+        pendingNameParts.push(line.replace(/\.{2,}/g, ' ').trim());
+      }
+      continue;
+    }
+
+    const inlineName = match[1].replace(/\.{2,}/g, ' ').trim();
+    const combinedName = [...pendingNameParts, inlineName].filter(Boolean).join(' ');
+    pendingNameParts = [];
+
+    pushInvestor(investors, seenNames, combinedName, match[2], match[3], match[4]);
+  }
+
   // ===== 2️⃣ PDF 清洗 =====
   tableText = tableText
-    .replace(/\.{2,}/g, ' ')          // 点线
-    .replace(/–\s*\d+\s*–/g, ' ')     // 页码
-    .replace(/\s+/g, ' ');            // 压缩空白
+    .replace(/\.{2,}/g, ' ')
+    .replace(/–\s*\d+\s*–/g, ' ')
+    .replace(/\u000c/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  tableText = tableText.replace(
+    /^.*?基石投資者認購金額\(1\)數目\(2\)百分比百分比百分比百分比/,
+    ''
+  );
 
   console.log('[表格文本预览]', tableText.slice(0, 400));
 
   // ===== 3️⃣ 核心识别正则（全局扫描） =====
-  /**
-   * 结构：
-   * 名字 + 空格 + 金额 + 股份数 + 百分比%
-   *
-   * 例如：
-   * Oaktree 30 5,106,200 5.45%
-   * 歐萬達基金 20 3,404,100 3.64%
-   */
-  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3})\s*([\d,]{6,})\s*\d+\.\d+%/g;
+  const compactRowPattern = /([A-Za-z\u4e00-\u9fa5（）()&.\-·,，\s]{2,120}?)\s*(\d{1,3}(?:\.\d+)?)\s*(?:百萬|百万)?(?:美元|港元|人民幣|人民币)\s*((?:\d{1,3}(?:,\d{3})+)|\d{6,})\s*(\d+\.\d+)%/g;
 
-  const investors = [];
-  let match;
+  let tableMatch;
+  while ((tableMatch = compactRowPattern.exec(tableText)) !== null) {
+    const rawName = tableMatch[1]
+      .replace(/\s+/g, ' ')
+      .replace(/(?:下表載列基石(?:配售|投資)的詳情[:：]?)$/g, '')
+      .trim();
 
-  while ((match = rowRegex.exec(tableText)) !== null) {
-    let name = match[1].replace(/\s+/g, ' ').trim();
+    if (rawName.includes('總計')) continue;
 
-    // 过滤總計
-    if (name.includes('總計')) continue;
-
-    console.log(`[识别] ✅ ${name}`);
-    investors.push(name);
+    pushInvestor(investors, seenNames, rawName, tableMatch[2], tableMatch[3], tableMatch[4]);
+    console.log(`[识别] ✅ ${rawName}`);
   }
 
-  const unique = [...new Set(investors)];
-
-  console.log(`\n[基石投资者] 🎯 成功识别 ${unique.length} 个基石投资者`);
-  console.log(unique);
+  console.log(`\n[基石投资者] 🎯 成功识别 ${investors.length} 个基石投资者`);
+  console.log(investors.map(inv => inv.name));
   console.log('[基石投资者] ====== 解析结束 ======\n');
 
-  return unique.map(name => ({ name }));
+  return investors;
 }
 
 // 使用示例
@@ -1871,7 +2025,7 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
  *   C  EPS 反推（净利润 / 每股收益）
  * @returns {{ totalShares: number|null, confidence: string, source: string }}
  */
-function extractTotalShares(text) {
+function extractTotalShares(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
 
   // 辅助：从数字字符串解析整数
@@ -1905,7 +2059,7 @@ function extractTotalShares(text) {
         const n = parseShares(hit[1]);
         if (isReasonable(n)) {
           console.log(`[totalShares] 策略A命中: ${n.toLocaleString()}股`);
-          return { totalShares: n, confidence: 'high', source: '股本章节(緊隨全球發售完成後)' };
+          return { totalShares: n, confidence: 'high', source: '股本章节(緊隨全球發售完成後)', snippet: nearby.slice(0, 200) };
         }
       }
     }
@@ -1923,7 +2077,7 @@ function extractTotalShares(text) {
       const n = parseShares(hit[1]);
       if (isReasonable(n)) {
         console.log(`[totalShares] 策略B命中: ${n.toLocaleString()}股`);
-        return { totalShares: n, confidence: 'medium', source: '股本結構表格' };
+        return { totalShares: n, confidence: 'medium', source: '股本結構表格', snippet: nearby.slice(0, 200) };
       }
     }
   }
@@ -1932,126 +2086,794 @@ function extractTotalShares(text) {
   const epsHit = /每股基本盈利[^\d]*([\d.]+)港仙/.exec(noSpace)
               || /每股盈利[^\d]*([\d.]+)仙/.exec(noSpace);
   if (epsHit) {
-    const profit = extractNetProfit(text);
+    const profit = extractNetProfit(text, {
+      debug: options.debug,
+      marketCapHKD: options.marketCapHKD,
+    });
     if (profit && profit.hkdAmount > 0) {
       const epsHKD = parseFloat(epsHit[1]) / 100; // 港仙→港元
       if (epsHKD > 0) {
         const shares = Math.round(profit.hkdAmount / epsHKD);
         if (isReasonable(shares)) {
           console.log(`[totalShares] 策略C(EPS反推): ${shares.toLocaleString()}股`);
-          return { totalShares: shares, confidence: 'low', source: 'EPS反推' };
+          return { totalShares: shares, confidence: 'low', source: 'EPS反推', snippet: extractSnippet(noSpace, epsHit.index, 120) };
         }
       }
     }
   }
 
   console.log('[totalShares] 未提取到总股本');
-  return { totalShares: null, confidence: 'none', source: '未找到' };
+  return { totalShares: null, confidence: 'none', source: '未找到', snippet: '' };
 }
 
 // ==================== V5：PDF 净利润提取 ====================
-/**
- * 从招股书提取最近完整财年归属母公司净利润（转换为港元）
- *
- * 优先级：股東應佔溢利 > 本年溢利 > 年內溢利 > 純利
- * 单位识别：人民币千元（最常见）/ 港元百万 / 港元千元
- * @returns {{ hkdAmount: number|null, currency: string, unit: string, source: string }}
- */
-function extractNetProfit(text) {
+function extractNetProfit(text, options = {}) {
   const noSpace = text.replace(/\s+/g, '');
+  const debug = options.debug !== false;
+  const marketCapHKD = Number.isFinite(options.marketCapHKD) ? options.marketCapHKD : null;
+  const RECENT_YEAR_SEMANTIC_THRESHOLD = 999;
+  const RECENT_YEAR_UNIT_THRESHOLD = 999;
+  const RECENT_YEAR_SCORE_THRESHOLD = 8;
+  const FX_RATES = { HKD: 1, RMB: 1.1, USD: 7.8 };
+  const SOFT_PENALTY_RULES = [
+    { re: /revenue|收益|收入/i, code: 'revenue_context', score: -35 },
+    { re: /grossprofit|毛利/i, code: 'gross_profit_context', score: -120 },
+    { re: /每股|eps|earningspershare/i, code: 'eps_context', score: -12 },
+    { re: /附註|附注|note\d*/i, code: 'note_context', score: -10 },
+    { re: /adjusted|經調整|经调整|非ifrs/i, code: 'adjusted_context', score: -55 },
+    { re: /分部|segment/i, code: 'segment_context', score: -28 },
+    { re: /beforetax|pretax|除稅前|除税前/i, code: 'before_tax_context', score: -80 },
+    { re: /taxexpense|所得稅|所得税/i, code: 'tax_expense_context', score: -80 },
+    { re: /continuingoperations|持續經營|持续经营/i, code: 'continuing_operations_context', score: -65 },
+  ];
+  const HARD_REJECT_RULES = [
+    { re: /beforetax|pretax|除稅前|除税前/i, code: 'before_tax' },
+    { re: /operatingprofit|經營溢利|经营利润/i, code: 'operating_profit' },
+    { re: /adjustedebitda|ebitda/i, code: 'ebitda' },
+    { re: /taxexpense|所得稅|所得税/i, code: 'tax_expense' },
+    { re: /continuingoperations|持續經營|持续经营/i, code: 'continuing_operations' },
+    { re: /discontinuedoperations|已終止經營|已终止经营/i, code: 'discontinued_operations' },
+    { re: /segmentresult|分部業績|分部业绩/i, code: 'segment_result' },
+    { re: /adjustedprofit|經調整利潤|经调整利润/i, code: 'adjusted_profit' },
+    { re: /non-ifrs|nonifrs|非ifrs/i, code: 'non_ifrs' },
+    { re: /excludinglistingexpenses|扣除上市開支前|扣除上市开支前/i, code: 'excluding_listing_expenses' },
+  ];
+  const PROFIT_PATTERNS = [
+    { re: /profitattributabletoowners(?:oftheparent|ofthecompany)?[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit attributable to owners', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /profitattributabletoequityshareholders[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit attributable to equity shareholders', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /本公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '本公司擁有人應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /母公司擁有人應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '母公司擁有人應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /本公司權益股東應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '本公司權益股東應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /股東應佔(?:年內|期內)?(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '股東應佔利潤', fieldTier: 1, attributable: true, impliedLoss: false },
+    { re: /profitfortheyear[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit for the year', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /profitfortheperiod[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'profit for the period', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /年內(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '年內利潤', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /期內(?:溢利|利潤|利润|虧損|亏损)[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '期內利潤', fieldTier: 2, attributable: false, impliedLoss: false },
+    { re: /netprofit[^\d(（-]*([\-(（]?\d[\d,.]*)/ig, label: 'net profit', fieldTier: 3, attributable: false, impliedLoss: false },
+    { re: /(?:^|[(:：])profit[^\d(（-]{0,20}([\-(（]?\d[\d,.]*)/ig, label: 'profit', fieldTier: 3, attributable: false, impliedLoss: false },
+    { re: /利潤[^\d(（-]*([\-(（]?\d[\d,.]*)/gi, label: '利潤', fieldTier: 3, attributable: false, impliedLoss: false },
+  ];
 
-  // 匹配负数（亏损）时捕获符号
-  const NUM_RE = /[（(]?([\d,]+)[）)]?/;
+  function locateFinancialSections() {
+    const summarySection = extractSection(
+      noSpace,
+      [/財務資料概要/i, /財務資料撮要/i, /主要財務資料/i, /财务资料概要/i, /FinancialSummary/i, /SummaryofFinancialInformation/i],
+      [/風險因素/i, /风险因素/i, /業務/i, /业务/i, /BUSINESS/i],
+      24000,
+      true
+    );
+    const incomeSection = extractSection(
+      noSpace,
+      [/綜合損益表/i, /综合损益表/i, /綜合全面收益表/i, /ConsolidatedStatementsofProfitorLoss/i, /ConsolidatedIncomeStatement/i],
+      [/綜合財務狀況表/i, /综合财务状况表/i, /ConsolidatedStatementsofFinancialPosition/i],
+      22000,
+      true
+    );
+    const sections = [];
+    if (incomeSection) sections.push({ text: incomeSection, source: '財務表格', sourceLevel: 'table', baseConfidence: 'high' });
+    if (summarySection) sections.push({ text: summarySection, source: '財務章節', sourceLevel: 'section', baseConfidence: 'high' });
+    sections.push({ text: noSpace, source: '全文回退', sourceLevel: 'text_fallback', baseConfidence: 'low' });
+    return sections;
+  }
 
-  /**
-   * 将原始数字字符串 + 单位描述 → 港元数值
-   * 汇率简化：1 RMB ≈ 1.10 HKD（保守估算）
-   */
-  function toHKD(raw, currency, unit) {
-    const n = parseInt(raw.replace(/,/g, ''), 10);
-    if (isNaN(n) || n <= 0) return null;
+  function detectYear(context) {
+    const yearMatches = [...context.matchAll(/20\d{2}/g)].map(m => parseInt(m[0], 10));
+    return yearMatches.length ? Math.max(...yearMatches) : null;
+  }
+
+  function detectPeriodType(context) {
+    if (/(sixmonthsended|ninemonthsended|中期|截至.*?[六6]個月|截至.*?六个月|截至.*?9個月|截至.*?9个月)/i.test(context)) return 'interim';
+    if (/(yearended|截至\d{4}年\d{1,2}月\d{1,2}日止年度|截至12月31日止年度|截至.*?止年度)/i.test(context)) return 'annual';
+    return 'unknown';
+  }
+
+  function parseNumericValue(raw) {
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    const negative = /[\-(（(]/.test(trimmed) && /[\d]/.test(trimmed);
+    const n = parseFloat(trimmed.replace(/[(),，（）]/g, '').replace(/-/g, ''));
+    if (!Number.isFinite(n)) return null;
+    return negative ? -n : n;
+  }
+
+  function detectUnit(block) {
+    const unitPatterns = [
+      { re: /RMB['’]?000/i, currency: 'RMB', unit: "RMB'000" },
+      { re: /HK\$?\s*million/i, currency: 'HKD', unit: 'HK$ million' },
+      { re: /US\$?\s*million/i, currency: 'USD', unit: 'US$ million' },
+      { re: /人民幣百萬元|人民币百万元/i, currency: 'RMB', unit: '人民幣百萬元' },
+      { re: /人民幣千元|人民币千元/i, currency: 'RMB', unit: '人民幣千元' },
+      { re: /港元百萬元|港幣百萬元|港币百万元/i, currency: 'HKD', unit: '港元百萬元' },
+      { re: /港元千元|港幣千元|港币千元/i, currency: 'HKD', unit: '港元千元' },
+      { re: /美元百萬元/i, currency: 'USD', unit: '美元百萬元' },
+      { re: /美元千元/i, currency: 'USD', unit: '美元千元' },
+      { re: /千元/i, currency: null, unit: '千元' },
+      { re: /百萬元|百万元|million/i, currency: null, unit: '百萬元' },
+      { re: /億元|亿元/i, currency: null, unit: '億元' },
+    ];
+    for (const item of unitPatterns) {
+      if (item.re.test(block)) return item;
+    }
+    return null;
+  }
+
+  function resolveTableUnitContext(sectionText, hitIndex) {
+    if (!sectionText || hitIndex === null || hitIndex === undefined) return null;
+    const scanStart = Math.max(0, hitIndex - 2400);
+    const scanEnd = Math.min(sectionText.length, hitIndex + 240);
+    const tableWindow = sectionText.slice(scanStart, scanEnd);
+    const hitWindow = sectionText.slice(Math.max(0, hitIndex - 520), Math.min(sectionText.length, hitIndex + 220));
+    const tableStructureScore = [
+      /(股份溢價|留存利潤|法定盈餘儲備|總計|權益|儲備變動)/.test(tableWindow) ? 1 : 0,
+      /(於20\d{2}年\d{1,2}月\d{1,2}日|截至20\d{2}年|年內利潤及其他全面收益|期內利潤及其他全面收益|轉撥|確認為分派的股息)/.test(tableWindow) ? 1 : 0,
+      ((tableWindow.match(/\d{1,3},\d{3}/g) || []).length >= 8) ? 1 : 0,
+      !/[。；:：]{2,}/.test(hitWindow) && !/(增加|減少|上調|下調|基點|敏感度|風險)/.test(hitWindow) ? 1 : 0,
+    ].reduce((sum, item) => sum + item, 0);
+    if (tableStructureScore < 3) return null;
+
+    const unitPatterns = [
+      /(?:單位[：:]?|[（(])\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)?\s*([千百萬億万千百万元亿元]+|million)?\s*(?:,?百分比除外)?\s*[）)]?/g,
+      /(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)\s*([千百萬億万千百万元亿元]+|million)/g,
+      /([千百萬億万千百万元亿元]+|million)\s*(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)/g,
+    ];
+
+    let best = null;
+    for (const re of unitPatterns) {
+      let match;
+      while ((match = re.exec(tableWindow)) !== null) {
+        const tokenA = match[1] || null;
+        const tokenB = match[2] || null;
+        const currency = /(人民幣|人民币|港幣|港元|美元|RMB|CNY|HKD|USD)/i.test(tokenA || '') ? tokenA : tokenB;
+        const unit = currency === tokenA ? tokenB : tokenA;
+        if (!unit && !currency) continue;
+        const absoluteIndex = scanStart + match.index;
+        const distance = Math.abs(hitIndex - absoluteIndex);
+        const isPreceding = absoluteIndex <= hitIndex;
+        const score = tableStructureScore * 20 + (isPreceding ? 40 : 0) - Math.min(distance / 10, 120);
+        if (!best || score > best.score) {
+          best = {
+            currency: currency || null,
+            unit: unit || null,
+            unitDistance: distance,
+            score,
+          };
+        }
+      }
+    }
+
+    if (!best || !best.unit) return null;
+    return best;
+  }
+
+  function resolveContext(sectionText, hitIndex) {
+    const nearbyStart = Math.max(0, hitIndex - 260);
+    const nearbyEnd = Math.min(sectionText.length, hitIndex + 260);
+    const nearby = sectionText.slice(nearbyStart, nearbyEnd);
+    const localHitIndex = Math.min(260, hitIndex - nearbyStart);
+    const fallback = getLocalUnitContext(noSpace, null, null);
+    const close = getClosestUnitContext(nearby, localHitIndex, fallback.currency, fallback.unit);
+    const localUnit = detectUnit(nearby);
+    const tableUnit = resolveTableUnitContext(sectionText, hitIndex);
+    const sectionUnit = detectUnit(sectionText.slice(0, Math.min(sectionText.length, 400)));
+    const globalUnit = detectUnit(noSpace.slice(0, 1200));
+
+    const resolvedCurrency = tableUnit?.currency || localUnit?.currency || close.currency || sectionUnit?.currency || globalUnit?.currency || fallback.currency || null;
+    const resolvedUnit = tableUnit?.unit || localUnit?.unit || close.unit || sectionUnit?.unit || globalUnit?.unit || fallback.unit || null;
+    const unitSource = tableUnit?.unit ? 'table_header' : localUnit ? 'nearby' : close?.unit ? 'nearby' : sectionUnit ? 'table_header' : globalUnit ? 'paragraph' : 'unresolved';
+    const localUnitDistance = tableUnit?.unitDistance ?? close?.unitDistance ?? null;
+    const hasStrongUnitLocality = unitSource === 'table_header'
+      || (close?.unit && close.unitDistance !== null && close.unitDistance <= 80);
+    return {
+      currency: resolvedCurrency,
+      unit: resolvedUnit,
+      unitSource,
+      localUnitDistance,
+      hasStrongUnitLocality,
+      unitResolved: !!resolvedUnit,
+      currencyResolved: !!resolvedCurrency,
+    };
+  }
+
+  function normalizeProfitCandidate(candidate) {
+    const numericValue = parseNumericValue(candidate.rawValue);
+    if (!Number.isFinite(numericValue)) {
+      return { ...candidate, normalizedValue: null, netProfitHKD: null, reason: 'invalid_number' };
+    }
+
+    const resolvedUnit = hasResolvableUnit(candidate);
+    const resolvedCurrency = hasResolvableCurrency(candidate);
 
     let multiplier = 1;
-    if (/千/.test(unit)) multiplier = 1e3;
-    else if (/百萬|百万/.test(unit)) multiplier = 1e6;
-    else if (/億|亿/.test(unit)) multiplier = 1e8;
+    if (/千|'000/i.test(candidate.unit || '')) multiplier = 1e3;
+    else if (/百萬|百万|million/i.test(candidate.unit || '')) multiplier = 1e6;
+    else if (/億|亿/i.test(candidate.unit || '')) multiplier = 1e8;
 
-    const baseAmount = n * multiplier;
+    let currencyCode = 'HKD';
+    if (/人民幣|人民币|RMB|CNY/i.test(candidate.currency || '')) currencyCode = 'RMB';
+    else if (/美元|USD|US\$/i.test(candidate.currency || '')) currencyCode = 'USD';
+    else if (/港幣|港元|HKD|HK\$/i.test(candidate.currency || '')) currencyCode = 'HKD';
 
-    if (/人民幣|人民币|RMB|CNY/.test(currency)) return Math.round(baseAmount * 1.10);
-    if (/港/.test(currency)) return baseAmount;
-    if (/美/.test(currency)) return Math.round(baseAmount * 7.80);
-    return baseAmount; // 未知货币，原值返回
+    const normalizedValue = Math.round(numericValue * multiplier);
+    const netProfitHKD = Math.round(normalizedValue * (FX_RATES[currencyCode] || 1));
+    return {
+      ...candidate,
+      currency: currencyCode,
+      normalizedValue,
+      netProfitHKD,
+      unitResolved: resolvedUnit,
+      currencyResolved: resolvedCurrency,
+    };
   }
 
-  // 识别财务报告单位（页面通常有 "（人民幣千元）" 这样的表头）
-  const unitHint = /（?(人民幣|港幣|港元|美元|RMB|HKD|USD)([千百萬億千万亿元]+)?）?/.exec(noSpace);
-  const defaultCurrency = unitHint ? unitHint[1] : '人民幣';
-  const defaultUnit     = unitHint ? (unitHint[2] || '千元') : '千元';
+  function digitLength(rawValue) {
+    return String(rawValue || '').replace(/\D/g, '').length;
+  }
 
-  // ── 策略 A：搜索財務資料概要章节 ──
-  const summaryAnchors = [
-    /財務資料概要/,
-    /財務資料撮要/,
-    /主要財務資料/,
-    /财务资料概要/,
-  ];
+  function hasResolvableUnit(candidate) {
+    return /千|'000|百萬|百万|million|億|亿/i.test(candidate.unit || '');
+  }
 
-  const profitPatterns = [
-    { re: /股東應佔溢利[^\d（(]*([\d,]+)/, label: '股東應佔溢利', isLoss: false },
-    { re: /本公司擁有人應佔溢利[^\d（(]*([\d,]+)/, label: '本公司擁有人應佔溢利', isLoss: false },
-    { re: /股東應佔虧損[^\d（(]*([\d,]+)/, label: '股東應佔虧損', isLoss: true },
-    { re: /本年溢利[^\d（(]*([\d,]+)/, label: '本年溢利', isLoss: false },
-    { re: /年內溢利[^\d（(]*([\d,]+)/, label: '年內溢利', isLoss: false },
-    { re: /期內溢利[^\d（(]*([\d,]+)/, label: '期內溢利', isLoss: false },
-    { re: /純利[^\d（(]*([\d,]+)/, label: '純利', isLoss: false },
-    { re: /年內虧損[^\d（(]*([\d,]+)/, label: '年內虧損', isLoss: true },
-  ];
+  function hasResolvableCurrency(candidate) {
+    return /人民幣|人民币|RMB|CNY|美元|USD|US\$|港幣|港元|HKD|HK\$/i.test(candidate.currency || '');
+  }
 
-  for (const anchor of summaryAnchors) {
-    const m = anchor.exec(noSpace);
-    if (!m) continue;
-    const section = noSpace.slice(m.index, m.index + 8000);
+  function isCredibleProfitYear(candidate) {
+    return Number.isInteger(candidate.year) && candidate.year >= 2018 && candidate.year <= new Date().getUTCFullYear() + 1;
+  }
 
-    for (const { re, label, isLoss } of profitPatterns) {
-      const hit = re.exec(section);
-      if (!hit) continue;
-      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
-      if (!hkd) continue;
-      const amount = isLoss ? -hkd : hkd;
-      console.log(`[netProfit] 策略A命中(${label}): ${amount.toLocaleString()} HKD`);
-      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `財務概要(${label})` };
+  function validateProfitNumericStructure(candidate, marketCapHKD = null) {
+    const rejectFlags = [...(candidate.rejectFlags || [])];
+    const rawValue = String(candidate.rawValue || '').trim();
+    const numericValue = parseNumericValue(rawValue);
+    const absNumericValue = Math.abs(numericValue);
+    const digits = digitLength(rawValue);
+    const commaSegments = rawValue.split(/[,\uFF0C]/).filter(Boolean);
+    const commaCount = Math.max(0, commaSegments.length - 1);
+    const hasMergedPattern = /^\d{1,3}(,\d{3}){4,}$/.test(rawValue);
+    const hasInvalidThousandsGrouping = commaCount > 0
+      && commaSegments.slice(1).some(segment => segment.replace(/\D/g, '').length !== 3);
+    const mergedNumberDetected = hasMergedPattern
+      || (digits > 15 && commaCount > 3)
+      || (commaCount > 3 && hasInvalidThousandsGrouping)
+      || (commaCount > 0 && hasInvalidThousandsGrouping && digits >= 7)
+      || (digits >= 8 && /^20\d{2},20\d{2}/.test(rawValue));
+
+    if (mergedNumberDetected) rejectFlags.push('merged_number_suspected');
+
+    const isYearLikeValue = Number.isFinite(numericValue)
+      && Number.isInteger(absNumericValue)
+      && absNumericValue >= 2000
+      && absNumericValue <= new Date().getUTCFullYear() + 1;
+    if (isYearLikeValue) rejectFlags.push('year_value_suspected');
+
+    const isSmallPlainNumber = Number.isFinite(numericValue)
+      && absNumericValue <= 24
+      && !hasResolvableUnit(candidate)
+      && candidate.fieldTier <= 3;
+    if (isSmallPlainNumber) rejectFlags.push('small_number_suspected');
+
+    const weakUnitLocalitySmallValue = Number.isFinite(numericValue)
+      && absNumericValue <= 99
+      && candidate.fieldTier >= 2
+      && !candidate.hasStrongUnitLocality;
+    if (weakUnitLocalitySmallValue) rejectFlags.push('weak_unit_locality_small_value');
+
+    const unresolvedUnitSuspicious = Number.isFinite(numericValue)
+      && !hasResolvableUnit(candidate)
+      && (
+        candidate.periodType === 'annual'
+        || candidate.label === '利潤'
+        || candidate.label === 'profit'
+        || candidate.fieldTier >= 3
+        || absNumericValue <= 9999
+      );
+    if (unresolvedUnitSuspicious) rejectFlags.push('unresolved_unit_suspected');
+
+    const genericProfitLabel = candidate.label === '利潤' || candidate.label === 'profit';
+    const profitTooSmallForAnnual = (candidate.periodType === 'annual' || genericProfitLabel)
+      && Number.isFinite(candidate.netProfitHKD)
+      && absNumericValue > 0
+      && (
+        Math.abs(candidate.netProfitHKD) < 1e6
+        || (!hasResolvableUnit(candidate) && absNumericValue < 1000)
+      );
+    if (profitTooSmallForAnnual) rejectFlags.push('profit_too_small_for_annual');
+
+    const annualTinyPlainValue = (candidate.periodType === 'annual' || genericProfitLabel)
+      && Number.isFinite(numericValue)
+      && absNumericValue > 0
+      && absNumericValue <= 999
+      && (!hasResolvableUnit(candidate) || !candidate.hasStrongUnitLocality);
+    if (annualTinyPlainValue) rejectFlags.push('annual_profit_tiny_plain_value');
+
+    const profitOutlier = digits > 15
+      || (Number.isFinite(candidate.netProfitHKD) && Math.abs(candidate.netProfitHKD) > 1e13)
+      || (Number.isFinite(candidate.netProfitHKD) && Number.isFinite(marketCapHKD) && marketCapHKD > 0
+        && Math.abs(candidate.netProfitHKD) > marketCapHKD * 50);
+    if (profitOutlier) rejectFlags.push('profit_outlier');
+
+    const hardRejectFlags = [
+      'merged_number_suspected',
+      'year_value_suspected',
+      'weak_unit_locality_small_value',
+      'unresolved_unit_suspected',
+      'annual_profit_tiny_plain_value',
+      'profit_outlier',
+    ];
+    const vetoFlags = ['profit_too_small_for_annual'];
+
+    return {
+      rejectFlags: Array.from(new Set(rejectFlags)),
+      mergedNumberDetected,
+      profitDigitLength: digits,
+      hardReject: hardRejectFlags.some(flag => rejectFlags.includes(flag)),
+      strongVeto: vetoFlags.some(flag => rejectFlags.includes(flag)),
+    };
+  }
+
+  function extractNetProfitCandidates() {
+    const candidates = [];
+    for (const section of locateFinancialSections()) {
+      for (const pattern of PROFIT_PATTERNS) {
+        pattern.re.lastIndex = 0;
+        let hit;
+        while ((hit = pattern.re.exec(section.text)) !== null) {
+          const snippet = extractSnippet(section.text, hit.index, 240);
+          const leadingContext = section.text.slice(Math.max(0, hit.index - 120), hit.index + 80);
+          const context = resolveContext(section.text, hit.index);
+          const labelText = hit[0] || pattern.label;
+          const year = detectYear(snippet);
+          const periodType = detectPeriodType(`${snippet}${leadingContext}`);
+          const rawValue = hit[1];
+          const isLoss = /虧損|亏损|loss/i.test(labelText) || /^[（(-]/.test(String(rawValue || '').trim());
+          candidates.push({
+            label: pattern.label,
+            matchedText: labelText,
+            rawValue,
+            unit: context.unit,
+            currency: context.currency,
+            year,
+            periodType,
+            source: section.source,
+            sourceLevel: section.sourceLevel,
+            confidence: section.baseConfidence,
+            fieldTier: pattern.fieldTier,
+            attributable: pattern.attributable,
+            snippet,
+            contextSnippet: leadingContext,
+            penalties: [],
+            rejectFlags: [],
+            rejectFlag: false,
+            isLoss,
+            unitSource: context.unitSource,
+            localUnitDistance: context.localUnitDistance,
+            hasStrongUnitLocality: context.hasStrongUnitLocality,
+            unitResolved: context.unitResolved,
+            currencyResolved: context.currencyResolved,
+          });
+        }
+      }
     }
+    return candidates.map(normalizeProfitCandidate);
   }
 
-  // ── 策略 B：搜索"所得稅開支"向下找净利润 ──
-  const taxIdx = noSpace.indexOf('所得稅開支');
-  if (taxIdx !== -1) {
-    const after = noSpace.slice(taxIdx, taxIdx + 500);
-    for (const { re, label, isLoss } of profitPatterns) {
-      const hit = re.exec(after);
-      if (!hit) continue;
-      const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
-      if (!hkd) continue;
-      const amount = isLoss ? -hkd : hkd;
-      console.log(`[netProfit] 策略B命中(${label}): ${amount.toLocaleString()} HKD`);
-      return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `所得稅附近(${label})` };
+  function scoreProfitCandidate(candidate, marketCapHKD = null) {
+    let score = 0;
+    let semanticScore = 0;
+    let yearScore = 0;
+    let unitScore = 0;
+    let sourceScore = 0;
+
+    semanticScore += ({ 1: 90, 2: 48, 3: 14 }[candidate.fieldTier] || 0);
+    if (candidate.attributable) semanticScore += 30;
+    if (candidate.periodType === 'annual') semanticScore += 40;
+    if (candidate.periodType === 'interim') semanticScore -= 55;
+
+    if (isCredibleProfitYear(candidate)) {
+      yearScore += 26;
+      yearScore += Math.min(8, Math.max(0, candidate.year - 2021));
+    } else if (candidate.year) {
+      yearScore -= 22;
+    } else {
+      yearScore -= 28;
     }
+
+    if (candidate.unitResolved) unitScore += 32;
+    else unitScore -= 42;
+    if (candidate.currencyResolved) unitScore += 10;
+    if (candidate.hasStrongUnitLocality) unitScore += 16;
+    if (candidate.unitSource === 'nearby') unitScore += 10;
+    else if (candidate.unitSource === 'table_header') unitScore += 6;
+    else if (candidate.unitSource === 'paragraph') unitScore += 1;
+    if (!candidate.currencyResolved) unitScore -= 6;
+
+    sourceScore += ({ table: 18, section: 10, text_fallback: 2, etnet_fallback: 0 }[candidate.sourceLevel] || 0);
+
+    const penaltyText = `${candidate.snippet}${candidate.contextSnippet}${candidate.matchedText}`;
+    for (const rule of SOFT_PENALTY_RULES) {
+      if (rule.re.test(penaltyText)) {
+        candidate.penalties.push({ code: rule.code, score: rule.score });
+        semanticScore += rule.score;
+      }
+    }
+    for (const rule of HARD_REJECT_RULES) {
+      if (rule.re.test(penaltyText)) {
+        candidate.rejectFlags.push(rule.code);
+        candidate.rejectFlag = true;
+      }
+    }
+
+    const penaltyCodes = new Set((candidate.penalties || []).map(p => p.code));
+    if (penaltyCodes.has('gross_profit_context')) {
+      candidate.rejectFlags.push('gross_profit_context');
+      candidate.rejectFlag = true;
+    }
+    if (penaltyCodes.has('revenue_context')) semanticScore -= 12;
+    if (penaltyCodes.has('adjusted_context')) semanticScore -= 18;
+    if (penaltyCodes.has('before_tax_context')) candidate.strongVeto = true;
+    if (penaltyCodes.has('tax_expense_context') || penaltyCodes.has('continuing_operations_context')) semanticScore -= 12;
+
+    if (!Number.isFinite(candidate.netProfitHKD) || candidate.netProfitHKD === null) {
+      candidate.rejectFlags.push('invalid_amount');
+      candidate.rejectFlag = true;
+      semanticScore -= 100;
+    }
+    if (/每股|eps|earningspershare/i.test(candidate.matchedText)) {
+      candidate.rejectFlags.push('eps_like');
+      candidate.rejectFlag = true;
+    }
+
+    const numericValidation = validateProfitNumericStructure(candidate, marketCapHKD);
+    candidate.rejectFlags = Array.from(new Set([...(candidate.rejectFlags || []), ...numericValidation.rejectFlags]));
+    candidate.rejectFlag = candidate.rejectFlag || numericValidation.hardReject || candidate.rejectFlags.length > 0;
+    candidate.strongVeto = !!candidate.strongVeto || !!numericValidation.strongVeto;
+    candidate.mergedNumberDetected = numericValidation.mergedNumberDetected;
+    candidate.profitDigitLength = numericValidation.profitDigitLength;
+
+    score = semanticScore + yearScore + unitScore + sourceScore;
+
+    return {
+      ...candidate,
+      score,
+      semanticScore,
+      yearScore,
+      unitScore,
+      sourceScore,
+      semanticPurityScore: semanticScore + unitScore + yearScore,
+    };
   }
 
-  // ── 策略 C：全文搜索 ──
-  for (const { re, label, isLoss } of profitPatterns) {
-    const hit = re.exec(noSpace);
-    if (!hit) continue;
-    const hkd = toHKD(hit[1], defaultCurrency, defaultUnit);
-    if (!hkd) continue;
-    const amount = isLoss ? -hkd : hkd;
-    console.log(`[netProfit] 策略C命中(${label}): ${amount.toLocaleString()} HKD`);
-    return { hkdAmount: amount, currency: defaultCurrency, unit: defaultUnit, source: `全文搜索(${label})` };
+  function chooseBestProfitCandidate(candidates) {
+    const recentYearDecision = {
+      triggered: false,
+      candidateYears: [],
+      selectedYear: null,
+    };
+    const STRUCTURED_SOURCE_LEVELS = new Set(['table', 'section']);
+    const isAnnualLikeCandidate = (candidate) => !!candidate
+      && candidate.periodType !== 'interim'
+      && Number.isFinite(candidate.year)
+      && (candidate.periodType === 'annual' || candidate.periodType === 'unknown');
+    const canApplyRecentYearTieBreak = (a, b) => {
+      if (!a || !b) return false;
+      if (!isAnnualLikeCandidate(a) || !isAnnualLikeCandidate(b)) return false;
+      if (a.rejectFlag || b.rejectFlag || a.strongVeto || b.strongVeto) return false;
+      if (!Number.isFinite(a.year) || !Number.isFinite(b.year)) return false;
+      if (Math.abs((a.semanticScore || 0) - (b.semanticScore || 0)) >= RECENT_YEAR_SEMANTIC_THRESHOLD) return false;
+      if (Math.abs((a.unitScore || 0) - (b.unitScore || 0)) >= RECENT_YEAR_UNIT_THRESHOLD) return false;
+      return true;
+    };
+    const getRecentYearBonus = (candidate, peers = []) => {
+      if (!Number.isFinite(candidate?.year)) return 0;
+      const years = peers.map(item => item?.year).filter(Number.isFinite);
+      if (!years.length) return 0;
+      return candidate.year === Math.max(...years) ? 1 : 0;
+    };
+    const sorted = [...candidates].sort((a, b) => {
+      if ((a.rejectFlag ? 1 : 0) !== (b.rejectFlag ? 1 : 0)) return a.rejectFlag ? 1 : -1;
+      if ((a.strongVeto ? 1 : 0) !== (b.strongVeto ? 1 : 0)) return a.strongVeto ? 1 : -1;
+      if ((b.semanticPurityScore || 0) !== (a.semanticPurityScore || 0)) return (b.semanticPurityScore || 0) - (a.semanticPurityScore || 0);
+      if ((b.unitScore || 0) !== (a.unitScore || 0)) return (b.unitScore || 0) - (a.unitScore || 0);
+      if ((b.yearScore || 0) !== (a.yearScore || 0)) return (b.yearScore || 0) - (a.yearScore || 0);
+      if (canApplyRecentYearTieBreak(a, b) && a.year !== b.year) return b.year - a.year;
+      if (a.periodType !== b.periodType) {
+        if (a.periodType === 'annual') return -1;
+        if (b.periodType === 'annual') return 1;
+      }
+      if (a.fieldTier !== b.fieldTier) return a.fieldTier - b.fieldTier;
+      if (b.score !== a.score) return b.score - a.score;
+      if ((b.sourceScore || 0) !== (a.sourceScore || 0)) return (b.sourceScore || 0) - (a.sourceScore || 0);
+      if (canApplyRecentYearTieBreak(a, b)) return getRecentYearBonus(b, [a, b]) - getRecentYearBonus(a, [a, b]);
+      return Math.abs(b.netProfitHKD || 0) - Math.abs(a.netProfitHKD || 0);
+    });
+
+    const debugCandidates = sorted.map(candidate => {
+      const rejectFlags = Array.from(new Set([
+        ...(candidate.rejectFlags || []),
+        ...(hasResolvableUnit(candidate) ? [] : ['unresolved_unit']),
+        ...(hasResolvableCurrency(candidate) ? [] : ['unresolved_currency']),
+        ...(isCredibleProfitYear(candidate) ? [] : ['untrusted_year']),
+        ...(!Number.isFinite(candidate.netProfitHKD) ? ['invalid_amount'] : []),
+      ]));
+      const gatingRejectFlags = Array.from(new Set([
+        ...rejectFlags.filter(flag => !['unresolved_currency', 'untrusted_year'].includes(flag)),
+        ...(!candidate.unitResolved ? ['unresolved_unit'] : []),
+      ]));
+      return {
+        ...candidate,
+        debugRejectFlags: rejectFlags,
+        gatingRejectFlags,
+      };
+    });
+    const usableCandidates = debugCandidates.filter(c =>
+      c.gatingRejectFlags.length === 0
+      && !c.mergedNumberDetected
+      && !c.strongVeto
+      && Number.isFinite(c.netProfitHKD)
+      && c.unitResolved
+    );
+    const rejectedCandidates = debugCandidates.filter(c => !usableCandidates.includes(c));
+    const rejectSummary = rejectedCandidates.reduce((acc, candidate) => {
+      for (const flag of (candidate.debugRejectFlags || [])) {
+        acc[flag] = (acc[flag] || 0) + 1;
+      }
+      return acc;
+    }, {});
+    const rejectReasonMap = rejectedCandidates.reduce((acc, candidate) => {
+      acc[`${candidate.source}:${candidate.label}:${candidate.rawValue}`] = candidate.debugRejectFlags || [];
+      return acc;
+    }, {});
+    const usableAnnual = usableCandidates.filter(c => c.periodType === 'annual');
+    const valid = usableAnnual.length ? usableAnnual : usableCandidates;
+    const structuredValid = valid.filter(c => STRUCTURED_SOURCE_LEVELS.has(c.sourceLevel));
+    const gatedValid = structuredValid.length ? structuredValid : valid;
+    if (!gatedValid.length) {
+      return {
+        best: null,
+        topCandidates: sorted.slice(0, 5),
+        debugCandidates,
+        usableCandidates,
+        rejectedCandidates,
+        rejectReasonMap,
+        rejectSummary,
+        winnerRunnerUp: { winner: null, runnerUp: null, scoreGap: null },
+        reason: 'insufficient_data',
+        structuredCandidateCount: structuredValid.length,
+        winnerSourceLevel: null,
+        profitStructureConfidence: 'none',
+      };
+    }
+
+    const best = { ...gatedValid[0] };
+    const runnerUp = gatedValid[1] || null;
+    const annualTieCandidates = valid.filter(c =>
+      isAnnualLikeCandidate(c)
+      && !c.rejectFlag
+      && !c.strongVeto
+      && Number.isFinite(c.year)
+    );
+    const topGapTooSmall = !!runnerUp && Math.abs(best.score - runnerUp.score) < RECENT_YEAR_SCORE_THRESHOLD;
+    const recentYearTieBreakEligible = topGapTooSmall
+      && annualTieCandidates.length > 1
+      && canApplyRecentYearTieBreak(best, runnerUp);
+    if (recentYearTieBreakEligible) {
+      recentYearDecision.triggered = true;
+      recentYearDecision.candidateYears = Array.from(new Set(annualTieCandidates.map(candidate => candidate.year))).sort((a, b) => b - a);
+      recentYearDecision.selectedYear = Math.max(...recentYearDecision.candidateYears);
+      best.recentYearBonus = getRecentYearBonus(best, annualTieCandidates);
+    }
+    const reason = [];
+    if (!usableAnnual.length && best.periodType === 'interim') reason.push('interim_only');
+    if (topGapTooSmall && !recentYearTieBreakEligible) reason.push('top_gap_too_small');
+    if (best.netProfitHKD <= 0) reason.push('non_positive_profit');
+
+    best.profitStructureConfidence = best.sourceLevel === 'text_fallback' ? 'weak' : 'strong';
+    best.winnerSourceLevel = best.sourceLevel;
+    best.confidence = best.sourceLevel === 'table' && best.fieldTier === 1 && !topGapTooSmall && best.periodType === 'annual'
+      ? 'high'
+      : (!topGapTooSmall && best.periodType === 'annual' ? 'medium' : 'low');
+    if (reason.includes('interim_only')) best.confidence = 'low';
+    if (reason.includes('top_gap_too_small')) {
+      best.netProfitHKD = null;
+      best.normalizedValue = null;
+      best.reason = 'ambiguous_profit_candidates';
+    } else if (reason.includes('interim_only')) {
+      best.netProfitHKD = null;
+      best.normalizedValue = null;
+      best.reason = 'insufficient_data';
+    } else {
+      best.reason = reason.length ? reason.join(',') : 'ok';
+    }
+    best.topGapTooSmall = topGapTooSmall;
+    best.recentYearDecision = recentYearDecision;
+    best.runnerUpScore = runnerUp?.score ?? null;
+    return {
+      best,
+      topCandidates: sorted.slice(0, 5),
+      debugCandidates,
+      usableCandidates,
+      rejectedCandidates,
+      rejectReasonMap,
+      rejectSummary,
+      winnerRunnerUp: {
+        winner: {
+          label: best.label,
+          rawValue: best.rawValue,
+          year: best.year,
+          source: best.source,
+          score: best.score,
+          confidence: best.confidence,
+          reason: best.reason,
+        },
+        runnerUp: runnerUp ? {
+          label: runnerUp.label,
+          rawValue: runnerUp.rawValue,
+          year: runnerUp.year,
+          source: runnerUp.source,
+          score: runnerUp.score,
+          confidence: runnerUp.confidence || null,
+          reason: runnerUp.reason || null,
+        } : null,
+        scoreGap: runnerUp ? best.score - runnerUp.score : null,
+      },
+      recentYearDecision,
+      reason: best.reason,
+      structuredCandidateCount: structuredValid.length,
+      winnerSourceLevel: best.winnerSourceLevel,
+      profitStructureConfidence: best.profitStructureConfidence,
+    };
   }
 
-  console.log('[netProfit] 未提取到净利润');
-  return { hkdAmount: null, currency: null, unit: null, source: '未找到' };
+  const candidates = extractNetProfitCandidates().map(candidate => scoreProfitCandidate(candidate, marketCapHKD));
+  const { best, topCandidates, debugCandidates, usableCandidates, rejectedCandidates, rejectReasonMap, rejectSummary, winnerRunnerUp, recentYearDecision, reason, structuredCandidateCount, winnerSourceLevel, profitStructureConfidence } = chooseBestProfitCandidate(candidates);
+
+  if (debug) {
+    const topSummary = topCandidates.map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
+      score: c.score,
+      penalties: c.penalties.map(p => p.code),
+      rejectFlags: c.rejectFlags,
+    }));
+    console.log('[netProfit] rawCandidates:', JSON.stringify(topSummary, null, 2));
+    console.log('[netProfit] usableCandidates:', JSON.stringify((usableCandidates || []).map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      score: c.score,
+      year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
+      rejectFlags: c.debugRejectFlags || c.rejectFlags,
+    })), null, 2));
+    console.log('[netProfit] rejectedCandidates:', JSON.stringify((rejectedCandidates || []).map(c => ({
+      label: c.label,
+      rawValue: c.rawValue,
+      score: c.score,
+      year: c.year,
+      source: c.source,
+      sourceLevel: c.sourceLevel,
+      rejectFlags: c.debugRejectFlags || c.rejectFlags,
+      mergedNumberDetected: !!c.mergedNumberDetected,
+      profitDigitLength: c.profitDigitLength || digitLength(c.rawValue),
+    })), null, 2));
+    console.log('[netProfit] rejectSummary:', JSON.stringify(rejectSummary || {}, null, 2));
+    console.log('[netProfit] winnerVsRunnerUp:', JSON.stringify(winnerRunnerUp || {}, null, 2));
+    console.log('[netProfit] recentYearDecision:', JSON.stringify(recentYearDecision || {}, null, 2));
+  }
+
+  if (!best) {
+    console.log('[netProfit] 未提取到净利润');
+    return {
+      hkdAmount: null,
+      netProfitHKD: null,
+      source: '未找到',
+      sourceLevel: 'text_fallback',
+      label: null,
+      year: null,
+      periodType: null,
+      profitPeriodType: 'unknown',
+      rawValue: null,
+      normalizedValue: null,
+      unit: null,
+      currency: null,
+      confidence: 'none',
+      reason,
+      score: null,
+      penalties: [],
+      rejectFlags: [],
+      snippet: '',
+      topCandidates,
+      usableCandidates,
+      rejectedCandidates,
+      rejectReasonMap,
+      rejectSummary,
+      winnerRunnerUp,
+      recentYearDecision,
+      winnerDiagnostics: null,
+      profitStructureConfidence,
+      winnerSourceLevel,
+      structuredCandidateCount,
+    };
+  }
+
+  console.log(`[netProfit] 最佳候选: ${best.source}/${best.label}, ${(best.netProfitHKD ?? 'null')} HKD, confidence=${best.confidence}, reason=${best.reason}`);
+  return {
+    hkdAmount: best.netProfitHKD,
+    netProfitHKD: best.netProfitHKD,
+    source: best.source,
+    sourceLevel: best.sourceLevel,
+    label: best.label,
+    year: best.year,
+    periodType: best.periodType,
+    profitPeriodType: best.periodType === 'annual' || best.periodType === 'interim' ? best.periodType : (best.periodType ? 'derived' : 'unknown'),
+    rawValue: best.rawValue,
+    normalizedValue: best.normalizedValue,
+    unit: best.unit,
+    currency: best.currency,
+    confidence: best.confidence,
+    profitStructureConfidence: best.profitStructureConfidence,
+    winnerSourceLevel: best.winnerSourceLevel,
+    reason: best.reason,
+    score: best.score,
+    penalties: best.penalties,
+    rejectFlags: best.rejectFlags,
+    snippet: best.snippet,
+    isInterim: best.periodType === 'interim',
+    conflict: !!best.topGapTooSmall,
+    topCandidates,
+    usableCandidates,
+    rejectedCandidates,
+    rejectReasonMap,
+    rejectSummary,
+    winnerRunnerUp,
+    recentYearDecision,
+    structuredCandidateCount,
+    winnerDiagnostics: {
+      score: best.score,
+      semanticScore: best.semanticScore,
+      yearScore: best.yearScore,
+      unitScore: best.unitScore,
+      sourceScore: best.sourceScore,
+      semanticPurityScore: best.semanticPurityScore,
+      unitResolved: !!best.unitResolved,
+      currencyResolved: !!best.currencyResolved,
+      hasStrongUnitLocality: !!best.hasStrongUnitLocality,
+      unitSource: best.unitSource || null,
+      sourceLevel: best.sourceLevel,
+      fieldTier: best.fieldTier,
+      attributable: !!best.attributable,
+      penaltiesCount: Array.isArray(best.penalties) ? best.penalties.length : 0,
+      profitStructureConfidence: best.profitStructureConfidence,
+      winnerSourceLevel: best.winnerSourceLevel,
+      structuredCandidateCount,
+    },
+    debugCandidates,
+    profitDigitLength: best.profitDigitLength || digitLength(best.rawValue),
+    mergedNumberDetected: !!best.mergedNumberDetected,
+  };
 }
 
 // ==================== V5：PE 评分函数（独立，供主流程调用）====================
@@ -2063,8 +2885,18 @@ function extractNetProfit(text) {
  * @param {number|null} peerMedianPE   - 同行PE中位数
  * @returns {{ score: number, reason: string, details: string, evidence: Object }}
  */
-function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE) {
-  const evidence = { offerPriceMid, totalShares, netProfitHKD, peerMedianPE };
+function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, meta = {}) {
+  const evidence = { offerPriceMid, totalShares, netProfitHKD, peerMedianPE, ...meta };
+  const profitPeriodType = meta.profitPeriodType || 'unknown';
+  const peMethod = profitPeriodType === 'annual'
+    ? 'static'
+    : profitPeriodType === 'interim'
+      ? 'rolling_like'
+      : 'uncertain';
+  evidence.profitPeriodType = profitPeriodType;
+  evidence.peMethod = peMethod;
+  evidence.profitStructureConfidence = meta.profitStructureConfidence || 'unknown';
+  evidence.winnerSourceLevel = meta.winnerSourceLevel || meta.profitSourceLevel || 'unknown';
 
   // 亏损公司
   if (netProfitHKD !== null && netProfitHKD <= 0) {
@@ -2072,41 +2904,201 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE) {
   }
 
   // 数据缺失
-  if (!offerPriceMid || !totalShares || !netProfitHKD) {
-    return { score: 0, reason: 'PE：数据不足', details: '发行价/股本/利润数据缺失，无法计算', evidence };
+  const marketCapMid = Number.isFinite(meta.marketCapMid) ? meta.marketCapMid : null;
+  const fallbackMarketCap = Number.isFinite(offerPriceMid) && Number.isFinite(totalShares) ? offerPriceMid * totalShares : null;
+  const totalMarketCap = Number.isFinite(marketCapMid) ? marketCapMid : fallbackMarketCap;
+  evidence.marketCapMid = marketCapMid;
+  evidence.marketCapUpper = Number.isFinite(meta.marketCapUpper) ? meta.marketCapUpper : null;
+  evidence.marketCapLower = Number.isFinite(meta.marketCapLower) ? meta.marketCapLower : null;
+  evidence.marketCapSource = meta.marketCapSource || (Number.isFinite(marketCapMid) ? 'etnet_mid' : 'price_shares');
+
+  if (!totalMarketCap || !netProfitHKD) {
+    return { score: 0, reason: 'PE：数据不足', details: '市值/利润数据缺失，无法计算', evidence };
   }
 
   if (!peerMedianPE || peerMedianPE <= 0) {
     return { score: 0, reason: 'PE：无法对标', details: '可比公司不足3家，无法对标', evidence };
   }
 
-  const totalMarketCap = offerPriceMid * totalShares;
-  const newIPOpe = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
-  const ratio    = parseFloat((newIPOpe / peerMedianPE).toFixed(4));
+  const computedPE = parseFloat((totalMarketCap / netProfitHKD).toFixed(2));
+  const sitePE = Number.isFinite(meta.sitePE) ? meta.sitePE : null;
+  const peDiffPct = sitePE && computedPE > 0 ? parseFloat((((computedPE - sitePE) / sitePE) * 100).toFixed(2)) : null;
+  const ratio    = parseFloat((computedPE / peerMedianPE).toFixed(4));
 
-  evidence.newIPOPE     = newIPOpe;
+  evidence.totalMarketCap = totalMarketCap;
+  evidence.computedPE    = computedPE;
+  evidence.newIPOPE      = computedPE;
+  evidence.sitePE        = sitePE;
+  evidence.peDiffPct     = peDiffPct;
   evidence.peerMedianPE = peerMedianPE;
   evidence.ratio        = ratio;
 
+  if (meta.profitConflict) {
+    return {
+      score: 0,
+      reason: 'PE：利润候选冲突',
+      details: '净利润候选值差异过大，疑似抓到不同口径或脏数据，暂不评分',
+      evidence,
+    };
+  }
+
+  if (meta.profitIsInterim || meta.profitReason === 'interim_only' || String(meta.profitReason || '').includes('interim_only')) {
+    return {
+      score: 0,
+      reason: 'PE：仅识别到中期利润',
+      details: '仅找到中期/期间利润口径，未找到最近完整财年利润，暂不评分',
+      evidence,
+    };
+  }
+
+  if (meta.profitTopGapTooSmall) {
+    return {
+      score: 0,
+      reason: 'PE：利润候选分差过小',
+      details: '净利润候选前两名分差过小，利润口径存在歧义，暂不评分',
+      evidence,
+    };
+  }
+
+  if ((meta.profitConfidence === 'low' || meta.profitConfidence === 'medium') && computedPE > 300) {
+    return {
+      score: 0,
+      reason: 'PE：利润口径存疑',
+      details: `净利润提取置信度较低且PE高达 ${computedPE.toFixed(1)}x，按异常值降级为暂不评分`,
+      evidence,
+    };
+  }
+
+  const weakProfitStructure = meta.profitStructureConfidence === 'weak';
+
+  if (computedPE <= 0 || computedPE > 300 || netProfitHKD < 1e6) {
+    return {
+      score: 0,
+      reason: 'PE：疑似异常值',
+      details: `净利润或PE数量级异常（PE ${computedPE.toFixed(1)}x，净利润 ${netProfitHKD.toLocaleString()} HKD），按数据异常暂不评分`,
+      evidence,
+    };
+  }
+
+  if (computedPE < 0.5) {
+    evidence.warning = 'suspicious_low_pe';
+  }
+
   let score, reason, details;
   if (ratio < 0.70) {
-    score  = 3;  reason = 'PE：大幅折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（>30%）`;
+    score  = 3;  reason = 'PE：大幅折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（>30%）`;
   } else if (ratio < 0.85) {
-    score  = 2;  reason = 'PE：明显折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（15-30%）`;
+    score  = 2;  reason = 'PE：明显折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（15-30%）`;
   } else if (ratio < 0.95) {
-    score  = 1;  reason = 'PE：轻微折让';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（5-15%）`;
+    score  = 1;  reason = 'PE：轻微折让';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，折让${((1-ratio)*100).toFixed(0)}%（5-15%）`;
   } else if (ratio <= 1.05) {
-    score  = 0;  reason = 'PE：基本持平';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，与市场持平`;
+    score  = 0;  reason = 'PE：基本持平';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，与市场持平`;
   } else if (ratio <= 1.15) {
-    score  = -1; reason = 'PE：轻微溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（5-15%）`;
+    score  = -1; reason = 'PE：轻微溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（5-15%）`;
   } else if (ratio <= 1.30) {
-    score  = -2; reason = 'PE：明显溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（15-30%）`;
+    score  = -2; reason = 'PE：明显溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（15-30%）`;
   } else {
-    score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${newIPOpe.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
+    score  = -3; reason = 'PE：大幅溢价';   details = `新股PE ${computedPE.toFixed(1)}x vs 同行 ${peerMedianPE}x，溢价${((ratio-1)*100).toFixed(0)}%（>30%）`;
+  }
+
+  if (weakProfitStructure) {
+    score = Math.max(-3, Math.min(3, score > 0 ? score - 1 : score < 0 ? score + 1 : 0));
+    reason = `${reason}（fallback利润）`;
+    details = `${details}；利润候选来自 text_fallback，PE 已计算但按低结构置信度降权`;
+    evidence.scoringAdjustment = 'weak_profit_structure';
   }
 
   console.log(`[PE] ${reason}: ${details}`);
   return { score, reason, details, evidence };
+}
+
+function computePEConfidence({ peStatus, sharesResult, profitResult, peerPEStatus, peResult }) {
+  const diagnostics = profitResult?.winnerDiagnostics || {};
+  const breakdown = [];
+  let score = 52;
+
+  const add = (delta, label) => {
+    score += delta;
+    breakdown.push({ label, delta });
+  };
+
+  const profitConfidenceDelta = { none: -36, low: -14, medium: 2, high: 8 };
+  add(profitConfidenceDelta[profitResult?.confidence || 'none'] ?? -8, `profitConfidence:${profitResult?.confidence || 'none'}`);
+
+  if (profitResult?.profitStructureConfidence === 'weak') add(-18, 'profitStructure:weak');
+  else if (profitResult?.profitStructureConfidence === 'strong') add(4, 'profitStructure:strong');
+
+  const sharesConfidenceDelta = { none: -22, low: -10, medium: 2, high: 8 };
+  add(sharesConfidenceDelta[sharesResult?.confidence || 'none'] ?? -8, `sharesConfidence:${sharesResult?.confidence || 'none'}`);
+
+  const peerStatus = peerPEStatus?.status || 'unknown';
+  const peerStatusDelta = {
+    success: 16,
+    insufficient_samples: -12,
+    parse_error: -16,
+    network_error: -18,
+    industry_mapping_failed: -14,
+    empty_table: -14,
+    no_nature_code: -14,
+  };
+  add(peerStatusDelta[peerStatus] ?? -10, `peerPEStatus:${peerStatus}`);
+
+  const sampleSize = Number(peerPEStatus?.sampleSize || 0);
+  if (sampleSize >= 10) add(8, `peerSampleSize:${sampleSize}`);
+  else if (sampleSize >= 5) add(4, `peerSampleSize:${sampleSize}`);
+  else if (sampleSize >= 3) add(1, `peerSampleSize:${sampleSize}`);
+  else if (peerStatus === 'success') add(-4, `peerSampleSize:${sampleSize}`);
+
+  const matchLevel = peerPEStatus?.details?.industryMapping?.matchLevel || 'unknown';
+  const matchLevelDelta = { exact: 8, normalized: 5, alias: 2, fallback: -6, failed: -12, unknown: 0 };
+  add(matchLevelDelta[matchLevel] ?? 0, `industryMapping:${matchLevel}`);
+
+  const semanticPurityScore = Number(diagnostics.semanticPurityScore);
+  if (Number.isFinite(semanticPurityScore)) {
+    if (semanticPurityScore >= 170) add(10, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore >= 145) add(6, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore >= 120) add(2, `semanticPurity:${semanticPurityScore}`);
+    else if (semanticPurityScore < 100) add(-8, `semanticPurity:${semanticPurityScore}`);
+  }
+
+  if (diagnostics.unitResolved) add(8, 'unitResolved');
+  else add(-18, 'unitUnresolved');
+  if (diagnostics.hasStrongUnitLocality) add(6, 'strongUnitLocality');
+  if (Number.isFinite(diagnostics.yearScore)) {
+    if (diagnostics.yearScore >= 30) add(6, `yearScore:${diagnostics.yearScore}`);
+    else if (diagnostics.yearScore < 0) add(-6, `yearScore:${diagnostics.yearScore}`);
+  }
+
+  const penaltiesCount = Array.isArray(profitResult?.penalties) ? profitResult.penalties.length : 0;
+  if (penaltiesCount > 0) add(-Math.min(8, penaltiesCount * 2), `winnerPenalties:${penaltiesCount}`);
+
+  const runnerGap = Number(profitResult?.winnerRunnerUp?.scoreGap);
+  if (Number.isFinite(runnerGap)) {
+    if (runnerGap < 8) add(-18, `runnerGap:${runnerGap}`);
+    else if (runnerGap < 18) add(-8, `runnerGap:${runnerGap}`);
+    else if (runnerGap >= 35) add(4, `runnerGap:${runnerGap}`);
+  }
+
+  if (profitResult?.conflict) add(-20, 'profitConflict');
+  if (profitResult?.isInterim) add(-18, 'interimOnly');
+  if (peResult?.evidence?.warning === 'suspicious_low_pe') add(-12, 'suspiciousLowPE');
+
+  let confidence;
+  if (score >= 78) confidence = 'high';
+  else if (score >= 58) confidence = 'medium';
+  else if (score > 0) confidence = 'low';
+  else confidence = 'none';
+
+  if (peStatus === 'insufficient_data') confidence = confidence === 'none' ? 'none' : 'low';
+  if (peStatus === 'unknown' && confidence === 'high') confidence = 'medium';
+  if (peStatus === 'not_applicable' && confidence === 'high' && (profitResult?.confidence || 'none') !== 'high') confidence = 'medium';
+  if (profitResult?.profitStructureConfidence === 'weak' && confidence !== 'none') confidence = 'low';
+
+  return {
+    confidence,
+    rawScore: Math.max(0, Math.min(100, score)),
+    breakdown,
+  };
 }
 
 // ==================== 评分引擎 ====================
@@ -2135,12 +3127,27 @@ async function scoreProspectus(rawText, stockCode) {
 
   // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
   let etnetData = null;
+  let etnetFetchStatus = { status: 'not_requested', reason: '' };
+  const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
   try {
-    const fmtCode = String(stockCode).replace(/\D/g, '').padStart(5, '0');
     etnetData = await crawlIPODetail(fmtCode);
-    console.log(`[etnet] 数据获取${etnetData ? '成功' : '失败'}`);
+    if (etnetData?._fetchStatus?.status === 'network_error') {
+      etnetFetchStatus = {
+        status: 'network_error',
+        reason: etnetData._fetchStatus.reason || 'etnet IPO详情抓取失败',
+        attempts: etnetData._fetchStatus.attempts || null,
+      };
+    } else {
+      etnetFetchStatus = etnetData
+        ? { status: 'success', reason: '', attempts: etnetData?._fetchStatus?.attempts || 1 }
+        : { status: 'network_error', reason: 'etnet IPO详情抓取失败' };
+    }
+    etnetData = applyIPOStaticFieldFallback(fmtCode, etnetData, etnetFetchStatus);
+    console.log(`[etnet] 数据获取${etnetFetchStatus.status === 'success' ? '成功' : '失败/降级'}`);
   } catch (e) {
-    console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取`);
+    etnetFetchStatus = { status: 'network_error', reason: e.message };
+    etnetData = applyIPOStaticFieldFallback(fmtCode, null, etnetFetchStatus);
+    console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取/静态缓存`);
   }
 
   // ── V5：绿鞋检测（展示项，不计分）──
@@ -3263,12 +4270,18 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[基石投资者] ========== 完成 ==========`);
 
   // V5：区分明星基石数量（≥3家 +2，1-2家 +1，无 0）
+  const cornerstoneConfidence = cornerstoneSection
+    ? (tableInvestors.length > 0 ? 'high' : 'medium')
+    : (investorSearchText ? 'low' : 'none');
+
   if (uniqueInvestors.length >= 3) {
     scores.cornerstone = {
       score: 2,
       reason: `有明星基石(${uniqueInvestors.length}家)`,
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
+      status: 'neutral',
+      confidence: cornerstoneConfidence,
       evidence: { ...cornerstoneEvidence, scoreRule: `≥3家明星基石，+2分` },
     };
   } else if (uniqueInvestors.length > 0) {
@@ -3277,15 +4290,29 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       reason: `有明星基石(${uniqueInvestors.length}家)`,
       details: uniqueInvestors.join(', '),
       investors: uniqueInvestors,
+      status: 'neutral',
+      confidence: cornerstoneConfidence,
       evidence: { ...cornerstoneEvidence, scoreRule: `1-2家明星基石，+1分` },
     };
   } else {
+    const hasAnyCornerstoneData = tableInvestors.length > 0 || (cornerstoneSection && cornerstoneSection.length > 200);
+    const cornerstoneStatus = hasAnyCornerstoneData ? 'neutral' : 'unknown';
+    const cornerstoneReason = hasAnyCornerstoneData ? '无明星基石' : '基石数据缺失';
+    const cornerstoneDetails = hasAnyCornerstoneData
+      ? '未发现指定名单中的基石投资者'
+      : '未定位到可靠的基石章节或表格，暂无法判断是否存在明星基石';
+
     scores.cornerstone = {
       score: 0,
-      reason: '无明星基石',
-      details: '未发现指定名单中的基石投资者',
+      reason: cornerstoneReason,
+      details: cornerstoneDetails,
       investors: [],
-      evidence: { ...cornerstoneEvidence, scoreRule: '未匹配到明星基石名单，0分' },
+      status: cornerstoneStatus,
+      confidence: cornerstoneConfidence,
+      evidence: {
+        ...cornerstoneEvidence,
+        scoreRule: cornerstoneStatus === 'neutral' ? '未匹配到明星基石名单，0分' : '基石章节/表格缺失，暂不判定为中性',
+      },
     };
   }
   
@@ -3297,12 +4324,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   const PREIPO_EXISTENCE_KW = [
     '首次公開發售前投資',
     '首次公开发售前投资',
+    'Pre-IPOInvestments',
     'Pre-IPO',
     'PreIPO',
     '上市前投資',
     '上市前投资',
-    '戰略投資',
-    '战略投资',
   ];
 
   // Step 3: 禁售语义关键词（扩展版）
@@ -3312,13 +4338,23 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     '不得出售', '不得轉讓', '不得转让',
     '不得處置', '不得处置',
     '不得減持', '不得减持',
+    '不得買賣', '不得买卖',
     '轉讓限制', '转让限制',
     '出售限制',
     '處置限制', '处置限制',
+    'shallnotdispose',
+    'shallnottransfer',
+    'sixmonthsfromListingDate',
+  ];
+
+  const EXPLICIT_NO_LOCKUP_KW = [
+    '無禁售', '无禁售', '可立即出售', '可立即轉讓', '可立即转让',
+    'nolock-up', 'nolockup', 'withoutlock-up', 'withoutlockup',
+    'nolockupperiod', 'freelydispose', 'freelytransfer',
   ];
 
   // Step 4: 禁售时长正则（支持"上市后X个月"等前置语境）
-  const LOCKUP_DURATION_RE = /(?:上市後|自上市日期?起(?:計)?|上市日期?起計)?(?:三年|3年|36個月|36个月|兩年|两年|2年|24個月|24个月|十二個月|十二个月|12個月|12个月|一年|1年|六個月|六个月|6個月|6个月|180[天日]|三個月|三个月|3個月|3个月|90[天日])/;
+  const LOCKUP_DURATION_RE = /(?:上市後|上市后|自上市日期?起(?:計)?|自上市之日起|上市日期?起計|fromtheListingDate|afterListing)?(?:三年|3年|36個月|36个月|兩年|两年|2年|24個月|24个月|十八個月|十八个月|18個月|18个月|十二個月|十二个月|12個月|12个月|一年|1年|六個月|六个月|6個月|6个月|180[天日]|三個月|三个月|3個月|3个月|90[天日]|sixmonths|12months|18months|24months)/i;
 
   // Step 5: 区分投资者禁售 vs 创始人禁售的标记词
   // 禁售条文附近（±300字）必须含以下任一词，才认定为Pre-IPO投资者禁售
@@ -3329,20 +4365,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     '上市前投資', '上市前投资',
   ];
 
-  // 将时长表达式转换为月数（用于判断是否 >= 6 个月）
-  const parseDurationMonths = (expr) => {
-    if (!expr) return null;
-    if (/三年|3年|36個月|36个月/.test(expr)) return 36;
-    if (/兩年|两年|2年|24個月|24个月/.test(expr)) return 24;
-    if (/十二個月|十二个月|12個月|12个月|一年|1年/.test(expr)) return 12;
-    if (/六個月|六个月|6個月|6个月|180/.test(expr)) return 6;
-    if (/三個月|三个月|3個月|3个月|90/.test(expr)) return 3;
-    return null;
-  };
-
   // ── 工作变量 ──────────────────────────────────────────────────────────────
   let hasPreIPOInvestment = false;
-  let hasLockup = false;
+  let hasLockup = 'unknown';
   let lockupPeriod = '';        // 原文时长表达式
   let lockupMonths = null;      // 数字月数（用于评分）
   let lockupContext = '';
@@ -3354,8 +4379,37 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   // ── Step 2: 提取Pre-IPO条款区块（按优先级三级策略）─────────────────────
 
-  // 辅助：在候选区块中搜索禁售（含投资者语境过滤）
+  const parseDurationMonths = (expr) => {
+    if (!expr) return null;
+    if (/三年|3年|36個月|36个月/.test(expr)) return 36;
+    if (/兩年|两年|2年|24個月|24个月|24months/i.test(expr)) return 24;
+    if (/十八個月|十八个月|18個月|18个月|18months/i.test(expr)) return 18;
+    if (/十二個月|十二个月|12個月|12个月|一年|1年|12months/i.test(expr)) return 12;
+    if (/六個月|六个月|6個月|6个月|180|sixmonths/i.test(expr)) return 6;
+    if (/三個月|三个月|3個月|3个月|90/.test(expr)) return 3;
+    return null;
+  };
+
+  const historySection = extractSection(
+    textNoSpaceForLockup,
+    [/歷史.*?發展.*?公司架構/i, /歷史.*?重組.*?公司架構/i, /历史.*?发展.*?公司架构/i, /历史.*?重组.*?公司架构/i,
+     /History.*?Development.*?CorporateStructure/i, /History.*?Reorganization.*?CorporateStructure/i],
+    [/業務/i, /业务/i, /BUSINESS/i],
+    180000,
+    true
+  );
+
   const findLockupInBlock = (block) => {
+    for (const nkw of EXPLICIT_NO_LOCKUP_KW) {
+      const idx = block.indexOf(nkw);
+      if (idx !== -1) {
+        hasLockup = false;
+        lockupContext = block.slice(Math.max(0, idx - 120), Math.min(block.length, idx + 200));
+        console.log(`[禁售期] ✓ 明确发现无禁售表述: "${nkw}"`);
+        return;
+      }
+    }
+
     for (const lkw of LOCKUP_SEMANTIC_KW) {
       let from = 0;
       while (from < block.length) {
@@ -3372,13 +4426,13 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         }
 
         // Step 4: 在禁售关键词前后500字内提取时长
-        const nearby = block.slice(Math.max(0, idx - 100), Math.min(block.length, idx + 500));
+        const nearby = block.slice(Math.max(0, idx - 120), Math.min(block.length, idx + 800));
         const durationMatch = nearby.match(LOCKUP_DURATION_RE);
         const period = durationMatch ? durationMatch[0] : '';
         const months = parseDurationMonths(period);
 
         // 保存找到的最长禁售期（优先保留时长更长的）
-        if (!hasLockup || (months !== null && (lockupMonths === null || months > lockupMonths))) {
+        if (hasLockup !== true || (months !== null && (lockupMonths === null || months > lockupMonths))) {
           hasLockup = true;
           lockupPeriod = period;
           lockupMonths = months;
@@ -3392,11 +4446,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   // 策略 A: 优先匹配"首次公開發售前投資的主要條款"专属子章节（置信度最高）
   console.log(`[禁售期] 策略A: 查找"首次公開發售前投資的主要條款"...`);
   const TERMS_SECTION_RE = /首次公開發售前投資的主要條款|首次公开发售前投资的主要条款|Pre-IPOInvestment.*?Terms/i;
-  const termsSectionMatch = textNoSpaceForLockup.match(TERMS_SECTION_RE);
+  const termsSectionMatch = historySection ? historySection.match(TERMS_SECTION_RE) : textNoSpaceForLockup.match(TERMS_SECTION_RE);
   if (termsSectionMatch) {
+    const sourceText = historySection || textNoSpaceForLockup;
     const matchIdx = termsSectionMatch.index;
     // 提取匹配位置 ±8000 字符
-    const block = textNoSpaceForLockup.slice(Math.max(0, matchIdx - 500), Math.min(textNoSpaceForLockup.length, matchIdx + 8000));
+    const block = sourceText.slice(Math.max(0, matchIdx - 500), Math.min(sourceText.length, matchIdx + 9000));
     preIPOSectionTitle = '首次公開發售前投資的主要條款';
     hasPreIPOInvestment = true;
     preIPOContext = block.slice(0, 200);
@@ -3408,13 +4463,6 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   // 策略 B: 在"歷史、重組及公司架構"章节中搜索Pre-IPO关键词
   if (!hasPreIPOInvestment) {
     console.log(`[禁售期] 策略B: 提取歷史/重組章节...`);
-    const historySection = extractSection(
-      textNoSpaceForLockup,
-      [/歷史.*?重組.*?公司架構/i, /歷史.*?發展.*?公司架構/i, /历史.*?重组.*?公司架构/i,
-       /HISTORY.*?REORGANIZATION/i, /HISTORY.*?CORPORATESTRUCTURE/i],
-      [/業務/i, /业务/i, /BUSINESS/i],
-      150000, true
-    );
     console.log(`[禁售期] 歷史章节长度: ${historySection?.length || 0}`);
 
     if (historySection && historySection.length > 1000) {
@@ -3426,8 +4474,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         preIPOContext = historySection.slice(Math.max(0, idx - 30), Math.min(historySection.length, idx + 200));
         lockupConfidence += 40;
         console.log(`[禁售期] ✓ 策略B命中Pre-IPO关键词: "${kw}"`);
-        // 提取 ±8000 字符作为候选区块
-        const block = historySection.slice(Math.max(0, idx - 500), Math.min(historySection.length, idx + 8000));
+        // 提取更大的后文区块，避免漏掉紧随其后的禁售安排
+        const block = historySection.slice(Math.max(0, idx - 1000), Math.min(historySection.length, idx + 12000));
         findLockupInBlock(block);
         break;
       }
@@ -3446,56 +4494,51 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       preIPOContext = midSection.slice(Math.max(0, idx - 30), Math.min(midSection.length, idx + 200));
       lockupConfidence += 20;
       console.log(`[禁售期] ✓ 策略C命中Pre-IPO关键词: "${kw}"`);
-      const block = midSection.slice(Math.max(0, idx - 500), Math.min(midSection.length, idx + 8000));
+      const block = midSection.slice(Math.max(0, idx - 800), Math.min(midSection.length, idx + 12000));
       findLockupInBlock(block);
       break;
     }
   }
 
-  if (hasLockup) lockupConfidence += 30;
+  if (hasLockup === true) lockupConfidence += 30;
   if (lockupMonths !== null) lockupConfidence += 10;
   lockupConfidence = Math.min(lockupConfidence, 100);
 
   console.log(`[禁售期] 结果: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, period="${lockupPeriod || '无'}", months=${lockupMonths ?? '未知'}, confidence=${lockupConfidence}`);
 
-  // ── Step 6: 评分 ──────────────────────────────────────────────────────────
+  // ── Step 6: 评分（保持原有规则：有禁售/无Pre-IPO=0，明确无禁售=-2，未知=0） ─────
   let lockupScore = 0;
   let lockupReason = '';
   let lockupDetails = '';
   let lockupScoreRule = '';
 
-  // V5：时长梯度细化（原6个月门槛 → 12/6 两档）
   if (!hasPreIPOInvestment) {
     lockupScore = 0;
     lockupReason = '无Pre-IPO';
     lockupDetails = '未发现Pre-IPO投资者';
     lockupScoreRule = '无Pre-IPO投资者，0分';
-  } else if (hasLockup && (lockupMonths === null || lockupMonths >= 12)) {
-    // 禁售≥12个月（或时长未明确，保守视为充足）→ 安全
+  } else if (hasLockup === true) {
     lockupScore = 0;
     lockupReason = 'Pre-IPO有禁售期';
-    lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : '（时长未明确，视为充足）'}`;
-    lockupScoreRule = 'Pre-IPO禁售期≥12个月（或未明确），0分（安全）';
-  } else if (hasLockup && lockupMonths !== null && lockupMonths >= 6) {
-    // 禁售 6-12个月 → 轻微风险
-    lockupScore = -1;
-    lockupReason = 'Pre-IPO禁售期适中';
-    lockupDetails = `有Pre-IPO投资者，禁售期${lockupPeriod}（6-12个月）`;
-    lockupScoreRule = 'Pre-IPO禁售期6-12个月，-1分（轻微风险）';
+    lockupDetails = `有Pre-IPO投资者，设有禁售期${lockupPeriod ? '（' + lockupPeriod + '）' : ''}`;
+    lockupScoreRule = '有Pre-IPO投资者且有禁售期，0分';
+  } else if (hasLockup === 'unknown') {
+    lockupScore = 0;
+    lockupReason = 'Pre-IPO禁售未明确';
+    lockupDetails = '发现Pre-IPO投资者，但未检出明确禁售或明确无禁售表述，暂不按无禁售处理';
+    lockupScoreRule = 'Pre-IPO禁售状态未知，0分（避免脏数据误伤）';
   } else {
-    // 禁售<6个月 或 无禁售 → 高风险
     lockupScore = -2;
-    lockupReason = hasLockup ? 'Pre-IPO禁售期偏短' : 'Pre-IPO无禁售安排';
-    lockupDetails = hasLockup
-      ? `有Pre-IPO投资者，禁售期仅${lockupPeriod}（< 6个月）`
-      : '警告：有Pre-IPO投资者但未发现明确禁售安排';
-    lockupScoreRule = hasLockup ? 'Pre-IPO禁售<6个月，-2分（高风险）' : 'Pre-IPO无禁售期，-2分（高风险）';
+    lockupReason = 'Pre-IPO无禁售安排';
+    lockupDetails = '有Pre-IPO投资者，且存在明确无禁售/可立即出售表述';
+    lockupScoreRule = 'Pre-IPO明确无禁售期，-2分';
   }
 
   const lockupEvidence = {
     section: preIPOSectionTitle || '未找到Pre-IPO相关章节',
     preIPOFound: hasPreIPOInvestment,
-    lockupFound: hasLockup,
+    lockupFound: hasLockup === true,
+    lockupStatus: hasLockup,
     lockupPeriod,
     lockupMonths,
     confidenceScore: lockupConfidence,
@@ -3707,51 +4750,386 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       }
     }
 
-    // 2. 总股本：从 PDF 提取（关键：不能用 H 股市值）
-    const sharesResult = extractTotalShares(text);
+    // 2. 总股本：优先 ETNet 结构化字段，失败时回退 PDF（关键：不能用 H 股市值）
+    const initialMarketCapHKD = Number.isFinite(etnetData?.marketCapMid)
+      ? etnetData.marketCapMid
+      : Number.isFinite(offerPriceMid) && Number.isFinite(etnetData?.totalShares)
+        ? offerPriceMid * etnetData.totalShares
+        : null;
+    let sharesResult = extractTotalShares(text, { marketCapHKD: initialMarketCapHKD });
+    if (etnetData?.totalShares && Number.isFinite(etnetData.totalShares) && etnetData.totalShares >= 1e7 && etnetData.totalShares <= 5e10) {
+      sharesResult = {
+        totalShares: etnetData.totalShares,
+        confidence: 'medium',
+        source: 'ETNet结构化字段',
+        snippet: etnetData.totalSharesRaw || '',
+      };
+    }
     const totalShares  = sharesResult.totalShares;
 
     // 3. 净利润：从 PDF 提取
-    const profitResult  = extractNetProfit(text);
+    const profitMarketCapHKD = Number.isFinite(etnetData?.marketCapMid)
+      ? etnetData.marketCapMid
+      : Number.isFinite(offerPriceMid) && Number.isFinite(totalShares)
+        ? offerPriceMid * totalShares
+        : initialMarketCapHKD;
+    const profitResult  = extractNetProfit(text, { marketCapHKD: profitMarketCapHKD });
     const netProfitHKD  = profitResult.hkdAmount;
 
     // 4. 同行 PE：通过 etnet 行业代码查询
     let peerMedianPE = null;
     const industry = etnetData?.industry || null;
+    let dataSourceLevel = 'none';
+    let fallbackUsed = [];
+    let peerPEStatus = {
+      status: industry ? 'industry_mapping_failed' : (etnetFetchStatus.status === 'network_error' ? 'network_error' : 'missing_industry'),
+      reason: industry ? '行业未映射到natureCode' : (etnetFetchStatus.status === 'network_error' ? etnetFetchStatus.reason : '缺少行业信息'),
+      industry,
+      natureCode: null,
+      sampleSize: 0,
+      median: null,
+      details: { etnetFetchStatus },
+    };
     if (industry) {
       try {
-        const codeMap   = await buildIndustryCodeMap();
-        const natureCode = codeMap[industry];
+        const codeMap = await buildIndustryCodeMap();
+        const resolvedIndustry = resolveIndustryNatureCode(industry, codeMap);
+        const natureCode = resolvedIndustry.natureCode;
+        console.log('[PE] industryMapping:', JSON.stringify({
+          industry,
+          natureCode: natureCode || null,
+          matchLevel: resolvedIndustry.matchLevel,
+          debug: resolvedIndustry.debug,
+        }, null, 2));
         if (natureCode) {
-          const peData   = await getComparablePE(natureCode);
-          peerMedianPE   = peData.median;
-          console.log(`[PE] 行业"${industry}"(${natureCode}) 同行PE中位数=${peerMedianPE}`);
+          const peerSelectionIpoMarketCap = Number.isFinite(etnetData?.marketCapMid)
+            ? etnetData.marketCapMid
+            : (Number.isFinite(offerPriceMid) && Number.isFinite(totalShares) ? offerPriceMid * totalShares : null);
+          const peData = await getComparablePE(natureCode, { ipoMarketCap: peerSelectionIpoMarketCap });
+          peerMedianPE = peData.median;
+          peerPEStatus = {
+            status: peData.status || (Number.isFinite(peData.median) ? 'success' : 'parse_error'),
+            reason: peData.reason || '',
+            industry,
+            natureCode,
+            sampleSize: peData.sampleSize || 0,
+            median: peData.median ?? null,
+            peerSelectionMethod: peData.peerSelectionMethod || peData.details?.peerSelectionMethod || null,
+            peerCountUsed: peData.peerCountUsed || peData.details?.peerCountUsed || 0,
+            details: {
+              ...(peData.details || {}),
+              peerSelectionMethod: peData.peerSelectionMethod || peData.details?.peerSelectionMethod || null,
+              peerCountUsed: peData.peerCountUsed || peData.details?.peerCountUsed || 0,
+              industryMapping: {
+                matchLevel: resolvedIndustry.matchLevel,
+                ...resolvedIndustry.debug,
+              },
+              etnetFetchStatus,
+            },
+          };
+          if (Number.isFinite(peerMedianPE) && peerMedianPE > 0 && peerPEStatus.status === 'success') {
+            dataSourceLevel = 'etnet_industry_pe';
+          } else {
+            const fallbackPeerPE = resolveFallbackPeerPE(industry);
+            if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+              peerMedianPE = fallbackPeerPE.median;
+              dataSourceLevel = fallbackPeerPE.sourceLevel;
+              fallbackUsed.push(fallbackPeerPE.sourceLevel);
+              peerPEStatus = {
+                ...peerPEStatus,
+                status: 'fallback_success',
+                reason: `${peerPEStatus.reason || 'ETNet行业PE不可用'}，已降级到${fallbackPeerPE.sourceLevel}`,
+                median: peerMedianPE,
+                details: {
+                  ...peerPEStatus.details,
+                  fallback: fallbackPeerPE,
+                },
+              };
+            }
+          }
+          console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         } else {
+          peerPEStatus = {
+            ...peerPEStatus,
+            reason: industry ? '行业未映射到natureCode' : '缺少行业信息',
+            details: {
+              industryMapping: {
+                matchLevel: resolvedIndustry.matchLevel,
+                ...resolvedIndustry.debug,
+              },
+              etnetFetchStatus,
+            },
+          };
+          const fallbackPeerPE = resolveFallbackPeerPE(industry);
+          if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+            peerMedianPE = fallbackPeerPE.median;
+            dataSourceLevel = fallbackPeerPE.sourceLevel;
+            fallbackUsed.push(fallbackPeerPE.sourceLevel);
+            peerPEStatus = {
+              ...peerPEStatus,
+              status: 'fallback_success',
+              reason: `行业未映射到natureCode，已降级到${fallbackPeerPE.sourceLevel}`,
+              median: peerMedianPE,
+              details: {
+                ...peerPEStatus.details,
+                fallback: fallbackPeerPE,
+              },
+            };
+          }
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
+          console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
         }
       } catch (e) {
+        peerPEStatus = {
+          status: 'network_error',
+          reason: e.message,
+          industry,
+          natureCode: null,
+          sampleSize: 0,
+          median: null,
+          details: { errorName: e.name || 'Error', etnetFetchStatus },
+        };
+        const fallbackPeerPE = resolveFallbackPeerPE(industry);
+        if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+          peerMedianPE = fallbackPeerPE.median;
+          dataSourceLevel = fallbackPeerPE.sourceLevel;
+          fallbackUsed.push(fallbackPeerPE.sourceLevel);
+          peerPEStatus = {
+            ...peerPEStatus,
+            status: 'fallback_success',
+            reason: `${e.message}，已降级到${fallbackPeerPE.sourceLevel}`,
+            median: peerMedianPE,
+            details: {
+              ...peerPEStatus.details,
+              fallback: fallbackPeerPE,
+            },
+          };
+        }
         console.warn(`[PE] 行业PE查询失败: ${e.message}`);
+        console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
       }
+    } else {
+      const fallbackPeerPE = resolveFallbackPeerPE(industry);
+      if (Number.isFinite(fallbackPeerPE.median) && fallbackPeerPE.median > 0) {
+        peerMedianPE = fallbackPeerPE.median;
+        dataSourceLevel = fallbackPeerPE.sourceLevel;
+        fallbackUsed.push(fallbackPeerPE.sourceLevel);
+        peerPEStatus = {
+          ...peerPEStatus,
+          status: 'fallback_success',
+          reason: industry ? `ETNet行业映射失败，已降级到${fallbackPeerPE.sourceLevel}` : '缺少行业信息',
+          median: peerMedianPE,
+          details: {
+            ...(peerPEStatus.details || {}),
+            fallback: fallbackPeerPE,
+          },
+        };
+      }
+      console.log('[PE] peerPEFetchStatus:', JSON.stringify(peerPEStatus, null, 2));
     }
 
+    if (!dataSourceLevel && Number.isFinite(peerMedianPE) && peerMedianPE > 0) dataSourceLevel = 'etnet_industry_pe';
+
+    const etnetFieldsRaw = etnetData ? {
+      offerPrice: etnetData.offerPrice || null,
+      offerPriceMid: etnetData.offerPriceMid || null,
+      totalShares: etnetData.totalShares || null,
+      totalSharesRaw: etnetData.totalSharesRaw || null,
+      sitePE: etnetData.sitePE || null,
+      marketCapRaw: etnetData.marketCapRaw || null,
+      marketCapUpper: etnetData.marketCapUpper || null,
+      marketCapLower: etnetData.marketCapLower || null,
+      marketCapMid: etnetData.marketCapMid || null,
+      industry: etnetData.industry || null,
+      staticFieldCache: etnetData._staticFieldCache || null,
+      fetchStatus: etnetData._fetchStatus || null,
+    } : {};
     console.log(`[PE] offerPriceMid=${offerPriceMid}, totalShares=${totalShares?.toLocaleString()}, netProfitHKD=${netProfitHKD?.toLocaleString()}, peerPE=${peerMedianPE}`);
-    const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE);
+    const peDebug = {
+      topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        score: c.score,
+        penalties: c.penalties?.map(p => p.code) || [],
+        rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
+      })),
+      usableCandidates: (profitResult.usableCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        score: c.score,
+      })),
+      rejectedCandidates: (profitResult.rejectedCandidates || []).map(c => ({
+        label: c.label,
+        rawValue: c.rawValue,
+        year: c.year,
+        source: c.source,
+        rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
+      })),
+      rejectReasonMap: profitResult.rejectReasonMap || {},
+      rejectSummary: profitResult.rejectSummary || {},
+      winnerRunnerUp: profitResult.winnerRunnerUp || null,
+      recentYearDecision: profitResult.recentYearDecision || null,
+      peerPEStatus,
+      computedPE: null,
+      profitDigitLength: profitResult.profitDigitLength ?? null,
+      mergedNumberDetected: !!profitResult.mergedNumberDetected,
+      etnetFieldsRaw,
+      sitePE: etnetData?.sitePE || null,
+    };
+    const dataAvailabilityScore = computeDataAvailabilityScore({ offerPriceMid, totalShares, netProfitHKD, peerMedianPE });
+    if (etnetFetchStatus.status === 'network_error' && Array.isArray(etnetData?._staticFieldCache?.fallbackUsed) && etnetData._staticFieldCache.fallbackUsed.length) {
+      fallbackUsed = fallbackUsed.concat(etnetData._staticFieldCache.fallbackUsed.map(field => `ipo_static_cache:${field}`));
+    }
+    fallbackUsed = Array.from(new Set(fallbackUsed.filter(Boolean)));
+
+    const peResult  = scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE, {
+      profitConfidence: profitResult.confidence || 'none',
+      profitSource: profitResult.source || '未找到',
+      profitIsInterim: !!profitResult.isInterim,
+      profitConflict: !!profitResult.conflict,
+      profitReason: profitResult.reason || '',
+      profitTopGapTooSmall: !!profitResult.conflict,
+      profitStructureConfidence: profitResult.profitStructureConfidence || 'none',
+      winnerSourceLevel: profitResult.winnerSourceLevel || profitResult.sourceLevel || 'unknown',
+      sitePE: etnetData?.sitePE || null,
+      peerPEStatus: peerPEStatus.status,
+      peerPEReason: peerPEStatus.reason,
+      peerPEIndustry: peerPEStatus.industry,
+      peerPENatureCode: peerPEStatus.natureCode,
+      peerPESampleSize: peerPEStatus.sampleSize,
+      dataAvailabilityScore,
+      dataSourceLevel: dataSourceLevel || 'none',
+      fallbackUsed,
+      staticFieldCacheStatus: etnetData?._staticFieldCache?.status || null,
+      marketCapUpper: etnetData?.marketCapUpper || null,
+      marketCapLower: etnetData?.marketCapLower || null,
+      marketCapMid: etnetData?.marketCapMid || null,
+      marketCapSource: Number.isFinite(etnetData?.marketCapMid)
+        ? 'etnet_mid'
+        : (etnetData?._staticFieldCache?.fallbackUsed || []).includes('marketCapMid')
+          ? 'cache'
+          : 'price_shares',
+      profitPeriodType: profitResult.profitPeriodType || profitResult.periodType || 'unknown',
+      peerSelectionMethod: peerPEStatus?.details?.peerSelectionMethod || peerPEStatus?.peerSelectionMethod || null,
+      peerCountUsed: peerPEStatus?.details?.peerCountUsed || peerPEStatus?.peerCountUsed || null,
+    });
+    peDebug.computedPE = peResult.evidence.computedPE ?? null;
+    console.log('[PE] debug=', JSON.stringify(peDebug, null, 2));
+    let peStatus = 'neutral';
+    let peReason = peResult.reason;
+    if (netProfitHKD !== null && netProfitHKD <= 0) {
+      peStatus = 'not_applicable';
+      peReason = 'PE：公司未盈利，暂不适用PE比较';
+    } else if (!(Number.isFinite(peResult.evidence.totalMarketCap) && Number.isFinite(netProfitHKD))) {
+      peStatus = 'insufficient_data';
+      peReason = 'PE：市值/净利润数据不足，暂无法判断估值中性';
+      if (etnetFetchStatus.status === 'network_error' && etnetData?._staticFieldCache?.status === 'cache_missing') {
+        peReason = 'PE：实时抓取失败且静态缓存不存在，insufficient_data';
+      }
+    } else if (peResult.evidence.warning === 'suspicious_low_pe') {
+      peStatus = 'unknown';
+      peReason = 'PE：结果偏低需人工复核';
+    } else if (!peerMedianPE || peerMedianPE <= 0) {
+      peStatus = 'unknown';
+      peReason = 'PE：缺少可靠同行PE对标，0分不代表估值中性';
+    }
+    const peConfidenceResult = computePEConfidence({
+      peStatus,
+      sharesResult,
+      profitResult,
+      peerPEStatus,
+      peResult,
+    });
+    const peConfidence = peConfidenceResult.confidence;
+    console.log('[PE] finalScoreReason:', JSON.stringify({ status: peStatus, reason: peReason, details: peResult.details, peerPEStatus }, null, 2));
+
     scores.pe = {
       score:   peResult.score,
-      reason:  peResult.reason,
+      reason:  peReason,
       details: peResult.details,
+      status: peStatus,
+      confidence: peConfidence,
       evidence: {
         ...peResult.evidence,
-        sharesSource:  sharesResult.source,
+        sharesSource: sharesResult.source,
         sharesConfidence: sharesResult.confidence,
-        profitSource:  profitResult.source,
+        sharesSnippet: sharesResult.snippet || '',
+        profitSource: profitResult.source,
+        profitSourceLevel: profitResult.sourceLevel,
+        profitConfidence: profitResult.confidence || 'none',
+        profitStructureConfidence: profitResult.profitStructureConfidence || 'none',
+        winnerSourceLevel: profitResult.winnerSourceLevel || profitResult.sourceLevel || 'unknown',
+        profitSnippet: profitResult.snippet || '',
+        profitLabel: profitResult.label,
+        profitYear: profitResult.year,
+        profitPeriodType: profitResult.profitPeriodType || profitResult.periodType || 'unknown',
+        peMethod: peResult.evidence.peMethod || 'uncertain',
+        marketCapSource: peResult.evidence.marketCapSource || null,
+        peerSelectionMethod: peResult.evidence.peerSelectionMethod || null,
+        peerCountUsed: peResult.evidence.peerCountUsed || null,
+        profitCurrency: profitResult.currency,
+        profitUnit: profitResult.unit,
+        profitNormalizedValue: profitResult.normalizedValue,
+        profitPenalties: profitResult.penalties || [],
+        profitRejectFlags: profitResult.rejectFlags || [],
+        profitWinnerDiagnostics: profitResult.winnerDiagnostics || null,
+        usableCandidates: (profitResult.usableCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          score: c.score,
+        })),
+        rejectedCandidates: (profitResult.rejectedCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
+        })),
+        rejectReasonMap: profitResult.rejectReasonMap || {},
+        rejectSummary: profitResult.rejectSummary || {},
+        winnerRunnerUp: profitResult.winnerRunnerUp || null,
+        recentYearDecision: profitResult.recentYearDecision || null,
+        peerPEStatus,
+        peerSelectionMethod: peerPEStatus.peerSelectionMethod || peerPEStatus.details?.peerSelectionMethod || null,
+        peerCountUsed: peerPEStatus.peerCountUsed || peerPEStatus.details?.peerCountUsed || 0,
+        computedPE: peResult.evidence.computedPE ?? null,
+        confidenceScore: peConfidenceResult.rawScore,
+        confidenceBreakdown: peConfidenceResult.breakdown,
+        profitDigitLength: profitResult.profitDigitLength ?? null,
+        mergedNumberDetected: !!profitResult.mergedNumberDetected,
+        scorePEReason: {
+          status: peStatus,
+          reason: peReason,
+          details: peResult.details,
+          peerPEStatus: peerPEStatus.status,
+          peerPEReason: peerPEStatus.reason,
+        },
+        topProfitCandidates: (profitResult.topCandidates || []).map(c => ({
+          label: c.label,
+          rawValue: c.rawValue,
+          year: c.year,
+          source: c.source,
+          sourceLevel: c.sourceLevel,
+          score: c.score,
+          penalties: c.penalties?.map(p => p.code) || [],
+          rejectFlags: c.debugRejectFlags || c.rejectFlags || [],
+        })),
+        etnetFieldsRaw,
         industry,
         scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
       },
     };
   } catch (e) {
     console.error(`[PE] 评分异常: ${e.message}`);
-    scores.pe = { score: 0, reason: 'PE：计算异常', details: e.message, evidence: {} };
+    scores.pe = { score: 0, reason: 'PE：计算异常，0分不代表估值中性', details: e.message, status: 'error', confidence: 'none', evidence: {} };
   }
 
   // ========== V5 新增：募资规模评分 ==========
@@ -3774,10 +5152,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     let ipoSizeScore = 0;
     let ipoSizeReason = '募资规模';
     let ipoSizeDetails = '无募资数据';
+    let ipoSizeStatus = 'insufficient_data';
+    let ipoSizeConfidence = ipoProceeds ? 'high' : 'none';
 
     if (ipoProceeds && ipoProceeds > 0) {
       const proceedsHKDHundredMillion = ipoProceeds / 1e8;
       ipoSizeDetails = `募资约${proceedsHKDHundredMillion.toFixed(2)}亿港元`;
+      ipoSizeStatus = 'neutral';
+      ipoSizeConfidence = etnetData?.ipoProceeds ? 'high' : 'medium';
 
       if (ipoProceeds >= 3e8 && ipoProceeds <= 20e8) {
         // 3亿-20亿：最佳区间，流动性好且机构可参与
@@ -3796,12 +5178,17 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         ipoSizeScore  = 0;
         ipoSizeReason = '募资规模中性(0)';
       }
+    } else {
+      ipoSizeReason = '募资规模：数据不足，0分不代表规模中性';
+      ipoSizeDetails = '未提取到可靠募资净额';
     }
 
     scores.ipoSize = {
       score:   ipoSizeScore,
       reason:  ipoSizeReason,
       details: ipoSizeDetails,
+      status: ipoSizeStatus,
+      confidence: ipoSizeConfidence,
       evidence: {
         ipoProceeds,
         source: etnetData?.ipoProceeds ? 'etnet' : 'PDF',
@@ -3811,7 +5198,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     console.log(`[募资规模] ${ipoSizeReason}: ${ipoSizeDetails}`);
   } catch (e) {
     console.error(`[募资规模] 计算异常: ${e.message}`);
-    scores.ipoSize = { score: 0, reason: '募资规模：计算异常', details: e.message, evidence: {} };
+    scores.ipoSize = { score: 0, reason: '募资规模：计算异常，0分不代表规模中性', details: e.message, status: 'error', confidence: 'none', evidence: {} };
   }
 
   // ========== 计算总分（V5）==========
@@ -3831,6 +5218,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
   console.log(`[评分] 各维度: 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score} PE${scores.pe.score} 募资${scores.ipoSize.score}`);
 
+  const display = buildIPOExtendedFields({
+    status: normalizeListingStatus(null, {
+      offer_start_date: null,
+      offer_end_date: null,
+      listing_date: etnetData?.listingDate || null,
+    }),
+    listingDate: etnetData?.listingDate || null,
+    lotSize: etnetData?.lotSize || null,
+    offerPrice: etnetData?.offerPrice || etnetData?.offerPriceMid || null,
+    offerPriceMid: etnetData?.offerPriceMid || null,
+    subscriptionMultiple: etnetData?.subscriptionMultiple || null,
+    updated_at: etnetData?._fetchedAt || new Date().toISOString(),
+    source_name: etnetData?._source || 'etnet',
+    source_url: null,
+  });
+
   return {
     stockCode:   formatStockCode(stockCode),
     totalScore,
@@ -3842,6 +5245,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       subscriptionMultiple: etnetData?.subscriptionMultiple || null,
       listingDate:          etnetData?.listingDate || null,
     },
+    ipoInfo: display,
     _version: 'v5',
   };
 }
@@ -3921,6 +5325,157 @@ function withTimeout(promise, ms, message = '操作超时') {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+
+function computeDataAvailabilityScore({ offerPriceMid, totalShares, netProfitHKD, peerMedianPE }) {
+  const weights = [
+    Number.isFinite(offerPriceMid) ? 25 : 0,
+    Number.isFinite(totalShares) ? 25 : 0,
+    Number.isFinite(netProfitHKD) ? 30 : 0,
+    Number.isFinite(peerMedianPE) && peerMedianPE > 0 ? 20 : 0,
+  ];
+  return weights.reduce((sum, value) => sum + value, 0);
+}
+
+function applyIPOStaticFieldFallback(stockCode, realtimeData, fetchStatus) {
+  const cacheEntry = getIPOStaticFieldCache(stockCode);
+  const fields = cacheEntry?.fields || {};
+  const fallbackUsed = [];
+  const merged = { ...(realtimeData || {}) };
+  const realtimeFailed = !realtimeData || fetchStatus?.status === 'network_error';
+
+  if (realtimeData && fetchStatus?.status !== 'network_error') {
+    const refreshed = updateIPOStaticFieldCache(stockCode, realtimeData);
+    if (refreshed) {
+      merged._staticFieldCache = {
+        status: 'refreshed',
+        cachedAt: refreshed.cachedAt,
+        fields: refreshed.fields,
+      };
+    }
+  }
+
+  if (realtimeFailed) {
+    for (const field of ['offerPriceMid', 'totalShares', 'industry', 'marketCapMid']) {
+      if ((merged[field] === null || merged[field] === undefined || merged[field] === '') && fields[field] !== undefined) {
+        merged[field] = fields[field];
+        fallbackUsed.push(field);
+      }
+    }
+    merged._staticFieldCache = {
+      status: cacheEntry ? (fallbackUsed.length ? 'cache_fallback_used' : 'cache_available_unused') : 'cache_missing',
+      cachedAt: cacheEntry?.cachedAt || null,
+      fields,
+      fallbackUsed,
+    };
+  }
+
+  return merged;
+}
+
+
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const cleaned = String(value).replace(/[,%xX倍港元HKDhkd\s,]/g, '');
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractOfferPriceBounds(value) {
+  if (value === null || value === undefined || value === '') return { min: null, max: null, mid: null, raw: null };
+  if (typeof value === 'number') return { min: value, max: value, mid: value, raw: String(value) };
+  const matches = String(value).match(/\d+(?:\.\d+)?/g) || [];
+  const nums = matches.map(Number).filter(Number.isFinite);
+  if (!nums.length) return { min: null, max: null, mid: null, raw: String(value) };
+  const min = nums[0];
+  const max = nums.length > 1 ? nums[nums.length - 1] : nums[0];
+  return { min, max, mid: (min + max) / 2, raw: String(value) };
+}
+
+function parsePercentValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const match = String(value).match(/([+-]?\d+(?:\.\d+)?)/);
+  return match ? parseFloat(match[1]) : null;
+}
+
+function normalizeListingStatus(rawStatus, dates = {}) {
+  const map = {
+    subscribing: '招股中',
+    coming: '待上市',
+    listed: '已上市',
+    ended: '已结束',
+    scored: '已评分',
+    filed: '已递表',
+  };
+  if (rawStatus && map[rawStatus]) return map[rawStatus];
+
+  const today = new Date();
+  const offerStart = dates.offer_start_date ? new Date(dates.offer_start_date) : null;
+  const offerEnd = dates.offer_end_date ? new Date(dates.offer_end_date) : null;
+  const listingDate = dates.listing_date ? new Date(dates.listing_date) : null;
+
+  if (offerStart && offerEnd && today >= offerStart && today <= offerEnd) return '招股中';
+  if (listingDate && today < listingDate) return '待上市';
+  if (listingDate && today >= listingDate) return '已上市';
+  return rawStatus || '待公布';
+}
+
+function buildIPOExtendedFields(base = {}) {
+  const offer = extractOfferPriceBounds(base.offerPrice || base.offer_price || base.offerPriceRange || base.offer_price_range || base.offerPriceMid);
+  const lotSize = toNumber(base.lot_size ?? base.lotSize);
+  const offerPrice = toNumber(base.offer_price ?? base.offerPriceMid) ?? offer.mid;
+  const currentPrice = toNumber(base.current_price ?? base.currentPrice);
+  const firstDayChangePct = parsePercentValue(base.first_day_change_pct ?? base.firstDayChangePct ?? base.firstDayReturn);
+  const subscriptionMultiple = toNumber(base.subscription_multiple ?? base.subscriptionMultiple);
+  const allotmentRate = parsePercentValue(base.allotment_rate ?? base.allotmentRate);
+  const lotAmount = toNumber(base.lot_amount ?? base.lotAmount) ?? (Number.isFinite(lotSize) && Number.isFinite(offerPrice) ? lotSize * offerPrice : null);
+  const currentVsOfferPct = parsePercentValue(base.current_vs_offer_pct ?? base.currentVsOfferPct) ?? (Number.isFinite(currentPrice) && Number.isFinite(offerPrice) && offerPrice !== 0 ? ((currentPrice - offerPrice) / offerPrice) * 100 : null);
+  const firstDayLotProfit = toNumber(base.first_day_lot_profit ?? base.firstDayLotProfit) ?? (Number.isFinite(firstDayChangePct) && Number.isFinite(lotAmount) ? lotAmount * (firstDayChangePct / 100) : null);
+  const currentLotProfit = toNumber(base.current_lot_profit ?? base.currentLotProfit) ?? (Number.isFinite(currentPrice) && Number.isFinite(offerPrice) && Number.isFinite(lotSize) ? (currentPrice - offerPrice) * lotSize : null);
+  const breakEven = Number.isFinite(currentPrice) && Number.isFinite(offerPrice) ? currentPrice < offerPrice : (Number.isFinite(firstDayChangePct) ? firstDayChangePct < 0 : null);
+  const listingDate = base.listing_date || base.listingDate || null;
+  const offerStartDate = base.offer_start_date || base.subscriptionStart || null;
+  const offerEndDate = base.offer_end_date || base.subscriptionEnd || null;
+  const pricingDate = base.pricing_date || null;
+  const allotmentResultDate = base.allotment_result_date || null;
+  const refundDate = base.refund_date || null;
+
+  return {
+    listing_status: normalizeListingStatus(base.listing_status || base.status, {
+      offer_start_date: offerStartDate,
+      offer_end_date: offerEndDate,
+      listing_date: listingDate,
+    }),
+    listing_date: listingDate,
+    offer_start_date: offerStartDate,
+    offer_end_date: offerEndDate,
+    pricing_date: pricingDate,
+    allotment_result_date: allotmentResultDate,
+    refund_date: refundDate,
+    lot_size: lotSize,
+    lot_amount: lotAmount,
+    offer_price: offerPrice,
+    offer_price_range: offer.raw,
+    current_price: currentPrice,
+    current_vs_offer_pct: currentVsOfferPct,
+    first_day_change_pct: firstDayChangePct,
+    first_day_lot_profit: firstDayLotProfit,
+    current_lot_profit: currentLotProfit,
+    subscription_multiple: subscriptionMultiple,
+    allotment_rate: allotmentRate,
+    updated_at: base.updated_at || base.lastUpdate || base.updateTime || base._fetchedAt || new Date().toISOString(),
+    source_name: base.source_name || base.sourceName || base._source || '系统计算',
+    source_url: base.source_url || base.sourceUrl || base.prospectus?.link || null,
+    is_below_offer_price: breakEven,
+    is_breaking_issue: breakEven,
+  };
+}
+
+function attachExtendedIPOFields(record = {}) {
+  return { ...record, ...buildIPOExtendedFields(record) };
+}
+
 // 自动保存评分记录到IPO列表（用户评分即数据）
 function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
   try {
@@ -3945,15 +5500,18 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
     // 检查是否已存在（去重）
     let existingIPO = data.ipos.find(ipo => ipo.code === stockCode);
 
+    const ipoInfo = scoreResult.ipoInfo || {};
     if (existingIPO) {
       // 更新现有记录
       existingIPO.score = scoreResult.totalScore;
       existingIPO.rating = scoreResult.rating;
       existingIPO.scoreDetails = scoreResult.scores;
       existingIPO.lastUpdate = new Date().toISOString();
+      Object.assign(existingIPO, ipoInfo);
       if (prospectusInfo) {
         existingIPO.name = prospectusInfo.name || existingIPO.name;
       }
+      existingIPO.source_url = existingIPO.source_url || prospectusInfo?.link || null;
       console.log(`[保存] 更新现有记录: ${stockCode} - ${scoreResult.totalScore}分`);
     } else {
       // 添加新记录
@@ -3966,6 +5524,7 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
         rating: scoreResult.rating,
         scoreDetails: scoreResult.scores,
         lastUpdate: new Date().toISOString(),
+        ...ipoInfo,
         prospectus: prospectusInfo ? {
           title: prospectusInfo.title,
           link: prospectusInfo.link
@@ -4060,6 +5619,7 @@ app.get('/api/score/:code', async (req, res) => {
     const response = {
       success: true,
       ...scoreResult,
+      ...(scoreResult.ipoInfo || {}),
       elapsed: `${elapsed}s`,
     };
 
@@ -4104,9 +5664,9 @@ app.get('/api/ipo/current', (req, res) => {
         success: true,
         updateTime: data.updateTime,
         total: data.count,
-        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        listed: listed.slice(0, 5), // 最近5个
+        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)).map(attachExtendedIPOFields),
+        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)).map(attachExtendedIPOFields),
+        listed: listed.slice(0, 5).map(attachExtendedIPOFields), // 最近5个
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -4145,7 +5705,7 @@ app.get('/api/ipo/top', (req, res) => {
         success: true,
         count: topIPOs.length,
         total: data.ipos.length,
-        ipos: topIPOs
+        ipos: topIPOs.map(attachExtendedIPOFields)
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -4236,12 +5796,27 @@ app.get('/api/market/stats', (req, res) => {
   }
 });
 
+
+// Dashboard API（首页真实数据）
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const sortBy = req.query.sort || 'score';
+    const forceRefresh = String(req.query.refresh || '').toLowerCase() === '1';
+    const data = await buildDashboard({ sortBy, forceRefresh });
+    res.json({ success: true, ...data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 静态文件
-app.get('/', (req, res) => {
+app.get(['/', '/hk', '/hk/'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ==================== 启动服务 ====================
+
+startDashboardSyncJob();
 
 app.listen(PORT, () => {
   console.log(`\n${'═'.repeat(60)}`);

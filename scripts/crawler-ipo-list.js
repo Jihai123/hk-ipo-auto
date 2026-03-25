@@ -37,11 +37,20 @@ async function crawlIPOList() {
         status: 'subscribing', // subscribing | coming | listed
         subscriptionStart: '2026-02-10',
         subscriptionEnd: '2026-02-15',
+        pricing_date: '2026-02-16',
+        allotment_result_date: '2026-02-17',
+        refund_date: '2026-02-17',
         listingDate: '2026-02-18',
+        lotSize: 200,
         offerPrice: '10-12',
+        offer_price: 11,
+        lot_amount: 2200,
+        subscription_multiple: 28.5,
+        allotment_rate: 18.2,
         currency: 'HKD',
         score: null, // 待评分
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        source_name: 'Mock IPO Feed'
       },
       {
         code: '02768',
@@ -50,11 +59,19 @@ async function crawlIPOList() {
         status: 'subscribing',
         subscriptionStart: '2026-02-08',
         subscriptionEnd: '2026-02-13',
+        pricing_date: '2026-02-14',
+        allotment_result_date: '2026-02-15',
+        refund_date: '2026-02-15',
         listingDate: '2026-02-16',
+        lotSize: 500,
         offerPrice: '8-10',
+        offer_price: 9,
+        lot_amount: 4500,
+        subscription_multiple: 12.6,
         currency: 'HKD',
         score: null,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        source_name: 'Mock IPO Feed'
       },
       {
         code: '01234',
@@ -63,11 +80,18 @@ async function crawlIPOList() {
         status: 'coming',
         subscriptionStart: '2026-02-20',
         subscriptionEnd: '2026-02-25',
+        pricing_date: '2026-02-26',
+        allotment_result_date: '2026-02-27',
+        refund_date: '2026-02-27',
         listingDate: '2026-02-28',
+        lotSize: 100,
         offerPrice: '15-18',
+        offer_price: 16.5,
+        lot_amount: 1650,
         currency: 'HKD',
         score: null,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        source_name: 'Mock IPO Feed'
       },
       {
         code: '05678',
@@ -76,11 +100,18 @@ async function crawlIPOList() {
         status: 'coming',
         subscriptionStart: '2026-02-22',
         subscriptionEnd: '2026-02-27',
+        pricing_date: '2026-02-28',
+        allotment_result_date: '2026-03-01',
+        refund_date: '2026-03-01',
         listingDate: '2026-03-02',
+        lotSize: 100,
         offerPrice: '20-25',
+        offer_price: 22.5,
+        lot_amount: 2250,
         currency: 'HKD',
         score: null,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        source_name: 'Mock IPO Feed'
       },
       {
         code: '09876',
@@ -88,9 +119,21 @@ async function crawlIPOList() {
         industry: '消费',
         status: 'listed',
         listingDate: '2026-02-05',
+        lotSize: 100,
+        offerPrice: '10.00',
+        offer_price: 10,
+        current_price: 11.2,
+        current_vs_offer_pct: 12,
         firstDayReturn: '+12.3%',
+        first_day_change_pct: 12.3,
+        lot_amount: 1000,
+        first_day_lot_profit: 123,
+        current_lot_profit: 120,
+        subscription_multiple: 18.8,
+        allotment_rate: 22.5,
         score: 68,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date().toISOString(),
+        source_name: 'Mock IPO Feed'
       }
     ];
 

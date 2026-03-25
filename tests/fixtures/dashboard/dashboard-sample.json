@@ -1,0 +1,42 @@
+{
+  "records": [
+    {
+      "code": "03355",
+      "name": "TEST BIO",
+      "score": 9,
+      "rating": "A",
+      "status": "subscribing",
+      "listing_date": "2026-03-30",
+      "subscription_close": "2026-03-25",
+      "offer_price": 12.5,
+      "lot_size": 200,
+      "lot_cost": 2500,
+      "current_price": 13.2,
+      "current_return": 5.6,
+      "first_day_return": 8.2,
+      "subscription_multiple": 120,
+      "success_rate": 8.5,
+      "allotment_date": "2026-03-27",
+      "refund_date": "2026-03-28"
+    },
+    {
+      "code": "02526",
+      "name": "TEST TECH",
+      "score": 6,
+      "rating": "B",
+      "status": "coming",
+      "listing_date": "2026-04-02",
+      "subscription_close": "2026-03-29",
+      "offer_price": 8.8,
+      "lot_size": 500,
+      "lot_cost": 4400,
+      "current_price": null,
+      "current_return": null,
+      "first_day_return": null,
+      "subscription_multiple": 35,
+      "success_rate": 20,
+      "allotment_date": "2026-03-31",
+      "refund_date": "2026-04-01"
+    }
+  ]
+}

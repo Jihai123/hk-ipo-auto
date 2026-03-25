@@ -1,0 +1,2688 @@
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:582:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1463:16)
+    at listenInCluster (node:net:1511:12)
+    at Server.listen (node:net:1599:7)
+    at Function.listen (/www/wwwroot/hk-ipo-auto/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/www/wwwroot/hk-ipo-auto/server.js:934:5)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+/bin/sh: pdftotext: command not found
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Invalid XRef entry
+Internal Error: xref num 198 not found but needed, try to reconstruct<0a>
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Invalid XRef entry
+Internal Error: xref num 1355 not found but needed, try to reconstruct<0a>
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Invalid XRef entry
+Internal Error: xref num 1922 not found but needed, try to reconstruct<0a>
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't read xref table
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Couldn't find trailer dictionary
+Syntax Error: Invalid XRef entry
+Syntax Error: Top-level pages object is wrong type (null)
+Command Line Error: Wrong page range given: the first page (1) can not be after the last page (0).
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+Internal Error: Cannot handle URI 'https://www.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf'.
+[PDF] 解析失败: PDF内容太少(15673字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[API] 错误: PDF解析失败: PDF内容太少(15673字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF前几页含有"結果, results, allotment, 公告, 配發"，可能下载的是配发结果公告而非招股书
+[API] 错误: PDF解析失败: PDF前几页含有"結果, results, allotment, 公告, 配發"，可能下载的是配发结果公告而非招股书
+[PDF] 解析失败: PDF前几页含有"結果, results, allotment, 公告, 配發"，可能下载的是配发结果公告而非招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF前几页含有"結果, results, allotment, 公告"，可能下载的是配发结果公告而非招股书
+[PDF] 解析失败: PDF内容太少(15673字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+------------------------
+[PDF] 解析失败: PDF内容太少(12784字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2227
+  const tableInvestors = extractCornerstoneInvestors(text);
+        ^
+
+SyntaxError: Identifier 'tableInvestors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2847
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+[API] 错误: Cannot read properties of undefined (reading 'includes')
+[警告] 未识别到有效投资者，请检查原始文本结构
+[API] 错误: hasCornerstoneSection is not defined
+[PDF] 解析失败: PDF内容太少(10564字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(10931字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(14910字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[API] 错误: Cannot read properties of undefined (reading 'length')
+[API] 错误: Cannot read properties of undefined (reading 'length')
+[API] 错误: Cannot read properties of undefined (reading 'length')
+[API] 错误: sponsorBlockRegex is not defined
+[API] 错误: Cannot read properties of undefined (reading 'length')
+[API] 错误: sponsorBlockRegex is not defined
+[API] 错误: Cannot read properties of undefined (reading 'length')
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:3068
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+[Sponsor] 未匹配到保荐人区块
+[Sponsor] 未匹配到保荐人区块
+[Sponsor] 未匹配到保荐人区块
+[Sponsor] 未匹配到保荐人区块
+[API] 错误: parts is not defined
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1957
+const extractedSponsors = [];
+      ^
+
+SyntaxError: Identifier 'extractedSponsors' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+[PDF] 解析失败: PDF内容太少(15673字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(41661字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(10931字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(33207字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(14565字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(11907字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(12544字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(10840字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(17572字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(17572字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(17572字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(14341字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(10676字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(12017字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(11035字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(12678字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(12017字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+Syntax Warning: Invalid Font Weight
+[PDF] 解析失败: PDF内容太少(14325字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(10955字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(11659字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[PDF] 解析失败: PDF内容太少(10600字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+[PDF] 解析失败: PDF内容太少(10767字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:1934
+  const rowRegex = /([A-Z][A-Za-z&().\-\s]{1,40}|[\u4e00-\u9fa5（）()及]{2,40})\s+(\d{1,3}(?:\.\d+)?)\s*([\d,]{6,})\s*(\d+\.\d+)%/g;
+        ^
+
+SyntaxError: Identifier 'rowRegex' has already been declared
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+/www/wwwroot/hk-ipo-auto/server.js:2282
+}
+^
+
+SyntaxError: Unexpected token '}'
+    at Object.compileFunction (node:vm:360:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1126:15)
+    at Module._compile (node:internal/modules/cjs/loader:1162:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:911:12)
+    at Object.<anonymous> (/www/server/nodejs/v16.20.2/lib/node_modules/pm2/lib/ProcessContainerFork.js:33:23)
+    at Module._compile (node:internal/modules/cjs/loader:1198:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1252:10)
+    at Module.load (node:internal/modules/cjs/loader:1076:32)
+[PE] 评分异常: etnetData is not defined
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
+[Sponsor] 未匹配到保荐人标题
