@@ -37,6 +37,7 @@ const { execSync } = require('child_process');
 const { crawlIPODetail }      = require('./crawlers/etnet/ipoDetail');
 const { buildIndustryCodeMap } = require('./crawlers/etnet/industryCodeMap');
 const { getComparablePE }     = require('./crawlers/etnet/industryPE');
+const { crawlIPOListFromETNet } = require('./crawlers/etnet/ipoList');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -4085,73 +4086,317 @@ app.get('/api/score/:code', async (req, res) => {
   }
 });
 
+// ==================== 首页IPO数据层（ETNet列表 + 缓存） ====================
+const HOME_IPO_CACHE_CONFIG = {
+  current: {
+    file: path.join(CACHE_DIR, 'home-ipo-current.json'),
+    ttlMs: 20 * 60 * 1000,
+  },
+  top: {
+    file: path.join(CACHE_DIR, 'home-ipo-top.json'),
+    ttlMs: 20 * 60 * 1000,
+  },
+};
+const TOP_MAX_SCORE_CANDIDATES = 8;
+const TOP_MAX_SCORE_CANDIDATES_HARD_LIMIT = 12;
+
+function readJSONSafely(file) {
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch (e) {
+    console.warn(`[home-ipo] 读取缓存失败: ${file} - ${e.message}`);
+    return null;
+  }
+}
+
+function writeJSONSafely(file, payload) {
+  try {
+    fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf-8');
+    return true;
+  } catch (e) {
+    console.warn(`[home-ipo] 写入缓存失败: ${file} - ${e.message}`);
+    return false;
+  }
+}
+
+function readCachePayload(cfg) {
+  const data = readJSONSafely(cfg.file);
+  if (!data || !data.meta || !data.data) return null;
+  const ageMs = Date.now() - new Date(data.meta.updatedAt).getTime();
+  return {
+    raw: data,
+    expired: Number.isNaN(ageMs) ? true : ageMs > cfg.ttlMs,
+  };
+}
+
+function normalizeCurrentIpoData(raw) {
+  const safe = raw || {};
+  const subscribing = Array.isArray(safe.subscribing) ? safe.subscribing : [];
+  const listingSoon = Array.isArray(safe.listingSoon) ? safe.listingSoon : [];
+  const recentListed = Array.isArray(safe.recentListed) ? safe.recentListed : [];
+
+  return {
+    subscribing,
+    listingSoon,
+    recentListed: recentListed.map(item => ({
+      code: item.code,
+      name: item.name,
+      status: item.status || 'recentListed',
+      listingDate: item.listingDate || null,
+      offerPrice: item.offerPrice || null,
+      offerPriceRange: item.offerPriceRange || null,
+      lotSize: item.lotSize || null,
+      lotAmount: item.lotAmount || null,
+    })),
+  };
+}
+
+function toLegacyCurrentFields(currentData, updatedAt) {
+  return {
+    updateTime: updatedAt,
+    total: (currentData.subscribing?.length || 0) + (currentData.listingSoon?.length || 0) + (currentData.recentListed?.length || 0),
+    subscribing: currentData.subscribing || [],
+    coming: currentData.listingSoon || [],
+    listed: currentData.recentListed || [],
+  };
+}
+
+async function rebuildCurrentIpoData() {
+  const etnetData = await crawlIPOListFromETNet();
+  const normalized = normalizeCurrentIpoData(etnetData);
+  const updatedAt = new Date().toISOString();
+
+  const payload = {
+    meta: {
+      updatedAt,
+      source: 'etnet',
+    },
+    data: normalized,
+  };
+
+  writeJSONSafely(HOME_IPO_CACHE_CONFIG.current.file, payload);
+  return payload;
+}
+
+async function getCurrentIpoDataWithCache() {
+  const cache = readCachePayload(HOME_IPO_CACHE_CONFIG.current);
+  if (cache && !cache.expired) {
+    return {
+      data: cache.raw.data,
+      updatedAt: cache.raw.meta.updatedAt,
+      stale: false,
+      fromCache: true,
+    };
+  }
+
+  try {
+    const rebuilt = await rebuildCurrentIpoData();
+    return {
+      data: rebuilt.data,
+      updatedAt: rebuilt.meta.updatedAt,
+      stale: false,
+      fromCache: false,
+    };
+  } catch (e) {
+    if (cache) {
+      console.warn(`[home-ipo] current刷新失败，回退旧缓存: ${e.message}`);
+      return {
+        data: cache.raw.data,
+        updatedAt: cache.raw.meta.updatedAt,
+        stale: true,
+        fromCache: true,
+      };
+    }
+    throw e;
+  }
+}
+
+async function scoreCodeForTopRanking(code) {
+  const stockCode = String(code || '').replace(/\D/g, '').padStart(5, '0');
+  if (!stockCode) return null;
+
+  try {
+    let pdfText = readCache(stockCode);
+    if (!pdfText) {
+      const searchResults = await withTimeout(
+        searchProspectus(stockCode),
+        120000,
+        `Top榜评分(${stockCode})搜索招股书超时`
+      );
+      if (!searchResults || searchResults.length === 0) return null;
+
+      let prospectusInfo = null;
+      for (let i = 0; i < searchResults.length; i++) {
+        const candidate = searchResults[i];
+        try {
+          pdfText = await downloadAndParsePDF(candidate.link, stockCode, candidate.name || '');
+          prospectusInfo = candidate;
+          break;
+        } catch (_) {
+          // continue
+        }
+      }
+      if (!pdfText) return null;
+      // 保存评分副产物，避免重复请求
+      try {
+        const result = await scoreProspectus(pdfText, stockCode);
+        if (result) {
+          saveScoreToIPOList(stockCode, result, prospectusInfo);
+          return result;
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+
+    const scoreResult = await scoreProspectus(pdfText, stockCode);
+    return scoreResult || null;
+  } catch (e) {
+    console.warn(`[home-ipo] Top榜评分失败 ${stockCode}: ${e.message}`);
+    return null;
+  }
+}
+
+function normalizeTopItem(item) {
+  return {
+    code: item.code,
+    name: item.name || `股票${item.code}`,
+    totalScore: item.totalScore,
+    rating: item.rating || '待评级',
+    status: item.status || null,
+    listingDate: item.listingDate || null,
+  };
+}
+
+async function rebuildTopIpoData(limit) {
+  const current = await getCurrentIpoDataWithCache();
+  const pool = [
+    ...(current.data.subscribing || []),
+    ...(current.data.listingSoon || []),
+  ];
+
+  const unique = [];
+  const seen = new Set();
+  for (const item of pool) {
+    if (!item?.code || seen.has(item.code)) continue;
+    seen.add(item.code);
+    unique.push(item);
+  }
+
+  const maxCandidates = Math.min(TOP_MAX_SCORE_CANDIDATES_HARD_LIMIT, TOP_MAX_SCORE_CANDIDATES);
+  const candidates = unique.slice(0, maxCandidates);
+
+  const scored = [];
+  for (const item of candidates) {
+    const scoreResult = await scoreCodeForTopRanking(item.code);
+    if (!scoreResult) continue;
+    scored.push(normalizeTopItem({
+      code: item.code,
+      name: item.name,
+      totalScore: scoreResult.totalScore,
+      rating: scoreResult.rating,
+      status: item.status,
+      listingDate: item.listingDate,
+    }));
+  }
+
+  scored.sort((a, b) => b.totalScore - a.totalScore);
+  const topData = scored.slice(0, Math.max(1, limit));
+
+  const payload = {
+    meta: {
+      updatedAt: new Date().toISOString(),
+      source: 'top-score-cache',
+      candidates: candidates.length,
+    },
+    data: topData,
+  };
+  writeJSONSafely(HOME_IPO_CACHE_CONFIG.top.file, payload);
+  return payload;
+}
+
+async function getTopIpoDataWithCache(limit = 5) {
+  const cache = readCachePayload(HOME_IPO_CACHE_CONFIG.top);
+  if (cache && !cache.expired) {
+    return {
+      data: (cache.raw.data || []).slice(0, limit),
+      updatedAt: cache.raw.meta.updatedAt,
+      stale: false,
+      fromCache: true,
+    };
+  }
+
+  try {
+    const rebuilt = await rebuildTopIpoData(limit);
+    return {
+      data: (rebuilt.data || []).slice(0, limit),
+      updatedAt: rebuilt.meta.updatedAt,
+      stale: false,
+      fromCache: false,
+    };
+  } catch (e) {
+    if (cache) {
+      console.warn(`[home-ipo] top刷新失败，回退旧缓存: ${e.message}`);
+      return {
+        data: (cache.raw.data || []).slice(0, limit),
+        updatedAt: cache.raw.meta.updatedAt,
+        stale: true,
+        fromCache: true,
+      };
+    }
+    throw e;
+  }
+}
+
 // ==================== 新增API：数据展示 ====================
 
-// 获取当前IPO列表（在招股/即将上市）
-app.get('/api/ipo/current', (req, res) => {
-  const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
+// 获取当前IPO列表（首页时间表）
+app.get('/api/ipo/current', async (req, res) => {
+  try {
+    const current = await getCurrentIpoDataWithCache();
+    const legacy = toLegacyCurrentFields(current.data, current.updatedAt);
 
-  if (fs.existsSync(IPO_LIST_JSON)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
-
-      // 按状态分类
-      const subscribing = data.ipos.filter(ipo => ipo.status === 'subscribing');
-      const coming = data.ipos.filter(ipo => ipo.status === 'coming');
-      const listed = data.ipos.filter(ipo => ipo.status === 'listed');
-
-      res.json({
-        success: true,
-        updateTime: data.updateTime,
-        total: data.count,
-        subscribing: subscribing.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        coming: coming.sort((a, b) => (b.score || 0) - (a.score || 0)),
-        listed: listed.slice(0, 5), // 最近5个
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  } else {
-    // 返回空数据
     res.json({
       success: true,
-      updateTime: new Date().toISOString(),
-      total: 0,
-      subscribing: [],
-      coming: [],
-      listed: [],
-      message: '暂无IPO数据，请运行 node scripts/crawler-ipo-list.js'
+      data: current.data,
+      updatedAt: current.updatedAt,
+      stale: current.stale,
+      // 兼容旧字段
+      ...legacy,
     });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 获取Top评分IPO（用于首页Top榜单）
-// 🎯 改进：显示所有用户评分过的股票，不限制状态
-app.get('/api/ipo/top', (req, res) => {
-  const IPO_LIST_JSON = path.join(DATA_DIR, 'ipo-list.json');
-  const limit = parseInt(req.query.limit) || 5;
+// 获取Top评分IPO（首页评分榜）
+app.get('/api/ipo/top', async (req, res) => {
+  const reqLimit = parseInt(req.query.limit, 10);
+  const limit = Number.isNaN(reqLimit) ? 5 : Math.max(1, Math.min(20, reqLimit));
 
-  if (fs.existsSync(IPO_LIST_JSON)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(IPO_LIST_JSON, 'utf-8'));
+  try {
+    const top = await getTopIpoDataWithCache(limit);
 
-      // 筛选所有已评分的IPO，按评分降序排列
-      const topIPOs = data.ipos
-        .filter(ipo => ipo.score !== null && ipo.score !== undefined)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
-
-      res.json({
-        success: true,
-        count: topIPOs.length,
-        total: data.ipos.length,
-        ipos: topIPOs
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  } else {
-    res.json({ success: true, count: 0, total: 0, ipos: [] });
+    res.json({
+      success: true,
+      data: top.data,
+      updatedAt: top.updatedAt,
+      stale: top.stale,
+      // 兼容旧字段
+      count: top.data.length,
+      total: top.data.length,
+      ipos: top.data.map(item => ({
+        code: item.code,
+        name: item.name,
+        score: item.totalScore,
+        rating: item.rating,
+        status: item.status,
+        listingDate: item.listingDate,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
