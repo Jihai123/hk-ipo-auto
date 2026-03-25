@@ -153,20 +153,31 @@ function buildEvidenceSnippet(obj) {
 }
 
 async function runBrowserDiagnostics(report) {
-  let playwright;
+  let browserType = null;
+  let launcher = null;
+
   try {
-    playwright = require('playwright');
-  } catch (err) {
-    addIssue(report, {
-      level: 'critical',
-      location: 'scripts/full-system-check.js',
-      module: '前端真实渲染层',
-      phenomenon: '未安装 playwright，无法执行真实浏览器自动化诊断。',
-      suspected_root_cause: '依赖缺失，工具退化为静态检查，无法覆盖“可点击可渲染”场景。',
-      evidence: err.message,
-      suggestion: '执行 npm i -D playwright && npx playwright install chromium，然后重跑诊断。',
-    });
-    return;
+    // puppeteer-core 对 Node 16 兼容更好，优先使用
+    // eslint-disable-next-line global-require
+    launcher = require('puppeteer-core');
+    browserType = 'puppeteer-core';
+  } catch (_) {
+    try {
+      // eslint-disable-next-line global-require
+      launcher = require('puppeteer');
+      browserType = 'puppeteer';
+    } catch (err) {
+      addIssue(report, {
+        level: 'critical',
+        location: 'scripts/full-system-check.js',
+        module: '前端真实渲染层',
+        phenomenon: '未安装可用浏览器自动化依赖（puppeteer/puppeteer-core），无法执行真实浏览器诊断。',
+        suspected_root_cause: '依赖缺失，工具退化为静态检查。',
+        evidence: err.message,
+        suggestion: '执行 npm i -D puppeteer-core，并通过 CHROME_PATH 指定本地 Chromium 路径。',
+      });
+      return;
+    }
   }
 
   const artifacts = {
@@ -181,21 +192,27 @@ async function runBrowserDiagnostics(report) {
 
   let browser;
   try {
-    browser = await playwright.chromium.launch({ headless: true });
+    const launchOptions = {
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    };
+    if (process.env.CHROME_PATH) launchOptions.executablePath = process.env.CHROME_PATH;
+    browser = await launcher.launch(launchOptions);
   } catch (err) {
     addIssue(report, {
       level: 'critical',
-      location: 'playwright.chromium.launch',
+      location: `${browserType}.launch`,
       module: '前端真实渲染层',
       phenomenon: '浏览器启动失败，无法执行真实页面可用性检查。',
-      suspected_root_cause: '浏览器二进制未安装或下载受限。',
+      suspected_root_cause: '浏览器二进制未安装、路径未配置（CHROME_PATH）或环境限制。',
       evidence: err.message,
-      suggestion: '执行 npx playwright install chromium，或在 CI 镜像预装 Chromium。',
+      suggestion: '安装 Chromium 并设置 CHROME_PATH，或在 CI 镜像预装浏览器。',
     });
     return;
   }
 
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1200 } });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1600, height: 1200 });
 
   const consoleLogs = [];
   const requestLogs = [];
@@ -224,7 +241,7 @@ async function runBrowserDiagnostics(report) {
     failedRequests.push({ url: req.url(), error: req.failure()?.errorText || 'requestfailed' });
   });
 
-  await page.goto(`${BASE_URL}/hk/`, { waitUntil: 'networkidle', timeout: TIMEOUT });
+  await page.goto(`${BASE_URL}/hk/`, { waitUntil: 'networkidle0', timeout: TIMEOUT });
   await page.waitForTimeout(1800);
 
   await page.screenshot({ path: artifacts.screenshot_before, fullPage: true });
@@ -280,7 +297,7 @@ async function runBrowserDiagnostics(report) {
       module: '前端真实渲染层',
       phenomenon: '页面加载完成后仍存在 skeleton 状态。',
       suspected_root_cause: '异步渲染未收敛，或请求失败后未回填真实内容。',
-      evidence: `skeleton elements remain in DOM`,
+      evidence: 'skeleton elements remain in DOM',
       suggestion: '为各模块补充 finally 状态收敛逻辑，确保成功/失败都移除 skeleton。',
     });
   }
@@ -341,8 +358,7 @@ async function runBrowserDiagnostics(report) {
     });
   }
 
-  // E2E: 立即评分
-  await page.fill('#codeInput', SCORE_CODE);
+  await page.type('#codeInput', SCORE_CODE, { delay: 20 });
   await page.click('#scoreForm button[type="submit"]');
   await page.waitForTimeout(2500);
 
@@ -401,6 +417,7 @@ async function runBrowserDiagnostics(report) {
   fs.writeFileSync(artifacts.console, JSON.stringify({ consoleLogs, pageErrors }, null, 2), 'utf-8');
 
   report.modules.frontend_render.browser_telemetry = {
+    engine: browserType,
     console_error_count: consoleLogs.filter((x) => x.type === 'error').length,
     page_error_count: pageErrors.length,
     failed_request_count: failedRequests.length,
