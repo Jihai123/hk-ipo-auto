@@ -26,7 +26,8 @@
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "puppeteer-core": "^19.11.1"
   },
   "optionalDependencies": {
     "better-sqlite3": "^9.6.0"

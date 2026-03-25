@@ -147,6 +147,7 @@ function runPythonBrowserCheck(report) {
     });
     return null;
   }
+}
 
   try {
     return JSON.parse(fs.readFileSync(PY_BROWSER_OUT, 'utf-8'));
