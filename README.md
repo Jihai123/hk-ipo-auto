@@ -90,34 +90,6 @@ Fixture 文件：
 - `tests/fixtures/etnet/listed-today.html`
 - `tests/fixtures/etnet/subscribing.html`
 
-### 3) 一键自检脚本（推荐）
-
-```bash
-bash scripts/one-click-check.sh 03355
-```
-
-作用：自动安装依赖、启动服务、探活 `/api/dashboard`、`/api/score/:code`、`/api/ipo/top`、`/api/ipo/current`、`/api/market/stats`，并输出汇总结果。
-
-### 4) 全量质量检查工具（前端+后端+数据完整度）
-
-```bash
-node scripts/full-system-check.js --code=03355
-# 或
-npm run test:full
-```
-
-检查范围：
-
-- 后端核心接口可用性：`/api/dashboard`、`/api/score/:code`、`/api/ipo/top`、`/api/ipo/current`、`/api/market/stats`
-- 前端页面结构与样式关键点：标题、评分表单、Top3/榜单/时间表容器、核心 CSS 类、响应式样式
-- 前端 PE 暴露检查：HTML 与 dashboard payload 不应出现 PE 展示字段
-- 数据完整度：Top3 与榜单字段完整度、`name` 空值统计、状态分布
-
-输出：
-
-- 控制台摘要（PASS / PASS_WITH_WARNINGS / FAIL）
-- `artifacts/full-system-check-*.json` 详细报告，可用于是否“废弃项目”的决策记录
-
 ---
 
 ## 快速部署

@@ -21,36 +21,35 @@ function pick(arr, code) {
     console.log('Detail source:', rec?._source?.detail_source || 'N/A');
     console.log('Fallback source:', rec?._source?.fallback_source || 'N/A');
 
-    const effective = rec || (data.items || [])[0] || null;
-    if (!effective) {
+    if (!rec) {
       console.log('Final result: FAIL (no record found)');
       process.exit(2);
     }
 
-    const fsMap = effective._source?.field_sources || {};
+    const fsMap = rec._source?.field_sources || {};
     console.log('Field source map:');
     Object.entries(fsMap).forEach(([k, v]) => console.log(`  - ${k}: ${v}`));
 
-    console.log('Name 来源证据:', effective._source?.name_evidence || fsMap.name || 'unknown');
-    console.log('Status 来源证据:', effective._source?.status_evidence || fsMap.status || 'unknown');
+    console.log('Name 来源证据:', rec._source?.name_evidence || fsMap.name || 'unknown');
+    console.log('Status 来源证据:', rec._source?.status_evidence || fsMap.status || 'unknown');
 
     console.log('Record preview:', {
-      code: effective.code,
-      name: effective.name,
-      status: effective.status,
-      listing_date: effective.listing_date,
-      offer_price: effective.offer_price,
-      lot_size: effective.lot_size,
-      lot_cost: effective.lot_cost,
-      subscription_multiple: effective.subscription_multiple,
-      success_rate: effective.success_rate,
-      current_price: effective.current_price,
-      source_sections: effective._source?.source_sections || [],
-      data_completeness: effective.data_completeness,
-      source_coverage: effective.source_coverage,
+      code: rec.code,
+      name: rec.name,
+      status: rec.status,
+      listing_date: rec.listing_date,
+      offer_price: rec.offer_price,
+      lot_size: rec.lot_size,
+      lot_cost: rec.lot_cost,
+      subscription_multiple: rec.subscription_multiple,
+      success_rate: rec.success_rate,
+      current_price: rec.current_price,
+      source_sections: rec._source?.source_sections || [],
+      data_completeness: rec.data_completeness,
+      source_coverage: rec.source_coverage,
     });
 
-    const pass = !!effective.name && !!effective.status;
+    const pass = !!rec.name && !!rec.status;
     console.log(`Final result: ${pass ? 'PASS' : 'PARTIAL'}`);
     process.exit(pass ? 0 : 1);
   } catch (error) {
