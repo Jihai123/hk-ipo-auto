@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
- * 全量系统检查（v3）
- * Node 作为总入口，Python Selenium 负责真实浏览器诊断。
+ * 全量系统检查（v4）
+ * Node 负责接口/结构/联动检查，Python Selenium 负责真实浏览器可用性诊断。
  */
 
 const { spawn, spawnSync } = require('child_process');
@@ -11,10 +11,12 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const args = process.argv.slice(2);
-const argMap = Object.fromEntries(args.filter((a) => a.startsWith('--') && a.includes('=')).map((a) => {
-  const [k, v] = a.replace(/^--/, '').split('=');
-  return [k, v];
-}));
+const argMap = Object.fromEntries(args
+  .filter((a) => a.startsWith('--') && a.includes('='))
+  .map((a) => {
+    const [k, v] = a.replace(/^--/, '').split('=');
+    return [k, v];
+  }));
 
 const SCORE_CODE = argMap.code || '03355';
 const PORT = Number(argMap.port || process.env.PORT || 3010);
@@ -56,9 +58,10 @@ function addIssue(report, issue) {
 }
 
 function summarizeSeverity(issues) {
-  const stat = { critical: 0, major: 0, minor: 0 };
-  for (const i of issues) stat[i.level] += 1;
-  return stat;
+  return issues.reduce((acc, i) => {
+    acc[i.level] += 1;
+    return acc;
+  }, { critical: 0, major: 0, minor: 0 });
 }
 
 function startServerIfNeeded() {
@@ -74,9 +77,8 @@ function startServerIfNeeded() {
 }
 
 function stopServerIfStarted() {
-  if (serverProc) {
-    try { process.kill(serverProc.pid, 'SIGTERM'); } catch (_) { /* ignore */ }
-  }
+  if (!serverProc) return;
+  try { process.kill(serverProc.pid, 'SIGTERM'); } catch (_) { /* ignore */ }
 }
 
 async function waitServerAlive(maxRetries = 40) {
@@ -114,13 +116,20 @@ function pathMatchesRoute(apiPath, routePath) {
 }
 
 function runPythonBrowserCheck(report) {
-  const cmd = ['scripts/browser-check.py', `--url=${BASE_URL}`, `--code=${SCORE_CODE}`, `--out=${PY_BROWSER_OUT}`, `--artifacts=${RUN_DIR}`];
+  const cmd = [
+    'scripts/browser-check.py',
+    `--url=${BASE_URL}`,
+    `--code=${SCORE_CODE}`,
+    `--out=${PY_BROWSER_OUT}`,
+    `--artifacts=${RUN_DIR}`,
+  ];
+
   const r = spawnSync('python3', cmd, { cwd: process.cwd(), encoding: 'utf-8', timeout: TIMEOUT * 4 });
 
   report.modules.browser_env.command = `python3 ${cmd.join(' ')}`;
   report.modules.browser_env.exit_code = r.status;
-  report.modules.browser_env.stdout = (r.stdout || '').slice(0, 2000);
-  report.modules.browser_env.stderr = (r.stderr || '').slice(0, 2000);
+  report.modules.browser_env.stdout = (r.stdout || '').slice(0, 2500);
+  report.modules.browser_env.stderr = (r.stderr || '').slice(0, 2500);
 
   if (r.error) {
     addIssue(report, {
@@ -147,7 +156,6 @@ function runPythonBrowserCheck(report) {
     });
     return null;
   }
-}
 
   try {
     return JSON.parse(fs.readFileSync(PY_BROWSER_OUT, 'utf-8'));
@@ -180,12 +188,39 @@ function determineOverall(report, browserExecuted) {
   return 'PASS';
 }
 
+function buildDiagnosisSummary(report) {
+  const group = (keyword) => report.issues.filter((x) => x.module.includes(keyword));
+  const envIssues = group('浏览器诊断环境');
+  const renderIssues = report.issues.filter((x) => ['前端真实渲染层', '数据完整度'].includes(x.module));
+  const mappingIssues = group('前后端联动层');
+  const scoreIssues = group('核心评分链路');
+  const fakeModules = report.issues
+    .filter((x) => x.phenomenon.includes('空壳') || x.phenomenon.includes('暂无数据'))
+    .map((x) => ({ module: x.location, phenomenon: x.phenomenon }));
+
+  const priorities = [];
+  if (mappingIssues.length) priorities.push('优先排查前端 fetch 路径与后端路由映射是否一致（尤其 /api/* 漂移）。');
+  if (scoreIssues.length) priorities.push('优先复盘评分链路提交事件 → /api/score/:code 返回结构 → #scoreResult 渲染字段。');
+  if (renderIssues.length) priorities.push('优先核对 dashboard 聚合字段与前端模块映射，确认不是“容器存在但内容失真”。');
+  while (priorities.length < 3) priorities.push('补充一次带日志的浏览器重跑，确认是否存在间歇性 console/network 异常。');
+
+  return {
+    environment_issues: envIssues.map((x) => `${x.id}: ${x.phenomenon}`),
+    frontend_render_issues: renderIssues.map((x) => `${x.id}: ${x.phenomenon}`),
+    api_mapping_issues: mappingIssues.map((x) => `${x.id}: ${x.phenomenon}`),
+    score_chain_issues: scoreIssues.map((x) => `${x.id}: ${x.phenomenon}`),
+    modules_exist_but_unusable: fakeModules,
+    top3_next_steps: priorities.slice(0, 3),
+  };
+}
+
 function buildMarkdown(report) {
   const sev = summarizeSeverity(report.issues);
   const lines = [
     '# 全量系统可用性诊断报告',
     '',
-    `- 结论: **${report.summary.status}**`,
+    `- 总体结论: **${report.summary.status}**`,
+    `- 结论依据: ${report.summary.basis.join('；')}`,
     `- 基准地址: ${report.meta.base_url}`,
     `- 时间: ${report.meta.started_at} ~ ${report.meta.finished_at}`,
     `- 问题统计: critical=${sev.critical}, major=${sev.major}, minor=${sev.minor}`,
@@ -193,27 +228,38 @@ function buildMarkdown(report) {
     '## 分模块结果',
   ];
 
-  for (const [k, v] of Object.entries(report.module_status)) lines.push(`- **${k}**: ${v}`);
+  Object.entries(report.module_status).forEach(([k, v]) => lines.push(`- **${k}**: ${v}`));
 
-  lines.push('', '## 问题明细');
+  lines.push('', '## 问题列表 issues');
   if (!report.issues.length) {
     lines.push('- 无问题。');
   } else {
-    for (const i of report.issues) {
+    report.issues.forEach((i) => {
       lines.push(`### ${i.id} [${i.level}] ${i.module}`);
-      lines.push(`- 位置: ${i.location}`);
-      lines.push(`- 现象: ${i.phenomenon}`);
-      lines.push(`- 推测根因: ${i.suspected_root_cause}`);
-      lines.push(`- 证据: ${i.evidence}`);
-      lines.push(`- 建议修复方向: ${i.suggestion}`);
+      lines.push(`- location: ${i.location}`);
+      lines.push(`- phenomenon: ${i.phenomenon}`);
+      lines.push(`- suspected_root_cause: ${i.suspected_root_cause}`);
+      lines.push(`- evidence: ${i.evidence}`);
+      lines.push(`- suggestion: ${i.suggestion}`);
       lines.push('');
-    }
+    });
   }
 
-  lines.push('## Artifacts');
-  for (const [k, v] of Object.entries(report.artifacts.files)) lines.push(`- ${k}: ${v}`);
+  lines.push('## diagnosis_summary');
+  lines.push(`- 环境问题: ${report.diagnosis_summary.environment_issues.length ? report.diagnosis_summary.environment_issues.join(' | ') : '无'}`);
+  lines.push(`- 前端渲染问题: ${report.diagnosis_summary.frontend_render_issues.length ? report.diagnosis_summary.frontend_render_issues.join(' | ') : '无'}`);
+  lines.push(`- 接口映射问题: ${report.diagnosis_summary.api_mapping_issues.length ? report.diagnosis_summary.api_mapping_issues.join(' | ') : '无'}`);
+  lines.push(`- 评分链路问题: ${report.diagnosis_summary.score_chain_issues.length ? report.diagnosis_summary.score_chain_issues.join(' | ') : '无'}`);
+  lines.push('- 看起来存在但不可用模块:');
+  if (!report.diagnosis_summary.modules_exist_but_unusable.length) lines.push('  - 无');
+  else report.diagnosis_summary.modules_exist_but_unusable.forEach((x) => lines.push(`  - ${x.module}: ${x.phenomenon}`));
+  lines.push('- 下一步最优先排查 TOP3:');
+  report.diagnosis_summary.top3_next_steps.forEach((x) => lines.push(`  - ${x}`));
+
+  lines.push('', '## Artifacts');
+  Object.entries(report.artifacts.files).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
   if (report.artifacts.browser) {
-    for (const [k, v] of Object.entries(report.artifacts.browser)) lines.push(`- ${k}: ${v}`);
+    Object.entries(report.artifacts.browser).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
   }
 
   return `${lines.join('\n')}\n`;
@@ -231,7 +277,7 @@ async function main() {
       score_code: SCORE_CODE,
       auto_start: AUTO_START,
       timeout_ms: TIMEOUT,
-      checker_version: 'full-check-v3-node+selenium',
+      checker_version: 'full-check-v4-node+selenium',
     },
     module_status: {
       '后端接口层': 'PENDING',
@@ -239,8 +285,8 @@ async function main() {
       '前端真实渲染层': 'PENDING',
       '前后端联动层': 'PENDING',
       '核心评分链路': 'PENDING',
-      '数据完整度': 'PENDING',
       '浏览器诊断环境': 'PENDING',
+      '数据完整度': 'PENDING',
       '页面可用性判定': 'PENDING',
     },
     modules: {
@@ -252,11 +298,12 @@ async function main() {
       browser_check: null,
     },
     issues: [],
+    diagnosis_summary: {},
     artifacts: {
       files: {
-        json_report: JSON_REPORT_PATH,
-        markdown_report: MD_REPORT_PATH,
-        browser_json: PY_BROWSER_OUT,
+        report_json: JSON_REPORT_PATH,
+        report_md: MD_REPORT_PATH,
+        browser_check_json: PY_BROWSER_OUT,
       },
       browser: null,
     },
@@ -268,33 +315,61 @@ async function main() {
 
   if (!alive) {
     addIssue(report, {
-      level: 'critical', module: '后端接口层', location: BASE_URL,
-      phenomenon: '服务不可达。', suspected_root_cause: '服务未启动或端口冲突。',
-      evidence: `BASE_URL=${BASE_URL}`, suggestion: '检查 server.js 启动日志与端口占用。',
+      level: 'critical',
+      module: '后端接口层',
+      location: BASE_URL,
+      phenomenon: '服务不可达。',
+      suspected_root_cause: '服务未启动或端口冲突。',
+      evidence: `BASE_URL=${BASE_URL}`,
+      suggestion: '检查 server.js 启动日志与端口占用。',
     });
   } else {
-    const apiTargets = ['/api/dashboard?sort=score', `/api/score/${SCORE_CODE}`, '/api/ipo/top?limit=3', '/api/ipo/current', '/api/market/stats'];
+    const apiTargets = [
+      '/api/dashboard?sort=score',
+      `/api/score/${SCORE_CODE}`,
+      '/api/ipo/top?limit=3',
+      '/api/ipo/current',
+      '/api/market/stats',
+    ];
     const apiPayload = {};
+
     for (const p of apiTargets) {
       try {
         const r = await httpGet(`${BASE_URL}${p}`);
-        const isJson = String(r.headers['content-type'] || '').includes('application/json');
+        const contentType = String(r.headers['content-type'] || '');
+        const isJson = contentType.includes('application/json');
         const body = isJson ? r.data : null;
         apiPayload[p] = body;
+
         const ok = r.status < 400 && isJson;
-        report.modules.backend.apis.push({ path: p, status: r.status, ok, success_field: body?.success ?? null, error: body?.error ?? null });
+        report.modules.backend.apis.push({
+          path: p,
+          status: r.status,
+          ok,
+          success_field: body && body.success !== undefined ? body.success : null,
+          error: body && body.error ? body.error : null,
+        });
+
         if (!ok) {
           addIssue(report, {
-            level: 'major', module: '后端接口层', location: p,
-            phenomenon: '接口返回异常。', suspected_root_cause: '状态码异常或非 JSON。',
-            evidence: `status=${r.status}, type=${r.headers['content-type']}`, suggestion: '校正接口返回。',
+            level: 'major',
+            module: '后端接口层',
+            location: p,
+            phenomenon: '接口返回异常（状态码或内容类型异常）。',
+            suspected_root_cause: '接口处理失败或返回协议不一致。',
+            evidence: `status=${r.status}; content-type=${contentType}`,
+            suggestion: '统一接口协议并排查异常状态。',
           });
         }
       } catch (err) {
         addIssue(report, {
-          level: 'critical', module: '后端接口层', location: p,
-          phenomenon: '接口请求失败。', suspected_root_cause: '服务异常。', evidence: err.message,
-          suggestion: '检查后端日志。',
+          level: 'critical',
+          module: '后端接口层',
+          location: p,
+          phenomenon: '接口请求失败。',
+          suspected_root_cause: '服务异常或网络失败。',
+          evidence: err.message,
+          suggestion: '检查服务日志与监听地址。',
         });
       }
     }
@@ -311,25 +386,35 @@ async function main() {
       has_validation: $('#validation').length > 0,
     };
 
-    for (const [k, v] of Object.entries(report.modules.frontend_static)) {
+    Object.entries(report.modules.frontend_static).forEach(([k, v]) => {
       if (!v) {
         addIssue(report, {
-          level: 'major', module: '前端静态结构层', location: '/hk/',
+          level: 'major',
+          module: '前端静态结构层',
+          location: '/hk/',
           phenomenon: `关键容器缺失: ${k}`,
-          suspected_root_cause: '模板结构缺失。', evidence: `${k}=false`, suggestion: '补齐页面结构。',
+          suspected_root_cause: '页面模板结构缺失。',
+          evidence: `${k}=false`,
+          suggestion: '补齐 DOM 容器并加 smoke test。',
         });
       }
-    }
+    });
 
     const frontendApiPaths = extractApiPathsFromFrontend(html);
-    const serverRoutes = extractApiPathsFromServer(fs.readFileSync(path.join(process.cwd(), 'server.js'), 'utf-8'));
+    const serverCode = fs.readFileSync(path.join(process.cwd(), 'server.js'), 'utf-8');
+    const serverRoutes = extractApiPathsFromServer(serverCode);
     const unmatched = frontendApiPaths.filter((f) => !f.includes('${') && !serverRoutes.some((s) => pathMatchesRoute(f, s)));
     report.modules.integration = { frontend_api_paths: frontendApiPaths, unmatched_frontend_calls: unmatched };
+
     if (unmatched.length) {
       addIssue(report, {
-        level: 'critical', module: '前后端联动层', location: '前端 fetch 路径',
-        phenomenon: '前端调用路径与后端不一致。', suspected_root_cause: '接口路径漂移。',
-        evidence: unmatched.join(', '), suggestion: '统一 API 常量并做 CI 校验。',
+        level: 'critical',
+        module: '前后端联动层',
+        location: '前端 fetch 路径',
+        phenomenon: '前端调用路径与后端路由不一致。',
+        suspected_root_cause: '接口路径漂移或映射遗漏。',
+        evidence: unmatched.join(', '),
+        suggestion: '统一 API 路径常量并加路由一致性检查。',
       });
     }
 
@@ -349,30 +434,35 @@ async function main() {
       has_validation_data: !!dashboard.validation_summary,
     };
 
-    if (top3Valid.length === 0) {
+    if (!top3Valid.length) {
       addIssue(report, {
-        level: 'critical', module: '数据完整度', location: '/api/dashboard.top3',
-        phenomenon: 'TOP3 无有效业务数据。', suspected_root_cause: '数据源为空或映射失败。',
-        evidence: JSON.stringify(top3.slice(0, 2)), suggestion: '检查 dashboard 数据聚合。',
+        level: 'critical',
+        module: '数据完整度',
+        location: '/api/dashboard.top3',
+        phenomenon: 'TOP3 无有效业务数据。',
+        suspected_root_cause: '聚合数据为空或字段映射异常。',
+        evidence: JSON.stringify(top3.slice(0, 2)),
+        suggestion: '排查 dashboard top3 数据源与字段映射。',
       });
     }
-    if (boardValid.length === 0) {
+    if (!boardValid.length) {
       addIssue(report, {
-        level: 'critical', module: '数据完整度', location: '/api/dashboard.leaderboard',
-        phenomenon: '评分榜无有效业务数据。', suspected_root_cause: '数据源为空或映射失败。',
-        evidence: JSON.stringify(leaderboard.slice(0, 2)), suggestion: '检查 dashboard 数据聚合。',
+        level: 'critical',
+        module: '数据完整度',
+        location: '/api/dashboard.leaderboard',
+        phenomenon: '评分榜无有效业务数据。',
+        suspected_root_cause: '聚合数据为空或字段映射异常。',
+        evidence: JSON.stringify(leaderboard.slice(0, 2)),
+        suggestion: '排查 dashboard leaderboard 数据源与字段映射。',
       });
     }
 
     const browserResult = runPythonBrowserCheck(report);
     report.modules.browser_check = browserResult;
 
-    if (browserResult && browserResult.artifacts) {
-      report.artifacts.browser = browserResult.artifacts;
-    }
-
+    if (browserResult && browserResult.artifacts) report.artifacts.browser = browserResult.artifacts;
     if (browserResult && Array.isArray(browserResult.issues)) {
-      for (const issue of browserResult.issues) addIssue(report, issue);
+      browserResult.issues.forEach((issue) => addIssue(report, issue));
     }
   }
 
@@ -382,8 +472,8 @@ async function main() {
   report.module_status['前端静态结构层'] = moduleStatusFromIssues('前端静态结构层', report.issues);
   report.module_status['前后端联动层'] = moduleStatusFromIssues('前后端联动层', report.issues);
   report.module_status['核心评分链路'] = moduleStatusFromIssues('核心评分链路', report.issues);
-  report.module_status['数据完整度'] = moduleStatusFromIssues('数据完整度', report.issues);
   report.module_status['浏览器诊断环境'] = moduleStatusFromIssues('浏览器诊断环境', report.issues);
+  report.module_status['数据完整度'] = moduleStatusFromIssues('数据完整度', report.issues);
 
   const frontRenderIssues = report.issues.filter((x) => ['前端真实渲染层', '浏览器诊断环境'].includes(x.module));
   if (!frontRenderIssues.length) report.module_status['前端真实渲染层'] = 'PASS';
@@ -399,8 +489,10 @@ async function main() {
     `major=${sev.major}`,
     `minor=${sev.minor}`,
     `browser_executed=${browserExecuted}`,
-    '真实浏览器未执行时，不允许 PASS。',
+    '规则: 浏览器诊断未成功执行时，页面可用性不能判定为 PASS。',
   ];
+
+  report.diagnosis_summary = buildDiagnosisSummary(report);
 
   report.meta.finished_at = now();
   fs.writeFileSync(JSON_REPORT_PATH, JSON.stringify(report, null, 2), 'utf-8');
@@ -419,7 +511,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[full-system-check] fatal:', err.stack || err.message);
+  console.error(err);
   stopServerIfStarted();
   process.exit(2);
 });
