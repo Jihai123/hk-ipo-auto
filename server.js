@@ -4381,12 +4381,37 @@ app.get('/api/ipo/current', async (req, res) => {
     const forceRefresh = req.query.refresh === '1' || req.query.force === '1';
     const current = await getCurrentIpoDataWithCache({ forceRefresh });
     const legacy = toLegacyCurrentFields(current.data, current.updatedAt);
+    const subscribing = current.data?.subscribing || [];
+    const listingSoon = current.data?.listingSoon || [];
+    const recentListed = current.data?.recentListed || [];
     const counts = {
-      subscribing: current.data?.subscribing?.length || 0,
-      listingSoon: current.data?.listingSoon?.length || 0,
-      recentListed: current.data?.recentListed?.length || 0,
+      subscribingCount: subscribing.length,
+      listingSoonCount: listingSoon.length,
+      recentListedCount: recentListed.length,
     };
-    console.log(`[API:/api/ipo/current] fromCache=${current.fromCache}, stale=${current.stale}, forceRefresh=${forceRefresh}, counts=${JSON.stringify(counts)}`);
+    const summarizeCurrentItem = (item) => item ? ({
+      code: item.code || '--',
+      name: item.name || '--',
+      status: item.status || '--',
+      listingDate: item.listingDate || '--',
+      offerEndDate: item.offerEndDate || '--',
+      offerPrice: item.offerPrice ?? '--',
+      offerPriceRange: item.offerPriceRange ?? '--',
+      lotSize: item.lotSize ?? '--',
+      lotAmount: item.lotAmount ?? '--',
+      subscriptionMultiple: item.subscriptionMultiple ?? '--',
+      allotmentRate: item.allotmentRate ?? '--',
+      firstDayChangePct: item.firstDayChangePct ?? '--',
+    }) : null;
+    console.log(`[ipo/current] summary fromCache=${current.fromCache}, stale=${current.stale}, forceRefresh=${forceRefresh}, counts=${JSON.stringify(counts)}, samples=${JSON.stringify({
+      subscribingFirst: summarizeCurrentItem(subscribing[0]),
+      recentListedFirst: summarizeCurrentItem(recentListed[0]),
+    })}`);
+    console.log(`[API:/api/ipo/current] fromCache=${current.fromCache}, stale=${current.stale}, forceRefresh=${forceRefresh}, counts=${JSON.stringify({
+      subscribing: counts.subscribingCount,
+      listingSoon: counts.listingSoonCount,
+      recentListed: counts.recentListedCount,
+    })}`);
 
     res.json({
       success: true,

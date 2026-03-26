@@ -16,6 +16,35 @@
       .replace(/'/g, '&#039;');
   }
 
+  const STATUS_LABEL_MAP = {
+    subscribing: '招股中',
+    listingSoon: '待上市',
+    recentListed: '近期上市',
+  };
+
+  function getStatusLabel(status, fallbackStatus) {
+    const normalized = status || fallbackStatus;
+    return STATUS_LABEL_MAP[normalized] || '--';
+  }
+
+  function summarizeItem(item) {
+    if (!item) return null;
+    return {
+      code: item.code || '--',
+      name: item.name || '--',
+      status: item.status || '--',
+      listingDate: item.listingDate || '--',
+      offerEndDate: item.offerEndDate || '--',
+      offerPrice: item.offerPrice ?? '--',
+      offerPriceRange: item.offerPriceRange ?? '--',
+      lotSize: item.lotSize ?? '--',
+      lotAmount: item.lotAmount ?? '--',
+      subscriptionMultiple: item.subscriptionMultiple ?? '--',
+      allotmentRate: item.allotmentRate ?? '--',
+      firstDayChangePct: item.firstDayChangePct ?? '--',
+    };
+  }
+
   function getTopList(data) {
     if (Array.isArray(data?.data)) return data.data;
     if (Array.isArray(data?.ipos)) {
@@ -52,7 +81,7 @@
     container.innerHTML = list.map((ipo, index) => {
       const score = Number(ipo.totalScore ?? 0);
       const scoreColor = score >= 4 ? 'var(--color-success)' : score >= 2 ? 'var(--color-warning)' : score >= 0 ? 'var(--color-text-secondary)' : 'var(--color-danger)';
-      const status = ipo.status || '-';
+      const status = getStatusLabel(ipo.status);
       const listingDate = ipo.listingDate || '-';
       return `
         <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--color-border);display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;" onclick="quickSearch('${escapeHtml(ipo.code)}')">
@@ -71,7 +100,10 @@
   }
 
   function timelineCard(title, items, mode) {
-    const rows = (items || []).slice(0, 8).map((ipo) => {
+    const timelineItems = (items || []).slice(0, 8);
+    console.log(`[home.js] timelineCard mode=${mode}, preview=${JSON.stringify(timelineItems.slice(0, 2).map(summarizeItem))}`);
+
+    const rows = timelineItems.map((ipo) => {
       const fallback = '--';
       const listing = ipo.listingDate || fallback;
       const offerEndDate = ipo.offerEndDate || fallback;
@@ -89,7 +121,7 @@
         ? (firstDayChangeNum > 0 ? 'var(--color-success)' : firstDayChangeNum < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)')
         : 'var(--color-text-muted)';
       const basic = `${escapeHtml(ipo.code || fallback)} · ${escapeHtml(ipo.name || fallback)}`;
-      const status = escapeHtml(ipo.status || mode);
+      const status = escapeHtml(getStatusLabel(ipo.status, mode));
 
       if (mode === 'recentListed') {
         return `
@@ -126,6 +158,7 @@
   function renderTimeline(data) {
     const container = document.getElementById('ipoTimeline');
     if (!container) return;
+    console.log(`[home.js] renderTimeline groups: subscribingFirst=${JSON.stringify(summarizeItem(data?.subscribing?.[0]))}, listingSoonFirst=${JSON.stringify(summarizeItem(data?.listingSoon?.[0]))}, recentListedFirst=${JSON.stringify(summarizeItem(data?.recentListed?.[0]))}`);
 
     container.innerHTML = [
       timelineCard('招股中', data.subscribing, 'subscribing'),
@@ -160,7 +193,16 @@
     try {
       const response = await fetchWithPathFallback('api/ipo/current');
       const json = await response.json();
-      renderTimeline(getCurrentData(json));
+      const currentData = getCurrentData(json);
+      console.log(`[home.js] /api/ipo/current loaded: counts=${JSON.stringify({
+        subscribingCount: currentData?.subscribing?.length || 0,
+        listingSoonCount: currentData?.listingSoon?.length || 0,
+        recentListedCount: currentData?.recentListed?.length || 0,
+      })}, sample=${JSON.stringify({
+        subscribingFirst: summarizeItem(currentData?.subscribing?.[0]),
+        recentListedFirst: summarizeItem(currentData?.recentListed?.[0]),
+      })}`);
+      renderTimeline(currentData);
     } catch (err) {
       if (container) {
         container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--color-danger);background:#fff;border:1px solid var(--color-border);border-radius:12px;">新股时间表加载失败</div>';
