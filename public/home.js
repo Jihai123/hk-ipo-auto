@@ -114,7 +114,7 @@
     }
 
     try {
-      const response = await fetch('/api/ipo/top?limit=8');
+      const response = await fetch('api/ipo/top?limit=8');
       const json = await response.json();
       renderTopList(getTopList(json));
     } catch (err) {
@@ -131,7 +131,7 @@
     }
 
     try {
-      const response = await fetch('/api/ipo/current');
+      const response = await fetch('api/ipo/current');
       const json = await response.json();
       renderTimeline(getCurrentData(json));
     } catch (err) {
