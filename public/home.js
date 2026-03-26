@@ -71,27 +71,47 @@
   }
 
   function timelineCard(title, items, mode) {
+    const formatValue = (value) => {
+      if (value === null || value === undefined || value === '') return '--';
+      return String(value);
+    };
+
+    const formatPct = (value) => {
+      if (value === null || value === undefined || value === '') return '--';
+      const num = Number(value);
+      if (!Number.isFinite(num)) return formatValue(value);
+      return `${num > 0 ? '+' : ''}${num}%`;
+    };
+
     const rows = (items || []).slice(0, 8).map((ipo) => {
-      const listing = ipo.listingDate || '-';
-      const price = ipo.offerPriceRange ? `${ipo.offerPriceRange}` : (ipo.offerPrice ?? '-');
-      const lotAmount = ipo.lotAmount ?? '-';
+      const listing = formatValue(ipo.listingDate);
       const basic = `${escapeHtml(ipo.code || '-')} · ${escapeHtml(ipo.name || '-')}`;
       const status = escapeHtml(ipo.status || mode);
 
       if (mode === 'recentListed') {
+        const firstDayChange = Number(ipo.firstDayChangePct);
+        let changeColor = 'var(--color-text-muted)';
+        if (Number.isFinite(firstDayChange) && firstDayChange > 0) changeColor = 'var(--color-success)';
+        if (Number.isFinite(firstDayChange) && firstDayChange < 0) changeColor = 'var(--color-danger)';
         return `
           <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
             <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
             <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
+            <div style="font-size:12px;color:var(--color-text-muted);">上市价 ${escapeHtml(formatValue(ipo.offerPrice ?? ipo.offerPriceRaw))} · 认购倍数 ${escapeHtml(formatValue(ipo.subscriptionMultiple))}x · 一手中签率 ${escapeHtml(formatValue(ipo.allotmentRate))}%</div>
+            <div style="font-size:12px;color:${changeColor};">累积升跌 ${escapeHtml(formatPct(ipo.firstDayChangePct))}</div>
           </div>
         `;
       }
 
+      const offerPriceRange = formatValue(ipo.offerPriceRange);
+      const offerEndDate = formatValue(ipo.offerEndDate);
+      const lotSize = formatValue(ipo.lotSize);
+      const lotAmount = formatValue(ipo.lotAmountRaw ?? ipo.lotAmount);
       return `
         <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
           <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
-          <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted);">招股价 ${escapeHtml(String(price))} · 入场费 ${escapeHtml(String(lotAmount))}</div>
+          <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)} · 截止认购 ${escapeHtml(offerEndDate)}</div>
+          <div style="font-size:12px;color:var(--color-text-muted);">发售价/区间 ${escapeHtml(offerPriceRange)} · 每手 ${escapeHtml(lotSize)} · 入场费 ${escapeHtml(lotAmount)}</div>
         </div>
       `;
     }).join('');

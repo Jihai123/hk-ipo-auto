@@ -33,7 +33,7 @@ const FIXED_COLUMN_MAP = {
     offerEndDate: 3,
     listingDate: 4,
     currency: 5,
-    offerPrice: 6,
+    offerPriceRange: 6,
     lotSize: 7,
     lotAmount: 8,
   },
@@ -163,6 +163,7 @@ function parseRowByFixedMap(columns = [], map = {}) {
     offerEndDate: getByIndex(columns, map.offerEndDate),
     listingDate: getByIndex(columns, map.listingDate),
     currency: getByIndex(columns, map.currency),
+    offerPriceRangeRaw: getByIndex(columns, map.offerPriceRange),
     offerPriceRaw: getByIndex(columns, map.offerPrice),
     offerPrice: getByIndex(columns, map.offerPrice),
     lotSize: getByIndex(columns, map.lotSize),
@@ -183,11 +184,12 @@ function normalizeSubscribingItem(item) {
     name,
     status: STATUS_MAP.subscribing,
     listingDate: normalizeDateOrRaw(item.listingDate),
-    offerPriceRange: String(item.offerPriceRaw || '').trim() || null,
-    lotSize: parseLotSize(item.lotSize),
-    lotAmount: parseLotAmount(item.lotAmount),
     offerEndDate: normalizeDateOrRaw(item.offerEndDate),
     currency: String(item.currency || '').trim() || null,
+    offerPriceRange: String(item.offerPriceRangeRaw || item.offerPriceRaw || '').trim() || null,
+    lotSize: parseLotSize(item.lotSize),
+    lotAmount: parseLotAmount(item.lotAmount),
+    lotAmountRaw: String(item.lotAmount || '').trim() || null,
   };
 }
 
@@ -202,6 +204,7 @@ function normalizeRecentListedItem(item) {
     status: STATUS_MAP.recentListed,
     listingDate: normalizeDateOrRaw(item.listingDate),
     offerPrice: parsePriceRange(item.offerPriceRaw || item.offerPrice).offerPrice,
+    offerPriceRaw: String(item.offerPriceRaw || item.offerPrice || '').trim() || null,
     subscriptionMultiple: parseLotAmount(item.subscriptionMultiple),
     allotmentRate: parsePercentNumber(item.allotmentRate),
     firstDayChangePct: parsePercentNumber(item.firstDayChangePct),
@@ -250,12 +253,23 @@ function parseFixedTables($, debug = false) {
   const subscribingTable = getTableByIndex($, FIXED_TABLE_INDEX.subscribing);
   const recentTable = getTableByIndex($, FIXED_TABLE_INDEX.recentListed);
 
-  const subscribing = subscribingTable
-    ? parseFixedTable($, subscribingTable, TABLE_TYPE.subscribing, debug)
-    : [];
-  const recentListed = recentTable
-    ? parseFixedTable($, recentTable, TABLE_TYPE.recentListed, debug)
-    : [];
+  let subscribing = [];
+  let recentListed = [];
+
+  if (subscribingTable) {
+    try {
+      subscribing = parseFixedTable($, subscribingTable, TABLE_TYPE.subscribing, debug);
+    } catch (e) {
+      console.warn(`[etnet/ipoList] 招股中表解析异常(table#5): ${e.message}`);
+    }
+  }
+  if (recentTable) {
+    try {
+      recentListed = parseFixedTable($, recentTable, TABLE_TYPE.recentListed, debug);
+    } catch (e) {
+      console.warn(`[etnet/ipoList] 近期上市表解析异常(table#8): ${e.message}`);
+    }
+  }
 
   if (!subscribingTable) {
     console.warn('[etnet/ipoList] 固定表定位失败: 招股中 table#5 不存在');

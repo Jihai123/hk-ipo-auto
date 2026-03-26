@@ -4137,20 +4137,32 @@ function normalizeCurrentIpoData(raw) {
   const recentListed = Array.isArray(safe.recentListed) ? safe.recentListed : [];
 
   return {
-    subscribing,
+    subscribing: subscribing.map(item => ({
+      code: item.code,
+      name: item.name,
+      status: item.status || 'subscribing',
+      listingDate: item.listingDate ?? null,
+      offerEndDate: item.offerEndDate ?? null,
+      currency: item.currency ?? null,
+      offerPriceRange: item.offerPriceRange ?? null,
+      lotSize: item.lotSize ?? null,
+      lotAmount: item.lotAmount ?? null,
+      lotAmountRaw: item.lotAmountRaw ?? null,
+    })),
     listingSoon,
     recentListed: recentListed.map(item => ({
       code: item.code,
       name: item.name,
       status: item.status || 'recentListed',
-      listingDate: item.listingDate || null,
-      offerPrice: item.offerPrice || null,
-      offerPriceRange: item.offerPriceRange || null,
-      subscriptionMultiple: item.subscriptionMultiple || null,
-      allotmentRate: item.allotmentRate || null,
-      firstDayChangePct: item.firstDayChangePct || null,
-      lotSize: item.lotSize || null,
-      lotAmount: item.lotAmount || null,
+      listingDate: item.listingDate ?? null,
+      offerPrice: item.offerPrice ?? null,
+      offerPriceRaw: item.offerPriceRaw ?? null,
+      offerPriceRange: item.offerPriceRange ?? null,
+      subscriptionMultiple: item.subscriptionMultiple ?? null,
+      allotmentRate: item.allotmentRate ?? null,
+      firstDayChangePct: item.firstDayChangePct ?? null,
+      lotSize: item.lotSize ?? null,
+      lotAmount: item.lotAmount ?? null,
     })),
   };
 }
