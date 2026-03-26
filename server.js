@@ -4146,6 +4146,9 @@ function normalizeCurrentIpoData(raw) {
       listingDate: item.listingDate || null,
       offerPrice: item.offerPrice || null,
       offerPriceRange: item.offerPriceRange || null,
+      subscriptionMultiple: item.subscriptionMultiple || null,
+      allotmentRate: item.allotmentRate || null,
+      firstDayChangePct: item.firstDayChangePct || null,
       lotSize: item.lotSize || null,
       lotAmount: item.lotAmount || null,
     })),
@@ -4165,6 +4168,14 @@ function toLegacyCurrentFields(currentData, updatedAt) {
 async function rebuildCurrentIpoData() {
   const etnetData = await crawlIPOListFromETNet();
   const normalized = normalizeCurrentIpoData(etnetData);
+
+  const totalItems = (normalized.subscribing?.length || 0)
+    + (normalized.listingSoon?.length || 0)
+    + (normalized.recentListed?.length || 0);
+  if (totalItems === 0) {
+    throw new Error('ETNet current IPO 解析结果为空，已拒绝覆盖缓存');
+  }
+
   const updatedAt = new Date().toISOString();
 
   const payload = {
@@ -4179,9 +4190,16 @@ async function rebuildCurrentIpoData() {
   return payload;
 }
 
-async function getCurrentIpoDataWithCache() {
+async function getCurrentIpoDataWithCache(options = {}) {
+  const forceRefresh = options.forceRefresh === true;
   const cache = readCachePayload(HOME_IPO_CACHE_CONFIG.current);
-  if (cache && !cache.expired) {
+  if (cache && !cache.expired && !forceRefresh) {
+    const counts = {
+      subscribing: cache.raw.data?.subscribing?.length || 0,
+      listingSoon: cache.raw.data?.listingSoon?.length || 0,
+      recentListed: cache.raw.data?.recentListed?.length || 0,
+    };
+    console.log(`[home-ipo] current cache命中: updatedAt=${cache.raw.meta.updatedAt}, counts=${JSON.stringify(counts)}`);
     return {
       data: cache.raw.data,
       updatedAt: cache.raw.meta.updatedAt,
@@ -4192,6 +4210,12 @@ async function getCurrentIpoDataWithCache() {
 
   try {
     const rebuilt = await rebuildCurrentIpoData();
+    const counts = {
+      subscribing: rebuilt.data?.subscribing?.length || 0,
+      listingSoon: rebuilt.data?.listingSoon?.length || 0,
+      recentListed: rebuilt.data?.recentListed?.length || 0,
+    };
+    console.log(`[home-ipo] current 刷新成功: updatedAt=${rebuilt.meta.updatedAt}, counts=${JSON.stringify(counts)}, forceRefresh=${forceRefresh}`);
     return {
       data: rebuilt.data,
       updatedAt: rebuilt.meta.updatedAt,
@@ -4354,14 +4378,22 @@ async function getTopIpoDataWithCache(limit = 5) {
 // 获取当前IPO列表（首页时间表）
 app.get('/api/ipo/current', async (req, res) => {
   try {
-    const current = await getCurrentIpoDataWithCache();
+    const forceRefresh = req.query.refresh === '1' || req.query.force === '1';
+    const current = await getCurrentIpoDataWithCache({ forceRefresh });
     const legacy = toLegacyCurrentFields(current.data, current.updatedAt);
+    const counts = {
+      subscribing: current.data?.subscribing?.length || 0,
+      listingSoon: current.data?.listingSoon?.length || 0,
+      recentListed: current.data?.recentListed?.length || 0,
+    };
+    console.log(`[API:/api/ipo/current] fromCache=${current.fromCache}, stale=${current.stale}, forceRefresh=${forceRefresh}, counts=${JSON.stringify(counts)}`);
 
     res.json({
       success: true,
       data: current.data,
       updatedAt: current.updatedAt,
       stale: current.stale,
+      fromCache: current.fromCache,
       // 兼容旧字段
       ...legacy,
     });

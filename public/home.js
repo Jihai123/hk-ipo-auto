@@ -1,4 +1,12 @@
 (function () {
+  async function fetchWithPathFallback(path, init) {
+    const primary = path.replace(/^\//, '');
+    const fallback = `/${primary}`;
+    let response = await fetch(primary, init);
+    if (response.status !== 404 || fallback === primary) return response;
+    return fetch(fallback, init);
+  }
+
   function escapeHtml(text) {
     return String(text || '')
       .replace(/&/g, '&amp;')
@@ -114,7 +122,7 @@
     }
 
     try {
-      const response = await fetch('/api/ipo/top?limit=8');
+      const response = await fetchWithPathFallback('api/ipo/top?limit=8');
       const json = await response.json();
       renderTopList(getTopList(json));
     } catch (err) {
@@ -131,7 +139,7 @@
     }
 
     try {
-      const response = await fetch('/api/ipo/current');
+      const response = await fetchWithPathFallback('api/ipo/current');
       const json = await response.json();
       renderTimeline(getCurrentData(json));
     } catch (err) {
