@@ -74,7 +74,7 @@
     if (!container) return;
 
     if (!list.length) {
-      container.innerHTML = '<div style="text-align:center;padding:36px;color:var(--color-text-muted);background:#fff;border:1px solid var(--color-border);border-radius:12px;">暂无可展示评分榜数据</div>';
+      container.innerHTML = '<div class="home-empty-state">暂无可展示评分榜数据</div>';
       return;
     }
 
@@ -84,19 +84,36 @@
       const status = getStatusLabel(ipo.status);
       const listingDate = ipo.listingDate || '-';
       return `
-        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--color-border);display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;" onclick="quickSearch('${escapeHtml(ipo.code)}')">
-          <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <div style="font-size:20px;font-weight:800;color:#cbd5e1;width:28px;">#${index + 1}</div>
-            <div>
-              <div style="font-weight:700;color:var(--color-text-primary);">${escapeHtml(ipo.name)} <span style="font-family:monospace;color:var(--color-text-secondary);">(${escapeHtml(ipo.code)})</span></div>
-              <div style="font-size:12px;color:var(--color-text-secondary);">${escapeHtml(status)} · 上市日 ${escapeHtml(listingDate)}</div>
-              <div style="font-size:12px;color:${scoreColor};font-weight:600;">${escapeHtml(ipo.rating || '待评级')}</div>
+        <div class="home-top-item" onclick="quickSearch('${escapeHtml(ipo.code)}')">
+          <div class="home-top-main">
+            <div class="home-top-rank">#${index + 1}</div>
+            <div class="home-top-meta">
+              <div class="home-stock-title">
+                <span class="home-stock-name">${escapeHtml(ipo.name)}</span>
+                <span class="home-stock-code">（${escapeHtml(ipo.code)}）</span>
+              </div>
+              <div class="home-row-sub">${escapeHtml(status)} · 上市日 ${escapeHtml(listingDate)}</div>
+              <div class="home-top-rating" style="color:${scoreColor};">${escapeHtml(ipo.rating || '待评级')}</div>
             </div>
           </div>
-          <div style="font-size:30px;font-weight:800;color:${scoreColor};font-variant-numeric:tabular-nums;">${score}</div>
+          <div class="home-score-value" style="color:${scoreColor};">${score}</div>
         </div>
       `;
     }).join('');
+  }
+
+  function getChangeDisplay(raw) {
+    const value = Number.parseFloat(String(raw ?? '').replace('%', ''));
+    if (!Number.isFinite(value)) {
+      return { text: '--', color: 'var(--color-text-muted)', className: 'is-flat' };
+    }
+    if (value > 0) {
+      return { text: `+${value}%`, color: 'var(--color-success)', className: 'is-up' };
+    }
+    if (value < 0) {
+      return { text: `${value}%`, color: 'var(--color-danger)', className: 'is-down' };
+    }
+    return { text: '0.00%', color: 'var(--color-text-secondary)', className: 'is-flat' };
   }
 
   function timelineCard(title, items, mode) {
@@ -112,44 +129,57 @@
       const lotAmount = ipo.lotAmount ?? fallback;
       const subscriptionMultiple = ipo.subscriptionMultiple ?? fallback;
       const allotmentRate = ipo.allotmentRate ?? fallback;
-      const firstDayChangeRaw = ipo.firstDayChangePct;
-      const firstDayChangeNum = Number.parseFloat(String(firstDayChangeRaw ?? '').replace('%', ''));
-      const firstDayChange = Number.isFinite(firstDayChangeNum)
-        ? `${String(firstDayChangeRaw).replace('%', '')}%`
-        : fallback;
-      const firstDayColor = Number.isFinite(firstDayChangeNum)
-        ? (firstDayChangeNum > 0 ? 'var(--color-success)' : firstDayChangeNum < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)')
-        : 'var(--color-text-muted)';
-      const basic = `${escapeHtml(ipo.code || fallback)} · ${escapeHtml(ipo.name || fallback)}`;
+      const change = getChangeDisplay(ipo.firstDayChangePct);
       const status = escapeHtml(getStatusLabel(ipo.status, mode));
 
       if (mode === 'recentListed') {
         return `
-          <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
-            <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
-            <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
-            <div style="font-size:12px;color:var(--color-text-muted);">上市价 ${escapeHtml(String(ipo.offerPrice ?? fallback))}</div>
-            <div style="font-size:12px;color:var(--color-text-muted);">
-              认购 ${escapeHtml(String(subscriptionMultiple))}x · 中签率 ${escapeHtml(String(allotmentRate))}% · 累积升跌
-              <span style="color:${firstDayColor};">${escapeHtml(String(firstDayChange))}</span>
+          <div class="home-ipo-row home-row-recent">
+            <div class="home-row-head">
+              <div class="home-stock-title">
+                <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+                <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+              </div>
+              <div class="home-change-pill ${change.className}" style="color:${change.color};">${escapeHtml(change.text)}</div>
             </div>
+            <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
+            <div class="home-row-metric">上市价 <span>${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+            <div class="home-row-metric">认购 <span>${escapeHtml(String(subscriptionMultiple))} 倍</span> · 中签率 <span>${escapeHtml(String(allotmentRate))}%</span></div>
+            <div class="home-row-focus">累积升跌 <span style="color:${change.color};">${escapeHtml(change.text)}</span></div>
+          </div>
+        `;
+      }
+
+      if (mode === 'subscribing') {
+        return `
+          <div class="home-ipo-row">
+            <div class="home-stock-title">
+              <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+              <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+            </div>
+            <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
+            <div class="home-offer-end">截止认购 <span>${escapeHtml(String(offerEndDate))}</span></div>
+            <div class="home-row-metric">发行价 <span>${escapeHtml(String(offerPrice))}</span> · 每手 <span>${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis">${escapeHtml(String(lotAmount))}</span></div>
           </div>
         `;
       }
 
       return `
-        <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
-          <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
-          <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted);">截止认购 ${escapeHtml(String(offerEndDate))}</div>
-          <div style="font-size:12px;color:var(--color-text-muted);">发售价/区间 ${escapeHtml(String(offerPrice))} · 每手 ${escapeHtml(String(lotSize))} · 入场费 ${escapeHtml(String(lotAmount))}</div>
+        <div class="home-ipo-row">
+          <div class="home-stock-title">
+            <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+            <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+          </div>
+          <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
+          <div class="home-row-metric">发行价 <span>${escapeHtml(String(offerPrice))}</span></div>
+          <div class="home-row-metric">每手 <span>${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis">${escapeHtml(String(lotAmount))}</span></div>
         </div>
       `;
     }).join('');
 
     return `
-      <div style="background:#fff;border:1px solid var(--color-border);border-radius:12px;padding:16px;">
-        <h3 style="font-size:18px;font-weight:700;margin-bottom:8px;color:var(--color-text-primary);">${title}</h3>
+      <div class="home-timeline-card">
+        <h3 class="home-timeline-title">${title}</h3>
         ${rows || '<div style="padding:12px 0;color:var(--color-text-muted);font-size:13px;">暂无数据</div>'}
       </div>
     `;
@@ -170,7 +200,7 @@
   async function loadTopList() {
     const container = document.getElementById('topIPOList');
     if (container) {
-      container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--color-text-muted);background:#fff;border:1px solid var(--color-border);border-radius:12px;">评分榜加载中...</div>';
+      container.innerHTML = '<div class="home-empty-state">评分榜加载中...</div>';
     }
 
     try {
@@ -179,7 +209,7 @@
       renderTopList(getTopList(json));
     } catch (err) {
       if (container) {
-        container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--color-danger);background:#fff;border:1px solid var(--color-border);border-radius:12px;">评分榜加载失败</div>';
+        container.innerHTML = '<div class="home-empty-state" style="color:var(--color-danger);">评分榜加载失败</div>';
       }
     }
   }
@@ -187,7 +217,7 @@
   async function loadTimeline() {
     const container = document.getElementById('ipoTimeline');
     if (container) {
-      container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--color-text-muted);background:#fff;border:1px solid var(--color-border);border-radius:12px;">新股时间表加载中...</div>';
+      container.innerHTML = '<div class="home-empty-state home-empty-span">新股时间表加载中...</div>';
     }
 
     try {
@@ -205,7 +235,7 @@
       renderTimeline(currentData);
     } catch (err) {
       if (container) {
-        container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--color-danger);background:#fff;border:1px solid var(--color-border);border-radius:12px;">新股时间表加载失败</div>';
+        container.innerHTML = '<div class="home-empty-state home-empty-span" style="color:var(--color-danger);">新股时间表加载失败</div>';
       }
     }
   }
