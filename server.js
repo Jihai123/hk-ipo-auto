@@ -4288,6 +4288,7 @@ function normalizeTopItem(item) {
     name: item.name || `股票${item.code}`,
     totalScore: item.totalScore,
     rating: item.rating || '待评级',
+    scoreDetails: item.scoreDetails || null,
     status: item.status || null,
     listingDate: item.listingDate || null,
   };
@@ -4320,6 +4321,7 @@ async function rebuildTopIpoData(limit) {
       name: item.name,
       totalScore: scoreResult.totalScore,
       rating: scoreResult.rating,
+      scoreDetails: scoreResult.scores || null,
       status: item.status,
       listingDate: item.listingDate,
     }));
@@ -4448,6 +4450,7 @@ app.get('/api/ipo/top', async (req, res) => {
         name: item.name,
         score: item.totalScore,
         rating: item.rating,
+        scoreDetails: item.scoreDetails || null,
         status: item.status,
         listingDate: item.listingDate,
       })),
