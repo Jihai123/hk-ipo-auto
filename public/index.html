@@ -58,6 +58,12 @@
       --color-warning-light: #fffbeb;
       --color-danger: #ef4444;
       --color-danger-light: #fef2f2;
+      --color-market-up: #c2413a;
+      --color-market-up-light: #fef2f2;
+      --color-market-down: #2f7d4f;
+      --color-market-down-light: #f0fdf4;
+      --color-market-flat: #64748b;
+      --color-market-flat-light: #f8fafc;
       --gradient-accent: linear-gradient(135deg, var(--color-accent-start) 0%, var(--color-accent-mid) 50%, var(--color-accent-end) 100%);
       --gradient-hero: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -1662,25 +1668,25 @@
       background: #fff;
       border: 1px solid var(--color-border);
       border-radius: 12px;
-      padding: 16px 18px;
+      padding: 18px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       cursor: pointer;
-      transition: border-color .2s ease, box-shadow .2s ease;
+      transition: border-color .2s ease, background-color .2s ease;
     }
     .home-top-item:hover {
       border-color: #d2d8e6;
-      box-shadow: var(--shadow-sm);
+      background: #f8fafc;
     }
     .home-top-main { display:flex; align-items:center; gap:12px; min-width:0; }
     .home-top-rank { font-size:20px; font-weight:800; color:#cbd5e1; width:30px; }
     .home-top-meta { min-width:0; }
     .home-stock-title { display:flex; align-items:baseline; gap:6px; line-height:1.35; min-width:0; }
-    .home-stock-name { font-weight:700; color:var(--color-text-primary); }
-    .home-stock-code { color:var(--color-text-muted); font-size:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .home-row-sub { font-size:12px; color:var(--color-text-secondary); margin-top:2px; }
+    .home-stock-name { font-weight:700; color:var(--color-text-primary); font-size:15px; }
+    .home-stock-code { color:var(--color-text-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+    .home-row-sub { font-size:12px; color:var(--color-text-secondary); margin-top:4px; }
     .home-top-rating { margin-top:2px; font-size:12px; font-weight:600; }
     .home-score-value { font-size:30px; font-weight:800; font-variant-numeric: tabular-nums; }
 
@@ -1688,53 +1694,75 @@
       background:#fff;
       border:1px solid var(--color-border);
       border-radius:12px;
-      padding:16px;
+      padding:18px;
     }
     .home-timeline-title {
       font-size:18px;
       font-weight:700;
-      margin-bottom:8px;
+      margin-bottom:10px;
       color:var(--color-text-primary);
     }
     .home-ipo-row {
-      padding:12px 0;
-      border-bottom:1px dashed #e7ebf3;
+      padding:14px 0;
+      border-bottom:1px solid #edf1f7;
+      transition: background-color .2s ease;
+    }
+    .home-ipo-row:hover {
+      background:#f8fafc;
     }
     .home-ipo-row:last-child { border-bottom:none; padding-bottom:4px; }
     .home-row-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-    .home-row-metric { font-size:12px; color:var(--color-text-muted); margin-top:4px; }
+    .home-row-metric { font-size:12px; color:var(--color-text-muted); margin-top:6px; }
     .home-row-metric span { color:var(--color-text-secondary); font-weight:500; }
     .home-offer-end {
-      margin-top:5px;
+      margin-top:7px;
       font-size:12px;
       color:#92400e;
       background:#fffbeb;
       border:1px solid #fde7bd;
       border-radius:999px;
       display:inline-flex;
-      gap:4px;
+      gap:6px;
       align-items:center;
-      padding:2px 10px;
+      padding:3px 10px;
     }
-    .home-offer-end span { color:#b45309; font-weight:600; }
-    .home-emphasis { color:var(--color-text-primary) !important; font-weight:600 !important; }
+    .home-offer-end span { color:#92400e; font-weight:700; font-variant-numeric:tabular-nums; }
+    .home-offer-end.is-urgent {
+      background:#fff1f2;
+      border-color:#fecdd3;
+      color:#be123c;
+    }
+    .home-offer-end.is-urgent span { color:#be123c; }
+    .home-emphasis { color:var(--color-text-primary) !important; font-weight:700 !important; }
     .home-change-pill {
-      font-size:20px;
+      font-size:24px;
       font-weight:800;
       line-height:1.1;
       font-variant-numeric:tabular-nums;
       white-space:nowrap;
+      padding:4px 10px;
+      border-radius:999px;
     }
-    .home-change-pill.is-up { color:var(--color-success); }
-    .home-change-pill.is-down { color:var(--color-danger); }
-    .home-change-pill.is-flat { color:var(--color-text-secondary); }
+    .home-change-pill.is-up {
+      color:var(--color-market-up);
+      background:var(--color-market-up-light);
+    }
+    .home-change-pill.is-down {
+      color:var(--color-market-down);
+      background:var(--color-market-down-light);
+    }
+    .home-change-pill.is-flat {
+      color:var(--color-market-flat);
+      background:var(--color-market-flat-light);
+    }
     .home-row-focus {
-      margin-top:6px;
+      margin-top:8px;
       font-size:12px;
       color:var(--color-text-secondary);
       font-weight:600;
     }
     .home-row-focus span { font-size:14px; font-weight:700; margin-left:4px; }
+    .home-num { font-variant-numeric:tabular-nums; }
 
     .home-empty-state {
       text-align:center;
@@ -1957,7 +1985,7 @@
 <section id="top-rankings" style="max-width: 1200px; margin: 48px auto; padding: 0 32px;">
   <div style="text-align: center; margin-bottom: 24px;">
     <h2 style="font-size: 32px; font-weight: 800; color: var(--color-text-primary); margin-bottom: 12px;">
-      🔥 当前新股评分榜
+      当前新股评分榜
     </h2>
     <p style="font-size: 16px; color: var(--color-text-secondary);">
       点击代码可快速带入评分框并发起评分
@@ -1969,7 +1997,7 @@
 <!-- ===== IPO TIMELINE ===== -->
 <section id="ipo-timeline" style="max-width:1200px;margin:32px auto 56px;padding:0 32px;">
   <div style="text-align:center;margin-bottom:24px;">
-    <h2 style="font-size:32px;font-weight:800;color:var(--color-text-primary);margin-bottom:12px;">📅 新股时间表</h2>
+    <h2 style="font-size:32px;font-weight:800;color:var(--color-text-primary);margin-bottom:12px;">新股时间表</h2>
     <p style="font-size:16px;color:var(--color-text-secondary);">招股中 / 待上市 / 近期上市</p>
   </div>
   <div id="ipoTimeline"></div>

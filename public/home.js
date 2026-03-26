@@ -105,15 +105,28 @@
   function getChangeDisplay(raw) {
     const value = Number.parseFloat(String(raw ?? '').replace('%', ''));
     if (!Number.isFinite(value)) {
-      return { text: '--', color: 'var(--color-text-muted)', className: 'is-flat' };
+      return { text: '--', color: 'var(--color-market-flat)', className: 'is-flat' };
     }
     if (value > 0) {
-      return { text: `+${value}%`, color: 'var(--color-success)', className: 'is-up' };
+      return { text: `+${value.toFixed(2)}%`, color: 'var(--color-market-up)', className: 'is-up' };
     }
     if (value < 0) {
-      return { text: `${value}%`, color: 'var(--color-danger)', className: 'is-down' };
+      return { text: `${value.toFixed(2)}%`, color: 'var(--color-market-down)', className: 'is-down' };
     }
-    return { text: '0.00%', color: 'var(--color-text-secondary)', className: 'is-flat' };
+    return { text: '0.00%', color: 'var(--color-market-flat)', className: 'is-flat' };
+  }
+
+  function getOfferDeadlineMeta(rawDate) {
+    const dateText = rawDate || '--';
+    const parsed = new Date(`${dateText}T00:00:00+08:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return { text: dateText, urgent: false, hint: '' };
+    }
+    const now = new Date();
+    const diffMs = parsed.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays <= 1) return { text: dateText, urgent: true, hint: '即将截止' };
+    return { text: dateText, urgent: false, hint: '' };
   }
 
   function timelineCard(title, items, mode) {
@@ -143,14 +156,15 @@
               <div class="home-change-pill ${change.className}" style="color:${change.color};">${escapeHtml(change.text)}</div>
             </div>
             <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
-            <div class="home-row-metric">上市价 <span>${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
-            <div class="home-row-metric">认购 <span>${escapeHtml(String(subscriptionMultiple))} 倍</span> · 中签率 <span>${escapeHtml(String(allotmentRate))}%</span></div>
+            <div class="home-row-metric">上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+            <div class="home-row-metric">认购 <span class="home-num">${escapeHtml(String(subscriptionMultiple))}</span> 倍 · 中签率 <span class="home-num">${escapeHtml(String(allotmentRate))}%</span></div>
             <div class="home-row-focus">累积升跌 <span style="color:${change.color};">${escapeHtml(change.text)}</span></div>
           </div>
         `;
       }
 
       if (mode === 'subscribing') {
+        const offerMeta = getOfferDeadlineMeta(offerEndDate);
         return `
           <div class="home-ipo-row">
             <div class="home-stock-title">
@@ -158,8 +172,11 @@
               <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
             </div>
             <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
-            <div class="home-offer-end">截止认购 <span>${escapeHtml(String(offerEndDate))}</span></div>
-            <div class="home-row-metric">发行价 <span>${escapeHtml(String(offerPrice))}</span> · 每手 <span>${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis">${escapeHtml(String(lotAmount))}</span></div>
+            <div class="home-offer-end ${offerMeta.urgent ? 'is-urgent' : ''}">
+              <span>${offerMeta.hint ? `${offerMeta.hint} ·` : ''}截止认购</span>
+              <span class="home-num">${escapeHtml(String(offerMeta.text))}</span>
+            </div>
+            <div class="home-row-metric">发行价 <span class="home-num">${escapeHtml(String(offerPrice))}</span> · 每手 <span class="home-num">${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(lotAmount))}</span></div>
           </div>
         `;
       }
@@ -171,8 +188,8 @@
             <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
           </div>
           <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
-          <div class="home-row-metric">发行价 <span>${escapeHtml(String(offerPrice))}</span></div>
-          <div class="home-row-metric">每手 <span>${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis">${escapeHtml(String(lotAmount))}</span></div>
+          <div class="home-row-metric">发行价 <span class="home-num">${escapeHtml(String(offerPrice))}</span></div>
+          <div class="home-row-metric">每手 <span class="home-num">${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(lotAmount))}</span></div>
         </div>
       `;
     }).join('');
