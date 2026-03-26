@@ -83,20 +83,26 @@
       const scoreColor = score >= 4 ? 'var(--color-success)' : score >= 2 ? 'var(--color-warning)' : score >= 0 ? 'var(--color-text-secondary)' : 'var(--color-danger)';
       const status = getStatusLabel(ipo.status);
       const listingDate = ipo.listingDate || '-';
+      const ratingTag = ipo.rating || (score >= 4 ? '可关注' : score >= 2 ? '谨慎申购' : '观望');
       return `
-        <div class="home-top-item" onclick="quickSearch('${escapeHtml(ipo.code)}')">
-          <div class="home-top-main">
+        <div class="home-top-item home-signal-card" onclick="quickSearch('${escapeHtml(ipo.code)}')">
+          <div class="home-top-main home-signal-main">
             <div class="home-top-rank">#${index + 1}</div>
-            <div class="home-top-meta">
-              <div class="home-stock-title">
+            <div class="home-top-meta home-signal-meta">
+              <div class="home-stock-title home-stock-title-strong">
                 <span class="home-stock-name">${escapeHtml(ipo.name)}</span>
                 <span class="home-stock-code">（${escapeHtml(ipo.code)}）</span>
               </div>
-              <div class="home-row-sub">${escapeHtml(status)} · 上市日 ${escapeHtml(listingDate)}</div>
-              <div class="home-top-rating" style="color:${scoreColor};">${escapeHtml(ipo.rating || '待评级')}</div>
+              <div class="home-row-sub home-signal-sub">${escapeHtml(status)} · 上市日 ${escapeHtml(listingDate)}</div>
+              <div class="home-signal-conclusion" style="color:${scoreColor};">
+                结论：${escapeHtml(ratingTag)}
+              </div>
             </div>
           </div>
-          <div class="home-score-value" style="color:${scoreColor};">${score}</div>
+          <div class="home-score-box">
+            <div class="home-score-label">综合评分</div>
+            <div class="home-score-value" style="color:${scoreColor};">${score}</div>
+          </div>
         </div>
       `;
     }).join('');
@@ -147,18 +153,20 @@
 
       if (mode === 'recentListed') {
         return `
-          <div class="home-ipo-row home-row-recent">
-            <div class="home-row-head">
-              <div class="home-stock-title">
+          <div class="home-ipo-row home-result-row">
+            <div class="home-result-main">
+              <div class="home-stock-title home-stock-title-strong">
                 <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
                 <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
               </div>
-              <div class="home-change-pill ${change.className}" style="color:${change.color};">${escapeHtml(change.text)}</div>
+              <div class="home-row-sub">近期上市 · 上市日 ${escapeHtml(listing)}</div>
+              <div class="home-row-metric">上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+              <div class="home-row-metric">认购 <span class="home-num">${escapeHtml(String(subscriptionMultiple))}</span> 倍 · 中签率 <span class="home-num">${escapeHtml(String(allotmentRate))}%</span></div>
             </div>
-            <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
-            <div class="home-row-metric">上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
-            <div class="home-row-metric">认购 <span class="home-num">${escapeHtml(String(subscriptionMultiple))}</span> 倍 · 中签率 <span class="home-num">${escapeHtml(String(allotmentRate))}%</span></div>
-            <div class="home-row-focus">累积升跌 <span style="color:${change.color};">${escapeHtml(change.text)}</span></div>
+            <div class="home-result-change ${change.className}" style="color:${change.color};">
+              <div class="home-result-label">累积升跌</div>
+              <div class="home-result-value">${escapeHtml(change.text)}</div>
+            </div>
           </div>
         `;
       }
@@ -166,17 +174,30 @@
       if (mode === 'subscribing') {
         const offerMeta = getOfferDeadlineMeta(offerEndDate);
         return `
-          <div class="home-ipo-row">
-            <div class="home-stock-title">
+          <div class="home-ipo-row home-time-card">
+            <div class="home-stock-title home-stock-title-strong">
               <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
               <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
             </div>
             <div class="home-row-sub">${status} · 上市日 ${escapeHtml(listing)}</div>
-            <div class="home-offer-end ${offerMeta.urgent ? 'is-urgent' : ''}">
-              <span>${offerMeta.hint ? `${offerMeta.hint} ·` : ''}截止认购</span>
-              <span class="home-num">${escapeHtml(String(offerMeta.text))}</span>
+            <div class="home-deadline-badge ${offerMeta.urgent ? 'is-urgent' : ''}">
+              <span class="home-deadline-label">${offerMeta.hint ? `${offerMeta.hint} · ` : ''}截止认购</span>
+              <span class="home-deadline-date home-num">${escapeHtml(String(offerMeta.text))}</span>
             </div>
-            <div class="home-row-metric">发行价 <span class="home-num">${escapeHtml(String(offerPrice))}</span> · 每手 <span class="home-num">${escapeHtml(String(lotSize))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(lotAmount))}</span></div>
+            <div class="home-field-grid">
+              <div class="home-field-item">
+                <div class="home-field-label">发行价</div>
+                <div class="home-field-value home-num">${escapeHtml(String(offerPrice))}</div>
+              </div>
+              <div class="home-field-item">
+                <div class="home-field-label">每手</div>
+                <div class="home-field-value home-num">${escapeHtml(String(lotSize))}</div>
+              </div>
+              <div class="home-field-item">
+                <div class="home-field-label">入场费</div>
+                <div class="home-field-value home-num">${escapeHtml(String(lotAmount))}</div>
+              </div>
+            </div>
           </div>
         `;
       }
