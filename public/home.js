@@ -53,11 +53,34 @@
         name: item.name,
         totalScore: item.totalScore ?? item.score,
         rating: item.rating,
+        scoreDetails: item.scoreDetails || item.scores || null,
         status: item.status,
         listingDate: item.listingDate,
       }));
     }
     return [];
+  }
+
+  function buildScoreDimensions(scoreDetails) {
+    if (!scoreDetails || typeof scoreDetails !== 'object') return [];
+    const defs = [
+      { key: 'oldShares', label: '旧股发售', min: -2, max: 0 },
+      { key: 'sponsor', label: '保荐人', min: -2, max: 2 },
+      { key: 'cornerstone', label: '基石投资', min: 0, max: 2 },
+      { key: 'lockup', label: '基石禁售期', min: -2, max: 0 },
+      { key: 'industry', label: '行业赛道', min: -2, max: 2 },
+    ];
+
+    return defs
+      .filter((def) => scoreDetails[def.key] && Number.isFinite(scoreDetails[def.key].score))
+      .map((def) => {
+        const raw = Number(scoreDetails[def.key].score);
+        const clamped = Math.max(def.min, Math.min(def.max, raw));
+        const pct = ((clamped - def.min) / (def.max - def.min)) * 100;
+        const tone = raw > 0 ? 'positive' : raw < 0 ? 'negative' : 'neutral';
+        const signed = raw > 0 ? `+${raw}` : `${raw}`;
+        return { ...def, score: raw, scoreText: signed, width: pct, tone };
+      });
   }
 
   function getCurrentData(data) {
@@ -86,11 +109,7 @@
       const listingDate = ipo.listingDate || '-';
       const ratingTag = ipo.rating || (score >= 2 ? '推荐申购' : score >= 0 ? '谨慎申购' : '不建议');
       const ratingClass = score >= 2 ? 'is-recommend' : score >= 0 ? 'is-cautious' : 'is-avoid';
-      const dims = [
-        { label: 'PE估值', score: Math.max(0, Math.min(3, score + 1)), max: 3 },
-        { label: '行业', score: Math.max(0, Math.min(2, score + 1)), max: 2 },
-        { label: '保荐人', score: Math.max(0, Math.min(2, score + 1)), max: 2 },
-      ];
+      const dims = buildScoreDimensions(ipo.scoreDetails);
       return `
         <div class="home-top-item home-signal-card home-score-${scoreTone}" onclick="quickSearch('${escapeHtml(ipo.code)}')">
           <div class="home-score-side-bar"></div>
@@ -106,14 +125,14 @@
                 <span class="home-rating-badge ${ratingClass}">${escapeHtml(ratingTag)}</span>
               </div>
               <div class="home-mini-metrics">
-                ${dims.map((dim) => `
+                ${dims.length ? dims.map((dim) => `
                   <div class="home-mini-metric">
-                    <div class="home-mini-label">${dim.label} <span>${dim.score}/${dim.max}</span></div>
+                    <div class="home-mini-label">${dim.label} <span>${dim.scoreText}分</span></div>
                     <div class="home-mini-track">
-                      <div class="home-mini-fill home-mini-${scoreTone}" style="width:${(dim.score / dim.max) * 100}%"></div>
+                      <div class="home-mini-fill home-mini-${dim.tone}" style="width:${dim.width}%"></div>
                     </div>
                   </div>
-                `).join('')}
+                `).join('') : '<div class="home-mini-empty">暂无维度评分明细</div>'}
               </div>
             </div>
           </div>
