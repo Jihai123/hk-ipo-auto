@@ -72,10 +72,23 @@
 
   function timelineCard(title, items, mode) {
     const rows = (items || []).slice(0, 8).map((ipo) => {
-      const listing = ipo.listingDate || '-';
-      const price = ipo.offerPriceRange ? `${ipo.offerPriceRange}` : (ipo.offerPrice ?? '-');
-      const lotAmount = ipo.lotAmount ?? '-';
-      const basic = `${escapeHtml(ipo.code || '-')} · ${escapeHtml(ipo.name || '-')}`;
+      const fallback = '--';
+      const listing = ipo.listingDate || fallback;
+      const offerEndDate = ipo.offerEndDate || fallback;
+      const offerPrice = ipo.offerPriceRange ? `${ipo.offerPriceRange}` : (ipo.offerPrice ?? fallback);
+      const lotSize = ipo.lotSize ?? fallback;
+      const lotAmount = ipo.lotAmount ?? fallback;
+      const subscriptionMultiple = ipo.subscriptionMultiple ?? fallback;
+      const allotmentRate = ipo.allotmentRate ?? fallback;
+      const firstDayChangeRaw = ipo.firstDayChangePct;
+      const firstDayChangeNum = Number.parseFloat(String(firstDayChangeRaw ?? '').replace('%', ''));
+      const firstDayChange = Number.isFinite(firstDayChangeNum)
+        ? `${String(firstDayChangeRaw).replace('%', '')}%`
+        : fallback;
+      const firstDayColor = Number.isFinite(firstDayChangeNum)
+        ? (firstDayChangeNum > 0 ? 'var(--color-success)' : firstDayChangeNum < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)')
+        : 'var(--color-text-muted)';
+      const basic = `${escapeHtml(ipo.code || fallback)} · ${escapeHtml(ipo.name || fallback)}`;
       const status = escapeHtml(ipo.status || mode);
 
       if (mode === 'recentListed') {
@@ -83,6 +96,11 @@
           <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
             <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
             <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
+            <div style="font-size:12px;color:var(--color-text-muted);">上市价 ${escapeHtml(String(ipo.offerPrice ?? fallback))}</div>
+            <div style="font-size:12px;color:var(--color-text-muted);">
+              认购 ${escapeHtml(String(subscriptionMultiple))}x · 中签率 ${escapeHtml(String(allotmentRate))}% · 累积升跌
+              <span style="color:${firstDayColor};">${escapeHtml(String(firstDayChange))}</span>
+            </div>
           </div>
         `;
       }
@@ -91,7 +109,8 @@
         <div style="padding:10px 0;border-bottom:1px dashed var(--color-border);">
           <div style="font-weight:600;color:var(--color-text-primary);">${basic}</div>
           <div style="font-size:12px;color:var(--color-text-secondary);">${status} · 上市日 ${escapeHtml(listing)}</div>
-          <div style="font-size:12px;color:var(--color-text-muted);">招股价 ${escapeHtml(String(price))} · 入场费 ${escapeHtml(String(lotAmount))}</div>
+          <div style="font-size:12px;color:var(--color-text-muted);">截止认购 ${escapeHtml(String(offerEndDate))}</div>
+          <div style="font-size:12px;color:var(--color-text-muted);">发售价/区间 ${escapeHtml(String(offerPrice))} · 每手 ${escapeHtml(String(lotSize))} · 入场费 ${escapeHtml(String(lotAmount))}</div>
         </div>
       `;
     }).join('');
