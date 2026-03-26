@@ -80,12 +80,20 @@
 
     container.innerHTML = list.map((ipo, index) => {
       const score = Number(ipo.totalScore ?? 0);
-      const scoreColor = score >= 4 ? 'var(--color-success)' : score >= 2 ? 'var(--color-warning)' : score >= 0 ? 'var(--color-text-secondary)' : 'var(--color-danger)';
+      const scoreColor = score > 0 ? 'var(--color-success)' : score < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)';
+      const scoreTone = score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral';
       const status = getStatusLabel(ipo.status);
       const listingDate = ipo.listingDate || '-';
-      const ratingTag = ipo.rating || (score >= 4 ? '可关注' : score >= 2 ? '谨慎申购' : '观望');
+      const ratingTag = ipo.rating || (score >= 2 ? '推荐申购' : score >= 0 ? '谨慎申购' : '不建议');
+      const ratingClass = score >= 2 ? 'is-recommend' : score >= 0 ? 'is-cautious' : 'is-avoid';
+      const dims = [
+        { label: 'PE估值', score: Math.max(0, Math.min(3, score + 1)), max: 3 },
+        { label: '行业', score: Math.max(0, Math.min(2, score + 1)), max: 2 },
+        { label: '保荐人', score: Math.max(0, Math.min(2, score + 1)), max: 2 },
+      ];
       return `
-        <div class="home-top-item home-signal-card" onclick="quickSearch('${escapeHtml(ipo.code)}')">
+        <div class="home-top-item home-signal-card home-score-${scoreTone}" onclick="quickSearch('${escapeHtml(ipo.code)}')">
+          <div class="home-score-side-bar"></div>
           <div class="home-top-main home-signal-main">
             <div class="home-top-rank">#${index + 1}</div>
             <div class="home-top-meta home-signal-meta">
@@ -94,8 +102,18 @@
                 <span class="home-stock-code">（${escapeHtml(ipo.code)}）</span>
               </div>
               <div class="home-row-sub home-signal-sub">${escapeHtml(status)} · 上市日 ${escapeHtml(listingDate)}</div>
-              <div class="home-signal-conclusion" style="color:${scoreColor};">
-                结论：${escapeHtml(ratingTag)}
+              <div class="home-signal-conclusion">
+                <span class="home-rating-badge ${ratingClass}">${escapeHtml(ratingTag)}</span>
+              </div>
+              <div class="home-mini-metrics">
+                ${dims.map((dim) => `
+                  <div class="home-mini-metric">
+                    <div class="home-mini-label">${dim.label} <span>${dim.score}/${dim.max}</span></div>
+                    <div class="home-mini-track">
+                      <div class="home-mini-fill home-mini-${scoreTone}" style="width:${(dim.score / dim.max) * 100}%"></div>
+                    </div>
+                  </div>
+                `).join('')}
               </div>
             </div>
           </div>
@@ -111,15 +129,15 @@
   function getChangeDisplay(raw) {
     const value = Number.parseFloat(String(raw ?? '').replace('%', ''));
     if (!Number.isFinite(value)) {
-      return { text: '--', color: 'var(--color-market-flat)', className: 'is-flat' };
+      return { text: '--', color: 'var(--color-market-flat)', className: 'is-flat', arrow: '' };
     }
     if (value > 0) {
-      return { text: `+${value.toFixed(2)}%`, color: 'var(--color-market-up)', className: 'is-up' };
+      return { text: `+${value.toFixed(2)}%`, color: 'var(--color-success)', className: 'is-up', arrow: '▲' };
     }
     if (value < 0) {
-      return { text: `${value.toFixed(2)}%`, color: 'var(--color-market-down)', className: 'is-down' };
+      return { text: `${value.toFixed(2)}%`, color: 'var(--color-danger)', className: 'is-down', arrow: '▼' };
     }
-    return { text: '0.00%', color: 'var(--color-market-flat)', className: 'is-flat' };
+    return { text: '0.00%', color: 'var(--color-market-flat)', className: 'is-flat', arrow: '' };
   }
 
   function getOfferDeadlineMeta(rawDate) {
@@ -160,12 +178,16 @@
                 <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
               </div>
               <div class="home-row-sub">近期上市 · 上市日 ${escapeHtml(listing)}</div>
-              <div class="home-row-metric">上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
-              <div class="home-row-metric">认购 <span class="home-num">${escapeHtml(String(subscriptionMultiple))}</span> 倍 · 中签率 <span class="home-num">${escapeHtml(String(allotmentRate))}%</span></div>
+              <div class="home-listing-price">上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+              <div class="home-recent-metrics">
+                <div class="home-recent-metric"><span>认购倍数</span><strong class="home-num">${escapeHtml(String(subscriptionMultiple))}</strong></div>
+                <div class="home-recent-metric"><span>中签率</span><strong class="home-num">${escapeHtml(String(allotmentRate))}%</strong></div>
+                <div class="home-recent-metric"><span>累积回报</span><strong class="home-num">${escapeHtml(change.text)}</strong></div>
+              </div>
             </div>
             <div class="home-result-change ${change.className}" style="color:${change.color};">
               <div class="home-result-label">累积升跌</div>
-              <div class="home-result-value">${escapeHtml(change.text)}</div>
+              <div class="home-result-value">${escapeHtml(change.arrow)} ${escapeHtml(change.text)}</div>
             </div>
           </div>
         `;
@@ -215,10 +237,15 @@
       `;
     }).join('');
 
+    const count = timelineItems.length;
+    const emptyText = mode === 'listingSoon'
+      ? '<div class="home-empty-state-box"><div class="home-empty-icon">🕒</div><div class="home-empty-title">暂无待上市新股</div></div>'
+      : '<div style="padding:12px 0;color:var(--color-text-muted);font-size:13px;">暂无数据</div>';
+
     return `
       <div class="home-timeline-card">
-        <h3 class="home-timeline-title">${title}</h3>
-        ${rows || '<div style="padding:12px 0;color:var(--color-text-muted);font-size:13px;">暂无数据</div>'}
+        <h3 class="home-timeline-title">${title} <span class="home-title-badge">${count}</span></h3>
+        ${rows || emptyText}
       </div>
     `;
   }

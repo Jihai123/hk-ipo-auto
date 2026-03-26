@@ -48,10 +48,10 @@
       --color-text-secondary: #475569;
       --color-text-muted: #94a3b8;
       --color-text-faint: #cbd5e1;
-      --color-accent-start: #4f46e5;
-      --color-accent-mid: #6366f1;
-      --color-accent-end: #8b5cf6;
-      --color-accent-light: #eef2ff;
+      --color-accent-start: #1e3a5f;
+      --color-accent-mid: #2d5b8f;
+      --color-accent-end: #5d8fc5;
+      --color-accent-light: #e8f0fa;
       --color-success: #10b981;
       --color-success-light: #ecfdf5;
       --color-warning: #f59e0b;
@@ -65,7 +65,7 @@
       --color-market-flat: #64748b;
       --color-market-flat-light: #f8fafc;
       --gradient-accent: linear-gradient(135deg, var(--color-accent-start) 0%, var(--color-accent-mid) 50%, var(--color-accent-end) 100%);
-      --gradient-hero: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --gradient-hero: linear-gradient(135deg, #1e3a5f 0%, #2d5b8f 55%, #93c5fd 100%);
       --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
       --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
       --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.08);
@@ -1656,31 +1656,45 @@
     #topIPOList,
     #ipoTimeline {
       display: grid;
-      gap: 14px;
+      gap: 18px;
     }
 
     #ipoTimeline {
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
+      gap: 20px;
     }
 
     .home-top-item {
       background: #fff;
       border: 1px solid var(--color-border);
       border-radius: 12px;
-      padding: 18px 20px;
+      padding: 22px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       cursor: pointer;
-      transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+      transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease, transform .2s ease;
+      position: relative;
+      overflow: hidden;
     }
     .home-top-item:hover {
       border-color: #ccd5e5;
       background: #fcfdff;
-      box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+      transform: translateY(-2px);
     }
+    .home-score-side-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--color-text-muted);
+    }
+    .home-score-positive .home-score-side-bar { background: var(--color-success); }
+    .home-score-negative .home-score-side-bar { background: var(--color-danger); }
+    .home-score-neutral .home-score-side-bar { background: var(--color-text-muted); }
     .home-top-main { display:flex; align-items:flex-start; gap:14px; min-width:0; }
     .home-top-rank { font-size:18px; font-weight:800; color:#cdd6e5; width:32px; line-height:1.2; }
     .home-top-meta { min-width:0; }
@@ -1690,30 +1704,86 @@
     .home-stock-code { color:#94a3b8; font-size:12px; font-variant-numeric:tabular-nums; }
     .home-row-sub { font-size:12px; color:#64748b; margin-top:6px; }
     .home-signal-sub { color:#7b879a; }
-    .home-signal-conclusion { margin-top:7px; font-size:12px; font-weight:700; letter-spacing:0.02em; }
+    .home-signal-conclusion { margin-top:8px; }
+    .home-rating-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: var(--radius-full);
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .home-rating-badge.is-recommend { background: rgba(16,185,129,0.14); color: #047857; }
+    .home-rating-badge.is-cautious { background: rgba(245,158,11,0.16); color: #92400e; }
+    .home-rating-badge.is-avoid { background: rgba(239,68,68,0.14); color: #b91c1c; }
+    .home-mini-metrics { margin-top: 10px; display: grid; gap: 7px; }
+    .home-mini-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+    }
+    .home-mini-track {
+      margin-top: 4px;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #e6edf5;
+      overflow: hidden;
+    }
+    .home-mini-fill { height: 100%; border-radius: 999px; }
+    .home-mini-positive { background: var(--color-success); }
+    .home-mini-negative { background: var(--color-danger); }
+    .home-mini-neutral { background: var(--color-text-muted); }
     .home-score-box { text-align:right; flex-shrink:0; }
     .home-score-label { font-size:11px; color:var(--color-text-muted); margin-bottom:2px; }
-    .home-score-value { font-size:38px; font-weight:800; line-height:1; font-variant-numeric: tabular-nums; }
+    .home-score-value { font-size:2.5rem; font-weight:800; line-height:1; font-variant-numeric: tabular-nums; }
 
     .home-timeline-card {
       background:#fff;
       border:1px solid var(--color-border);
       border-radius:12px;
-      padding:18px;
+      padding:22px;
+      min-height: 420px;
+      transition: box-shadow .2s ease, transform .2s ease;
+    }
+    .home-timeline-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
     }
     .home-timeline-title {
       font-size:18px;
       font-weight:700;
       margin-bottom:10px;
       color:var(--color-text-primary);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .home-title-badge {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: rgba(30,58,95,0.12);
+      color: var(--color-accent-start);
+      font-size: 12px;
+      font-weight: 700;
     }
     .home-ipo-row {
-      padding:18px 0;
+      padding:22px 0;
       border-bottom:1px solid #eef2f7;
-      transition: background-color .2s ease, border-color .2s ease;
+      transition: background-color .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+      border-radius: 10px;
     }
     .home-ipo-row:hover {
       background:#fcfdff;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
     }
     .home-ipo-row:last-child { border-bottom:none; padding-bottom:8px; }
     .home-row-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
@@ -1779,9 +1849,51 @@
       font-weight:800;
       font-variant-numeric:tabular-nums;
     }
-    .home-result-change.is-up { color:var(--color-market-up); }
-    .home-result-change.is-down { color:var(--color-market-down); }
+    .home-result-change.is-up { color:var(--color-success); }
+    .home-result-change.is-down { color:var(--color-danger); }
     .home-result-change.is-flat { color:var(--color-market-flat); }
+    .home-listing-price {
+      margin-top: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-secondary);
+    }
+    .home-listing-price span {
+      font-size: 18px;
+      color: var(--color-text-primary);
+      margin-left: 4px;
+    }
+    .home-recent-metrics {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .home-recent-metric {
+      padding: 6px 9px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+    .home-empty-state-box {
+      min-height: 300px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      color: var(--color-text-muted);
+      background: linear-gradient(180deg, #f8fbff, #ffffff);
+    }
+    .home-empty-icon { font-size: 28px; }
+    .home-empty-title { font-size: 14px; font-weight: 600; }
     .home-num { font-variant-numeric:tabular-nums; }
 
     @media (max-width: 900px) {
@@ -1801,6 +1913,16 @@
       border-radius:12px;
     }
     .home-empty-span { grid-column:1/-1; }
+    .section-title-gradient {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d5b8f 60%, #93c5fd 100%);
+      border-radius: 14px;
+      padding: 20px 16px;
+      box-shadow: var(--shadow-md);
+    }
+    .section-title-gradient h2,
+    .section-title-gradient p {
+      color: #fff !important;
+    }
 
   </style>
 </head>
@@ -2011,7 +2133,7 @@
 
 <!-- ===== TOP IPO RANKINGS ===== -->
 <section id="top-rankings" style="max-width: 1200px; margin: 48px auto; padding: 0 32px;">
-  <div style="text-align: center; margin-bottom: 24px;">
+  <div class="section-title-gradient" style="text-align: center; margin-bottom: 24px;">
     <h2 style="font-size: 32px; font-weight: 800; color: var(--color-text-primary); margin-bottom: 12px;">
       当前新股评分榜
     </h2>
@@ -2024,7 +2146,7 @@
 
 <!-- ===== IPO TIMELINE ===== -->
 <section id="ipo-timeline" style="max-width:1200px;margin:32px auto 56px;padding:0 32px;">
-  <div style="text-align:center;margin-bottom:24px;">
+  <div class="section-title-gradient" style="text-align:center;margin-bottom:24px;">
     <h2 style="font-size:32px;font-weight:800;color:var(--color-text-primary);margin-bottom:12px;">新股时间表</h2>
     <p style="font-size:16px;color:var(--color-text-secondary);">招股中 / 待上市 / 近期上市</p>
   </div>
