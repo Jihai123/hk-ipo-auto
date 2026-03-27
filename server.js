@@ -3321,7 +3321,6 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     /行業概覽/i, /行业概览/i, /INDUSTRYOVERVIEW/i,
     /基石投資者/i, /基石投资者/i, /CORNERSTONE/i,
     /全球發售/i, /全球发售/i, /GLOBALOFFERING/i,
-    /主要股東/i, /主要股东/i, /控股股東/i, /控股股东/i,
   ];
 
   // Step 1：Pre-IPO识别关键词
@@ -3411,13 +3410,17 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     textNoSpaceForLockup,
     HISTORY_SECTION_START_PATTERNS,
     HISTORY_SECTION_END_PATTERNS,
-    180000,
+    260000,
     true
   );
 
   console.log(`[禁售期] 历史发展章节长度: ${historySection?.length || 0}`);
   if (historySection) {
     console.log(`[禁售期] 历史发展章节前120字: ${historySection.slice(0, 120)}`);
+    console.log(`[禁售期] 历史发展章节后120字: ${historySection.slice(Math.max(0, historySection.length - 120))}`);
+    const quickLockupProbes = ['禁售', '鎖定', '锁定', 'lock-up', '不得出售', '不得轉讓', '出售限制'];
+    const probeSummary = quickLockupProbes.map(k => `${k}:${historySection.includes(k) ? 'Y' : 'N'}`).join(', ');
+    console.log(`[禁售期] 历史章节禁售探针: ${probeSummary}`);
   }
 
   if (!historySection) {
