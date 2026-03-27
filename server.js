@@ -3449,11 +3449,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       preIPOContext = historySection.slice(Math.max(0, idx - 60), Math.min(historySection.length, idx + 160));
       decisionPath.push(`命中Pre-IPO关键词: "${preIPOMatch[0]}"`);
 
-      const lockupBlock = historySection.slice(Math.max(0, idx - 1200), Math.min(historySection.length, idx + 2000));
+      // 按最新规则：禁售识别范围改为整个“历史/发展”章节（不再限制Pre-IPO附近窗口）
+      const lockupBlock = historySection;
       const isPreIPOInvestorContext = (snippet) => {
         const hasPreIPOMarker = PREIPO_SUBJECT_MARKERS.some(m => snippet.includes(m));
         const hasExclude = EXCLUDE_SUBJECT_MARKERS.some(m => snippet.includes(m));
-        return hasPreIPOMarker && !hasExclude;
+        // 全章节扫描时：优先排除明显非Pre-IPO主体；若附近未出现Pre-IPO标记，
+        // 但本章节已确认存在Pre-IPO投资者，也可继续判定禁售（满足“全章节查找”要求）
+        return !hasExclude && (hasPreIPOMarker || hasPreIPOInvestment);
       };
 
       // CASE 2：明确无禁售（强负面）
