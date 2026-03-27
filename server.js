@@ -3317,10 +3317,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     /业务发展历史/i,
   ];
   const HISTORY_SECTION_END_PATTERNS = [
-    /業務/i, /业务/i, /BUSINESS/i,
+    // 注意：不能使用 /業務|业务/ 这类短词，否则会在历史章节正文中误触发提前截断
     /行業概覽/i, /行业概览/i, /INDUSTRYOVERVIEW/i,
-    /基石投資者/i, /基石投资者/i, /CORNERSTONE/i,
-    /全球發售/i, /全球发售/i, /GLOBALOFFERING/i,
+    /基石投資者/i, /基石投资者/i, /CORNERSTONEINVESTORS?/i,
+    /全球發售的架構/i, /全球发售的架构/i, /STRUCTUREOFTHEGLOBALOFFERING/i,
+    /股份發售的架構/i, /股份发售的架构/i,
   ];
 
   // Step 1：Pre-IPO识别关键词
@@ -3421,6 +3422,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     const quickLockupProbes = ['禁售', '鎖定', '锁定', 'lock-up', '不得出售', '不得轉讓', '出售限制'];
     const probeSummary = quickLockupProbes.map(k => `${k}:${historySection.includes(k) ? 'Y' : 'N'}`).join(', ');
     console.log(`[禁售期] 历史章节禁售探针: ${probeSummary}`);
+
+    // 额外诊断：检查“从历史章节标题起260k窗口”的探针，确认是否因章节截断导致漏检
+    let historyStartIdx = -1;
+    for (const sp of HISTORY_SECTION_START_PATTERNS) {
+      const m = textNoSpaceForLockup.match(sp);
+      if (m && m.index !== undefined) {
+        historyStartIdx = m.index;
+        break;
+      }
+    }
+    if (historyStartIdx >= 0) {
+      const rawHistoryWindow = textNoSpaceForLockup.slice(historyStartIdx, Math.min(textNoSpaceForLockup.length, historyStartIdx + 260000));
+      const rawProbeSummary = quickLockupProbes.map(k => `${k}:${rawHistoryWindow.includes(k) ? 'Y' : 'N'}`).join(', ');
+      console.log(`[禁售期] 历史标题后260k窗口禁售探针: ${rawProbeSummary}`);
+      console.log(`[禁售期] 截断诊断: extractedLen=${historySection.length}, rawWindowLen=${rawHistoryWindow.length}`);
+    }
   }
 
   if (!historySection) {
