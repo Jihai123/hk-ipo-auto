@@ -3416,6 +3416,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   );
 
   console.log(`[禁售期] 历史发展章节长度: ${historySection?.length || 0}`);
+  if (historySection) {
+    console.log(`[禁售期] 历史发展章节前120字: ${historySection.slice(0, 120)}`);
+  }
 
   if (!historySection) {
     decisionPath.push('未找到限定历史发展章节 -> 不做跨章节识别');
@@ -3428,6 +3431,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       const m = historySection.match(re);
       if (m) {
         preIPOMatch = m;
+        console.log(`[禁售期] ✓ 命中Pre-IPO模式: ${re} -> "${m[0]}"`);
         break;
       }
     }
@@ -3439,6 +3443,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         const nearby = historySection.slice(Math.max(0, idx - 50), Math.min(historySection.length, idx + 80));
         if (/上市前/.test(nearby)) {
           preIPOMatch = strategicMatch;
+          console.log(`[禁售期] ✓ 命中战略投资者语义补充: "${strategicMatch[0]}" (含上市前语境)`);
+        } else {
+          console.log(`[禁售期] ✗ 命中战略投资者词但无上市前语境，忽略`);
         }
       }
     }
@@ -3448,6 +3455,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       const idx = preIPOMatch.index || 0;
       preIPOContext = historySection.slice(Math.max(0, idx - 60), Math.min(historySection.length, idx + 160));
       decisionPath.push(`命中Pre-IPO关键词: "${preIPOMatch[0]}"`);
+      console.log(`[禁售期] Pre-IPO上下文: ${preIPOContext.slice(0, 180)}`);
 
       // 按最新规则：禁售识别范围改为整个“历史/发展”章节（不再限制Pre-IPO附近窗口）
       const lockupBlock = historySection;
@@ -3459,35 +3467,56 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         return !hasExclude && (hasPreIPOMarker || hasPreIPOInvestment);
       };
 
+      const findValidMatchWithLog = (patterns, tag) => {
+        let rawHitCount = 0;
+        let rejectedCount = 0;
+        for (const re of patterns) {
+          const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+          const gRe = new RegExp(re.source, flags);
+          let mm;
+          while ((mm = gRe.exec(lockupBlock)) !== null) {
+            rawHitCount++;
+            const hitIdx = mm.index || 0;
+            const near = lockupBlock.slice(Math.max(0, hitIdx - 120), Math.min(lockupBlock.length, hitIdx + 220));
+            const hasExclude = EXCLUDE_SUBJECT_MARKERS.some(m => near.includes(m));
+            const hasPreIPOMarker = PREIPO_SUBJECT_MARKERS.some(m => near.includes(m));
+            if (!isPreIPOInvestorContext(near)) {
+              rejectedCount++;
+              console.log(`[禁售期] ✗ ${tag}命中但被过滤: "${mm[0]}", hasExclude=${hasExclude}, hasPreIPOMarker=${hasPreIPOMarker}, 上下文=${near.slice(0, 120)}`);
+              continue;
+            }
+            console.log(`[禁售期] ✓ ${tag}有效命中: "${mm[0]}", 上下文=${near.slice(0, 160)}`);
+            return { match: mm, near, rawHitCount, rejectedCount };
+          }
+        }
+        console.log(`[禁售期] ${tag}扫描结束: 原始命中=${rawHitCount}, 过滤=${rejectedCount}, 有效=0`);
+        return { match: null, near: '', rawHitCount, rejectedCount };
+      };
+
       // CASE 2：明确无禁售（强负面）
-      for (const re of LOCKUP_NEGATIVE_PATTERNS) {
-        const m = lockupBlock.match(re);
-        if (!m) continue;
-        const negIdx = m.index || 0;
-        const near = lockupBlock.slice(Math.max(0, negIdx - 120), Math.min(lockupBlock.length, negIdx + 180));
-        if (!isPreIPOInvestorContext(near)) continue;
+      const negHit = findValidMatchWithLog(LOCKUP_NEGATIVE_PATTERNS, '负面禁售');
+      if (negHit.match) {
+        const m = negHit.match;
+        const near = negHit.near;
         hasLockup = false;
         lockupNegativeContext = near.slice(0, 220);
         decisionPath.push(`命中明确无禁售表达: "${m[0]}"`);
-        break;
       }
 
       // CASE 1：明确有禁售
       if (!lockupNegativeContext) {
-        for (const re of LOCKUP_POSITIVE_PATTERNS) {
-          const m = lockupBlock.match(re);
-          if (!m) continue;
-          const posIdx = m.index || 0;
-          const near = lockupBlock.slice(Math.max(0, posIdx - 120), Math.min(lockupBlock.length, posIdx + 220));
-          if (!isPreIPOInvestorContext(near)) continue;
+        const posHit = findValidMatchWithLog(LOCKUP_POSITIVE_PATTERNS, '正面禁售');
+        if (posHit.match) {
+          const m = posHit.match;
+          const near = posHit.near;
           hasLockup = true;
           lockupContext = near.slice(0, 260);
           decisionPath.push(`命中禁售强信号: "${m[0]}"`);
-          break;
         }
       }
     } else {
       decisionPath.push('限定章节内未命中Pre-IPO关键词');
+      console.log(`[禁售期] ✗ 未识别到Pre-IPO关键词，跳过禁售识别`);
     }
   }
 
