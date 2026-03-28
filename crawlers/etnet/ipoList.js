@@ -16,7 +16,6 @@ const STATUS_MAP = {
 
 const MAX_NAME_LENGTH = 40;
 const RECENT_LIST_LIMIT = 30;
-const TOP_CARD_BROKERS = ['耀才', '輝立', '辉立', '富途'];
 const IPO_DEBUG_CODES = process.env.IPO_DEBUG_CODES === '1';
 
 const TABLE_TYPE = {
@@ -27,15 +26,9 @@ const TABLE_TYPE = {
 
 const SECTION_KEYWORDS = {
   subscribing: ['招股中'],
-  listingSoon: ['即將上市', '即将上市', '明掛上市', '明挂上市'],
-  recentListed: ['新股消息', '新股資訊', '新股信息'],
-  topCards: ['昨上市', '今日上市', '暗盤', '暗盘'],
-};
-
-const TABLE_HEADER_KEYWORDS = {
-  subscribing: ['招股中', '招股價', '招股截止日', '上市日期'],
-  listingSoon: ['即將上市', '上市日期', '每手', '入場費'],
-  recentListed: ['新股消息', '上市日期', '認購倍數', '一手中籤率'],
+  listingSoon: ['即將上市', '即将上市'],
+  newsRecent: ['新股消息', '新股資訊', '新股信息'],
+  greyMarketRecent: ['暗盤', '暗盘', '昨上市', '今日上市'],
 };
 
 function normalizeCode(raw = '') {
@@ -116,6 +109,7 @@ function sanitizeName(raw = '') {
   if (!text) return null;
 
   const firstSegment = text
+    .replace(/\d+\s*日[後后]上市.*$/g, '')
     .replace(/(?:今午|今日|明午|明日)截止.*$/g, '')
     .replace(/(?:孖展|按金|认购|認購).*$/g, '')
     .split(/[|｜\/\n\r]/)[0]
@@ -215,26 +209,6 @@ function normalizeRecentListedItem(item) {
   };
 }
 
-function normalizeTopCardItem(item) {
-  const code = normalizeCode(item.code);
-  const name = sanitizeName(item.name);
-  if (!code || !name) return null;
-
-  return {
-    code,
-    name,
-    status: STATUS_MAP.recentListed,
-    listingDate: normalizeDateOrRaw(item.listingDate),
-    offerPrice: parseLotAmount(item.price),
-    subscriptionMultiple: null,
-    allotmentRate: null,
-    firstDayChangePct: parsePercentNumber(item.changePercent),
-    lotSize: null,
-    lotAmount: null,
-    source: 'top_card',
-  };
-}
-
 function normalizeItemByStatus(item, status) {
   if (status === TABLE_TYPE.subscribing) return normalizeSubscribingItem(item);
   if (status === TABLE_TYPE.listingSoon) return normalizeListingSoonItem(item);
@@ -243,216 +217,235 @@ function normalizeItemByStatus(item, status) {
 }
 
 function getHeaderKey(raw = '') {
-  return String(raw).replace(/\s+/g, '').replace(/[()（）:：]/g, '').trim();
+  return String(raw)
+    .replace(/\s+/g, '')
+    .replace(/[()（）:：]/g, '')
+    .replace(/號/g, '号')
+    .replace(/稱/g, '称')
+    .replace(/幣/g, '币')
+    .replace(/價/g, '价')
+    .replace(/數/g, '数')
+    .replace(/場/g, '场')
+    .replace(/認購/g, '认购')
+    .replace(/籤/g, '签')
+    .replace(/盤/g, '盘')
+    .replace(/開/g, '开')
+    .replace(/掛/g, '挂')
+    .replace(/累計/g, '累积')
+    .replace(/資訊/g, '信息')
+    .trim();
 }
 
-function resolveColumnMap(headerCells = [], status) {
-  const keys = headerCells.map(getHeaderKey);
-  const findIndex = (patterns = []) => keys.findIndex(k => patterns.some(p => k.includes(p)));
-
-  const map = {
-    code: findIndex(['代号', '股票编号', '編號']),
-    name: findIndex(['名称', '名稱']),
-    listingDate: findIndex(['上市日期']),
-    offerEndDate: findIndex(['招股截止', '截止认购', '截止認購']),
-    currency: findIndex(['货币', '貨幣']),
-    offerPrice: findIndex(['招股价', '上市价', '上市價', '发售价', '發售價']),
-    lotSize: findIndex(['每手股数', '每手']),
-    lotAmount: findIndex(['入场费', '入場費']),
-    subscriptionMultiple: findIndex(['认购倍数', '認購倍數']),
-    allotmentRate: findIndex(['一手中签率', '一手中籤率']),
-    firstDayChangePct: findIndex(['首日升跌', '累计升跌', '累計升跌']),
-    entryFee: findIndex(['入场费', '入場費']),
-  };
-
-  if (map.code < 0) map.code = 0;
-  if (map.name < 0) map.name = 1;
-
-  if (status === TABLE_TYPE.subscribing) {
-    if (map.offerEndDate < 0) map.offerEndDate = 3;
-    if (map.listingDate < 0) map.listingDate = 4;
-    if (map.currency < 0) map.currency = 5;
-    if (map.offerPrice < 0) map.offerPrice = 6;
-    if (map.lotSize < 0) map.lotSize = 7;
-    if (map.lotAmount < 0) map.lotAmount = 8;
-  }
-
-  if (status === TABLE_TYPE.listingSoon) {
-    if (map.listingDate < 0) map.listingDate = 2;
-    if (map.currency < 0) map.currency = 3;
-    if (map.lotSize < 0) map.lotSize = 5;
-    if (map.entryFee < 0) map.entryFee = map.lotAmount >= 0 ? map.lotAmount : 6;
-  }
-
-  if (status === TABLE_TYPE.recentListed) {
-    if (map.listingDate < 0) map.listingDate = 2;
-    if (map.offerPrice < 0) map.offerPrice = 4;
-    if (map.subscriptionMultiple < 0) map.subscriptionMultiple = 5;
-    if (map.allotmentRate < 0) map.allotmentRate = 7;
-    if (map.firstDayChangePct < 0) map.firstDayChangePct = 10;
-  }
-
-  return map;
+function findHeaderIndex(keys = [], patterns = []) {
+  return keys.findIndex(k => patterns.some(p => k.includes(p)));
 }
 
-function findSectionByTitle($, keywords = []) {
-  if (!keywords.length) return null;
+function collectTables($) {
+  const tables = [];
+  $('table').each((index, table) => {
+    const $table = $(table);
+    const headerCells = $table.find('tr').first().find('th,td').map((_, td) => $(td).text()).get();
+    const headers = headerCells.map(getHeaderKey).filter(Boolean);
+    const nearbyTitleText = getNearbyTitleText($, $table);
+    tables.push({ tableIndex: index, tableNode: $table, headers, nearbyTitleText });
+  });
+  return tables;
+}
 
-  const nodes = $('h1,h2,h3,h4,h5,strong,b,th,td,div,span,a').filter((_, el) => {
-    const text = $(el).text().replace(/\s+/g, '').trim();
-    if (!text || text.length > 30) return false;
-    return keywords.some(k => text.includes(k));
+function getNearbyTitleText($, $table) {
+  const collect = [];
+  const prevSiblings = $table.prevAll('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th').slice(0, 8);
+  prevSiblings.each((_, el) => {
+    const text = getHeaderKey($(el).text());
+    if (text && text.length <= 30) collect.push(text);
   });
 
-  if (!nodes.length) return null;
-  return nodes.first();
-}
-
-function findNextTableFromSection($, sectionNode) {
-  if (!sectionNode || !sectionNode.length) return null;
-
-  const selfTable = sectionNode.is('table') ? sectionNode : sectionNode.find('table').first();
-  if (selfTable && selfTable.length) return selfTable;
-
-  const nextTable = sectionNode.nextAll('table').first();
-  if (nextTable && nextTable.length) return nextTable;
-
-  let parent = sectionNode.parent();
-  for (let i = 0; i < 5 && parent && parent.length; i += 1) {
-    const pNextTable = parent.nextAll('table').first();
-    if (pNextTable && pNextTable.length) return pNextTable;
-    const pTable = parent.find('table').first();
-    if (pTable && pTable.length) return pTable;
+  let parent = $table.parent();
+  for (let i = 0; i < 3 && parent && parent.length; i += 1) {
+    const pText = parent.prevAll('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th').first().text();
+    const text = getHeaderKey(String(pText || ''));
+    if (text && text.length <= 30) collect.push(text);
     parent = parent.parent();
   }
-
-  return null;
+  return collect.join('|');
 }
 
-function findTableByHeaderKeywords($, keywords = []) {
-  const tables = $('table');
-  let matched = null;
-
-  tables.each((_, table) => {
-    if (matched) return;
-    const text = $(table).text().replace(/\s+/g, '');
-    if (keywords.some(k => text.includes(k))) {
-      matched = $(table);
-    }
-  });
-
-  return matched;
+function includesAll(text, keywords = []) {
+  return keywords.every(k => text.includes(k));
 }
 
-function parseTableRowsByStatus($, tableNode, status, debug = false) {
-  if (!tableNode || !tableNode.length) return [];
+function includesAny(text, keywords = []) {
+  return keywords.some(k => text.includes(k));
+}
 
-  const rows = tableNode.find('tr');
-  if (!rows.length) return [];
+function matchTableType(headers = [], nearbyTitleText = '') {
+  const mergedHeader = headers.join('|');
+  const titleText = getHeaderKey(String(nearbyTitleText || ''));
+  const reason = [];
 
-  const headerCells = rows.first().find('th,td').map((i, td) => $(td).text()).get();
-  const map = resolveColumnMap(headerCells, status);
+  const isSubscribing = includesAll(mergedHeader, ['代号', '名称', '招股书', '截止认购日', '上市日期']);
+  if (isSubscribing) return { type: TABLE_TYPE.subscribing, reason: 'headers:代号/名称/招股书/截止认购日/上市日期' };
+
+  const newsRecentMust = includesAll(mergedHeader, ['代号', '名称', '上市日期', '首日开市价', '按盘价', '累积升跌']);
+  if (newsRecentMust) return { type: TABLE_TYPE.recentListed, reason: 'headers:新股信息结构命中' };
+
+  const greyMust = includesAll(mergedHeader, ['代号', '名称', '上市日期', '货币', '上市价', '每手股数', '入场费']);
+  const greyTitle = includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent.map(getHeaderKey));
+  if (greyMust && greyTitle) {
+    return { type: 'greyMarketRecent', reason: 'headers + nearbyTitleText: 暗盘/昨上市/今日上市结构命中' };
+  }
+
+  const listingSoonMust = includesAll(mergedHeader, ['代号', '名称', '上市日期', '货币', '每手股数'])
+    && (mergedHeader.includes('上市价') || mergedHeader.includes('上市价#'));
+  const listingSoonExclude = includesAny(mergedHeader, ['首日开市价', '按盘价', '累积升跌']);
+  if (listingSoonMust && !listingSoonExclude) {
+    return { type: TABLE_TYPE.listingSoon, reason: 'headers:即将上市结构命中且未命中新股信息特征列' };
+  }
+
+  if (includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent.map(getHeaderKey))) reason.push('titleLikeGreyMarket');
+  return { type: null, reason: reason.join(',') || 'unmatched' };
+}
+
+function resolveColumnMapByHeaders(headers = []) {
+  return {
+    code: findHeaderIndex(headers, ['代号', '股票编号', '編號']),
+    name: findHeaderIndex(headers, ['名称', '名稱']),
+    listingDate: findHeaderIndex(headers, ['上市日期']),
+    offerEndDate: findHeaderIndex(headers, ['截止认购日', '截止認購日', '截止认购', '截止認購']),
+    currency: findHeaderIndex(headers, ['货币', '貨幣']),
+    offerPrice: findHeaderIndex(headers, ['招股价', '招股價', '上市价', '上市價', '上市价#', '發售價', '发售价']),
+    lotSize: findHeaderIndex(headers, ['每手股数']),
+    lotAmount: findHeaderIndex(headers, ['入场费', '入場費']),
+    subscriptionMultiple: findHeaderIndex(headers, ['认购倍数', '認購倍數']),
+    allotmentRate: findHeaderIndex(headers, ['一手中签率', '一手中籤率']),
+    firstDayChangePct: findHeaderIndex(headers, ['首日升跌', '累积升跌', '累計升跌']),
+  };
+}
+
+function getCol(columns, index) {
+  if (index < 0 || index >= columns.length) return null;
+  return columns[index] || null;
+}
+
+function isNoDataTable($, $table) {
+  const text = $table.text().replace(/\s+/g, '');
+  return text.includes('没有相关资料') || text.includes('沒有相關資料');
+}
+
+function parseTableByMap($, $table, map, status, opts = {}) {
   const list = [];
+  $table.find('tr').slice(1).each((_, row) => {
+    const cols = $(row).find('td').map((__, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
+    if (!cols.length) return;
 
-  rows.slice(1).each((rowIndex, row) => {
-    const tds = $(row).find('td');
-    if (!tds || tds.length < 2) return;
+    const codeRaw = getCol(cols, map.code) || '';
+    const codeMatch = codeRaw.match(/(\d{5})/);
+    if (!codeMatch) return;
 
-    const columns = tds.map((i, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
-    const parsedRow = parseRowByFlexibleMap(columns, map);
-    const normalized = normalizeItemByStatus(parsedRow, status);
+    const nameRaw = getCol(cols, map.name) || '';
+    const parsed = {
+      code: codeMatch[0],
+      name: sanitizeName(nameRaw),
+      listingDate: getCol(cols, map.listingDate),
+      offerEndDate: getCol(cols, map.offerEndDate),
+      currency: getCol(cols, map.currency),
+      offerPriceRaw: getCol(cols, map.offerPrice),
+      offerPrice: getCol(cols, map.offerPrice),
+      lotSize: getCol(cols, map.lotSize),
+      lotAmount: getCol(cols, map.lotAmount),
+      subscriptionMultiple: getCol(cols, map.subscriptionMultiple),
+      allotmentRate: getCol(cols, map.allotmentRate),
+      firstDayChangePct: getCol(cols, map.firstDayChangePct),
+      entryFee: getCol(cols, map.lotAmount),
+    };
 
-    if (debug) {
-      console.log(`[ipoList][debug][${status}] row#${rowIndex + 1} raw=`, columns);
-      console.log(`[ipoList][debug][${status}] row#${rowIndex + 1} parsed=`, normalized);
+    const normalized = normalizeItemByStatus(parsed, status);
+    if (!normalized) return;
+
+    if (opts.keepOfferPriceRaw === true) {
+      normalized.offerPrice = parsed.offerPriceRaw && parsed.offerPriceRaw !== '--'
+        ? parseLotAmount(parsed.offerPriceRaw)
+        : null;
+      normalized.offerPriceRange = parsed.offerPriceRaw && parsed.offerPriceRaw !== '--'
+        ? String(parsed.offerPriceRaw).trim()
+        : null;
     }
-
-    if (normalized) list.push(normalized);
+    list.push(normalized);
   });
-
   return list;
 }
 
-function parseSectionTable($, status, debug = false) {
-  const sectionKeywords = SECTION_KEYWORDS[status] || [];
-  const headerKeywords = TABLE_HEADER_KEYWORDS[status] || [];
+function validateItem(item = {}, mode = 'common') {
+  if (!item || !/^\d{5}$/.test(item.code || '')) return null;
+  if (!item.name || item.name.length < 2) return null;
+  if (item.name.length === 1) return null;
+  if (/^[-—]+$/.test(item.name)) return null;
+  const clean = { ...item, listingDate: normalizeDateOrRaw(item.listingDate) };
 
-  const sectionNode = findSectionByTitle($, sectionKeywords);
-  const sectionTable = findNextTableFromSection($, sectionNode);
-
-  const table = (sectionTable && sectionTable.length)
-    ? sectionTable
-    : findTableByHeaderKeywords($, headerKeywords);
-
-  if (!table || !table.length) {
-    console.warn(`[etnet/ipoList] 区块定位失败: ${status}`);
-    return [];
+  if (mode === 'listingSoon') {
+    if (clean.offerPrice != null && !Number.isFinite(clean.offerPrice)) clean.offerPrice = null;
   }
-
-  return parseTableRowsByStatus($, table, status, debug);
+  return clean;
 }
 
-function extractNameNearCode(text = '', code = '') {
-  if (!text || !code) return null;
-  const idx = text.indexOf(code);
-  if (idx < 0) return null;
-
-  const left = text.slice(Math.max(0, idx - 18), idx).replace(/[\d\s()（）/|]+/g, ' ').trim();
-  const right = text.slice(idx + code.length, idx + code.length + 24).replace(/[\d\s()（）/|]+/g, ' ').trim();
-  return sanitizeName(left || right || '');
+function parseSubscribingTable($, tableInfo) {
+  if (!tableInfo || !tableInfo.tableNode || isNoDataTable($, tableInfo.tableNode)) return [];
+  const map = resolveColumnMapByHeaders(tableInfo.headers);
+  const parsed = parseTableByMap($, tableInfo.tableNode, map, TABLE_TYPE.subscribing);
+  return parsed.map(item => validateItem(item, 'subscribing')).filter(Boolean);
 }
 
-function parseTopLatestCards($) {
-  const list = [];
-  const seenBlock = new Set();
-
-  $('div,section,article,tr,td,li').each((_, node) => {
-    const text = $(node).text().replace(/\s+/g, ' ').trim();
-    if (!text || text.length < 20) return;
-
-    const hasBroker = TOP_CARD_BROKERS.some(k => text.includes(k));
-    const hasTopTitle = SECTION_KEYWORDS.topCards.some(k => text.includes(k));
-    const codes = text.match(/\b\d{5}\b/g) || [];
-
-    if ((!hasBroker && !hasTopTitle) || !codes.length) return;
-
-    const blockKey = `${codes.join(',')}|${text.slice(0, 80)}`;
-    if (seenBlock.has(blockKey)) return;
-    seenBlock.add(blockKey);
-
-    const priceMatch = text.match(/(?:現價|成交|报|報|上市價)?\s*([\d]{1,4}(?:\.\d+)?)/);
-    const pctMatch = text.match(/([+-]\d+(?:\.\d+)?)\s*%/);
-    const dateMatch = text.match(/(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})/);
-
-    for (const rawCode of codes) {
-      const code = normalizeCode(rawCode);
-      const name = extractNameNearCode(text, rawCode);
-      if (!code || !name) continue;
-
-      list.push(normalizeTopCardItem({
-        code,
-        name,
-        price: priceMatch ? priceMatch[1] : null,
-        changePercent: pctMatch ? pctMatch[1] : null,
-        listingDate: dateMatch ? dateMatch[1] : null,
-      }));
-    }
-  });
-
-  return uniqByCode(list.filter(Boolean));
+function parseListingSoonTable($, tableInfo) {
+  if (!tableInfo || !tableInfo.tableNode || isNoDataTable($, tableInfo.tableNode)) return [];
+  const map = resolveColumnMapByHeaders(tableInfo.headers);
+  const parsed = parseTableByMap($, tableInfo.tableNode, map, TABLE_TYPE.listingSoon, { keepOfferPriceRaw: true });
+  return parsed.map(item => validateItem(item, 'listingSoon')).filter(Boolean);
 }
 
-function mergeRecentListed(topCards = [], newsTable = []) {
+function parseNewsRecentTable($, tableInfo) {
+  if (!tableInfo || !tableInfo.tableNode || isNoDataTable($, tableInfo.tableNode)) return [];
+  const map = resolveColumnMapByHeaders(tableInfo.headers);
+  const parsed = parseTableByMap($, tableInfo.tableNode, map, TABLE_TYPE.recentListed);
+  return parsed.map(item => validateItem(item, 'recent')).filter(Boolean);
+}
+
+function parseGreyMarketRecentTable($, tableInfo) {
+  if (!tableInfo || !tableInfo.tableNode || isNoDataTable($, tableInfo.tableNode)) return [];
+  const map = resolveColumnMapByHeaders(tableInfo.headers);
+  const parsed = parseTableByMap($, tableInfo.tableNode, map, TABLE_TYPE.listingSoon, { keepOfferPriceRaw: true });
+  const converted = parsed.map(item => ({
+    ...item,
+    status: STATUS_MAP.recentListed,
+  }));
+  return converted.map(item => validateItem(item, 'recent')).filter(Boolean);
+}
+
+function mergeRecentListed(greyMarketRecent = [], newsTable = []) {
   const map = new Map();
 
-  for (const item of topCards) {
+  for (const item of greyMarketRecent) {
     if (!item?.code) continue;
     map.set(item.code, item);
   }
 
   for (const item of newsTable) {
-    if (!item?.code || map.has(item.code)) continue;
-    map.set(item.code, item);
+    if (!item?.code) continue;
+    if (!map.has(item.code)) {
+      map.set(item.code, item);
+      continue;
+    }
+
+    const existing = map.get(item.code);
+    map.set(item.code, {
+      ...item,
+      ...existing,
+      subscriptionMultiple: existing.subscriptionMultiple || item.subscriptionMultiple || null,
+      allotmentRate: existing.allotmentRate || item.allotmentRate || null,
+      firstDayChangePct: existing.firstDayChangePct || item.firstDayChangePct || null,
+      offerPrice: existing.offerPrice || item.offerPrice || null,
+      lotSize: existing.lotSize || item.lotSize || null,
+      lotAmount: existing.lotAmount || item.lotAmount || null,
+    });
   }
 
   return Array.from(map.values())
@@ -505,31 +498,72 @@ async function crawlIPOListFromETNet() {
     fetchedAt: new Date().toISOString(),
   };
 
-  const subscribing = parseSectionTable($, TABLE_TYPE.subscribing);
-  const listingSoon = parseSectionTable($, TABLE_TYPE.listingSoon);
-  const newsTableRecent = parseSectionTable($, TABLE_TYPE.recentListed);
-  const topCardsRecent = parseTopLatestCards($);
+  const tables = collectTables($);
+  const matched = {
+    subscribing: null,
+    listingSoon: null,
+    newsRecent: null,
+    greyMarketRecent: null,
+  };
+
+  for (const table of tables) {
+    const matchedType = matchTableType(table.headers, table.nearbyTitleText);
+    if (!matchedType.type) continue;
+    if (matchedType.type === TABLE_TYPE.subscribing && !matched.subscribing) matched.subscribing = { ...table, reason: matchedType.reason };
+    if (matchedType.type === TABLE_TYPE.listingSoon && !matched.listingSoon) matched.listingSoon = { ...table, reason: matchedType.reason };
+    if (matchedType.type === TABLE_TYPE.recentListed && !matched.newsRecent) matched.newsRecent = { ...table, reason: matchedType.reason };
+    if (matchedType.type === 'greyMarketRecent' && !matched.greyMarketRecent) matched.greyMarketRecent = { ...table, reason: matchedType.reason };
+  }
+
+  const subscribing = parseSubscribingTable($, matched.subscribing);
+  const listingSoon = parseListingSoonTable($, matched.listingSoon);
+  const newsRecent = parseNewsRecentTable($, matched.newsRecent);
+  const greyMarketRecent = parseGreyMarketRecentTable($, matched.greyMarketRecent);
 
   result.subscribing = uniqByCode(subscribing);
   result.listingSoon = uniqByCode(listingSoon);
-  result.recentListed = mergeRecentListed(topCardsRecent, newsTableRecent).slice(0, RECENT_LIST_LIMIT);
+  result.recentListed = mergeRecentListed(greyMarketRecent, newsRecent).slice(0, RECENT_LIST_LIMIT);
 
   if (IPO_DEBUG_CODES) {
     console.log('[IPO_DEBUG]', {
+      subscribingTableMatched: matched.subscribing ? {
+        headers: matched.subscribing.headers,
+        nearbyTitleText: matched.subscribing.nearbyTitleText,
+        reason: matched.subscribing.reason,
+      } : null,
+      listingSoonTableMatched: matched.listingSoon ? {
+        headers: matched.listingSoon.headers,
+        nearbyTitleText: matched.listingSoon.nearbyTitleText,
+        reason: matched.listingSoon.reason,
+      } : null,
+      newsRecentTableMatched: matched.newsRecent ? {
+        headers: matched.newsRecent.headers,
+        nearbyTitleText: matched.newsRecent.nearbyTitleText,
+        reason: matched.newsRecent.reason,
+      } : null,
+      greyMarketRecentTableMatched: matched.greyMarketRecent ? {
+        headers: matched.greyMarketRecent.headers,
+        nearbyTitleText: matched.greyMarketRecent.nearbyTitleText,
+        reason: matched.greyMarketRecent.reason,
+      } : null,
+      subscribingCodes: result.subscribing.map(x => x.code),
       listingSoonCodes: result.listingSoon.map(x => x.code),
-      topCardsCodes: topCardsRecent.map(x => x.code),
+      greyMarketRecentCodes: greyMarketRecent.map(x => x.code),
+      newsRecentCodes: newsRecent.map(x => x.code),
       recentListedCodes: result.recentListed.map(x => x.code),
-      listingSoonItems: result.listingSoon.slice(0, 5),
-      topCardsItems: topCardsRecent.slice(0, 5),
-      recentListedItems: result.recentListed.slice(0, 10),
+      listingSoonFirst3: result.listingSoon.slice(0, 3),
+      greyMarketRecentFirst3: greyMarketRecent.slice(0, 3),
+      newsRecentFirst3: newsRecent.slice(0, 3),
+      recentListedFirst5: result.recentListed.slice(0, 5),
     });
   }
 
   const stats = {
     subscribingCount: result.subscribing.length,
     listingSoonCount: result.listingSoon.length,
+    greyMarketRecentCount: greyMarketRecent.length,
+    newsRecentCount: newsRecent.length,
     recentListedCount: result.recentListed.length,
-    topCardsCount: topCardsRecent.length,
   };
   console.log('[IPO]', stats);
 
@@ -551,15 +585,32 @@ async function debugRun() {
   }
 
   const $ = cheerio.load(html);
-  const subscribing = parseSectionTable($, TABLE_TYPE.subscribing, true);
-  const listingSoon = parseSectionTable($, TABLE_TYPE.listingSoon, true);
-  const recent = parseSectionTable($, TABLE_TYPE.recentListed, true);
-  const topCards = parseTopLatestCards($);
+  const tables = collectTables($);
+  const matched = {
+    subscribing: null,
+    listingSoon: null,
+    newsRecent: null,
+    greyMarketRecent: null,
+  };
+
+  for (const table of tables) {
+    const matchedType = matchTableType(table.headers, table.nearbyTitleText);
+    if (!matchedType.type) continue;
+    if (matchedType.type === TABLE_TYPE.subscribing && !matched.subscribing) matched.subscribing = table;
+    if (matchedType.type === TABLE_TYPE.listingSoon && !matched.listingSoon) matched.listingSoon = table;
+    if (matchedType.type === TABLE_TYPE.recentListed && !matched.newsRecent) matched.newsRecent = table;
+    if (matchedType.type === 'greyMarketRecent' && !matched.greyMarketRecent) matched.greyMarketRecent = table;
+  }
+
+  const subscribing = parseSubscribingTable($, matched.subscribing);
+  const listingSoon = parseListingSoonTable($, matched.listingSoon);
+  const newsRecent = parseNewsRecentTable($, matched.newsRecent);
+  const greyMarketRecent = parseGreyMarketRecentTable($, matched.greyMarketRecent);
 
   const debugItems = [
     ...subscribing,
     ...listingSoon,
-    ...mergeRecentListed(topCards, recent),
+    ...mergeRecentListed(greyMarketRecent, newsRecent),
   ];
 
   const clean = uniqByCode(debugItems)
