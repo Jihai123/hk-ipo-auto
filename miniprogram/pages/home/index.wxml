@@ -1,0 +1,112 @@
+<view class="container">
+  <view class="hero card">
+    <view class="title">港股打新量化评分（小程序）</view>
+    <view class="subtitle">Phase 1：首页骨架 + 聚合数据</view>
+
+    <view class="search-row">
+      <input
+        class="search-input"
+        type="number"
+        maxlength="5"
+        placeholder="输入股票代码（支持自动补零）"
+        value="{{searchCode}}"
+        bindinput="onSearchInput"
+        confirm-type="search"
+        bindconfirm="onSearchSubmit"
+      />
+      <button class="search-btn" bindtap="onSearchSubmit">查询</button>
+    </view>
+    <view class="meta">输入不足 5 位将自动左侧补零</view>
+    <view class="recent-wrap" wx:if="{{recentSearches.length > 0}}">
+      <view class="recent-title">最近查询</view>
+      <view class="recent-list">
+        <view
+          class="recent-item"
+          wx:for="{{recentSearches}}"
+          wx:key="*this"
+          data-code="{{item}}"
+          bindtap="onTapRecent"
+        >
+          {{item}}
+        </view>
+      </view>
+    </view>
+    <button size="mini" bindtap="goToTimeline">查看完整时间表</button>
+    <view class="meta">更新时间：{{updatedAt || '--'}}</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="card state-box">加载中...</view>
+
+  <view wx:elif="{{error}}" class="card state-box error">
+    <view>加载失败：{{error}}</view>
+    <button size="mini" bindtap="loadHomeData">重试</button>
+  </view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="section-title">当前新股评分榜</view>
+      <view wx:if="{{degraded.topList}}" class="warn">榜单已降级（使用缓存或空结果）</view>
+      <view wx:if="{{topList.length === 0}}" class="empty">暂无榜单数据</view>
+      <block wx:for="{{topList}}" wx:key="code">
+        <stock-card
+          code="{{item.code}}"
+          name="{{item.name}}"
+          extra="{{(item.ratingLabel || item.legacyRating || '')}} · 上市日 {{item.listingDate || '--'}}"
+          score="{{item.score}}"
+          bindtapitem="onTapTopItem"
+        />
+      </block>
+    </view>
+
+    <view class="card">
+      <view class="section-title">新股时间表摘要</view>
+
+      <view class="group-title">招股中</view>
+      <view wx:if="{{timelineSummary.subscribing.length === 0}}" class="empty">暂无数据</view>
+      <view
+        wx:for="{{timelineSummary.subscribing}}"
+        wx:key="code"
+        class="timeline-item"
+        data-code="{{item.code}}"
+        bindtap="onTapTimelineItem"
+      >
+        <view>{{item.name}}（{{item.code}}）</view>
+        <view class="meta">截止：{{item.offerEndDate || '--'}} · 上市：{{item.listingDate || '--'}}</view>
+      </view>
+
+      <view class="group-title">待上市</view>
+      <view wx:if="{{timelineSummary.listingSoon.length === 0}}" class="empty">暂无数据</view>
+      <view
+        wx:for="{{timelineSummary.listingSoon}}"
+        wx:key="code"
+        class="timeline-item"
+        data-code="{{item.code}}"
+        bindtap="onTapTimelineItem"
+      >
+        <view>{{item.name}}（{{item.code}}）</view>
+        <view class="meta">上市：{{item.listingDate || '--'}}</view>
+      </view>
+
+      <view class="group-title">近期上市</view>
+      <view wx:if="{{timelineSummary.recentListed.length === 0}}" class="empty">暂无数据</view>
+      <view
+        wx:for="{{timelineSummary.recentListed}}"
+        wx:key="code"
+        class="timeline-item"
+        data-code="{{item.code}}"
+        bindtap="onTapTimelineItem"
+      >
+        <view>{{item.name}}（{{item.code}}）</view>
+        <view class="meta">上市：{{item.listingDate || '--'}} · 累积升跌：{{item.firstDayChangePct ?? '--'}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">市场快照</view>
+      <view wx:if="{{degraded.market}}" class="warn">市场指标已降级</view>
+      <view class="meta">近10只平均涨幅：{{market.avgReturn ?? '--'}}</view>
+      <view class="meta">近10只破发率：{{market.breakRate ?? '--'}}</view>
+      <view class="meta">打新热度指数：{{market.heatIndex ?? '--'}}</view>
+    </view>
+  </block>
+</view>

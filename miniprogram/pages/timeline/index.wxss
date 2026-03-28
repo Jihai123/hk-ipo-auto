@@ -1,0 +1,39 @@
+.container {
+  padding: 24rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.meta {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.warn {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #b45309;
+}
+
+.group-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 12rpx;
+}
+
+.empty {
+  color: #64748b;
+  font-size: 24rpx;
+  padding: 8rpx 0;
+}

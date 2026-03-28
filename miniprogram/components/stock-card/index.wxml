@@ -1,0 +1,8 @@
+<view class="stock-item" bindtap="onTap">
+  <view class="left">
+    <view class="name">{{name}}</view>
+    <view class="code">{{code}}</view>
+    <view class="extra" wx:if="{{extra}}">{{extra}}</view>
+  </view>
+  <view class="right" wx:if="{{score !== undefined}}">{{score}}</view>
+</view>

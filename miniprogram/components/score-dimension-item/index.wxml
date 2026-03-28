@@ -1,0 +1,11 @@
+<view class="dim-card" bindtap="toggle">
+  <view class="head">
+    <view>
+      <view class="label">{{item.label}}</view>
+      <view class="summary">{{item.summary || '暂无摘要'}}</view>
+    </view>
+    <view class="score {{item.score > 0 ? 'pos' : item.score < 0 ? 'neg' : 'neu'}}">{{item.score}}</view>
+  </view>
+  <view class="detail" wx:if="{{expanded && item.detail}}">{{item.detail}}</view>
+  <view class="hint">{{expanded ? '收起详情' : '展开详情'}}</view>
+</view>

@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "评分详情",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "page-state": "/components/page-state/index",
+    "score-summary-card": "/components/score-summary-card/index",
+    "score-dimension-item": "/components/score-dimension-item/index"
+  }
+}

@@ -4624,6 +4624,309 @@ app.get('/api/market/stats', (req, res) => {
   }
 });
 
+// ==================== 小程序API（Phase 0） ====================
+
+function buildMiniProgramDimensions(scores = {}) {
+  const defs = [
+    { key: 'oldShares', label: '旧股发售' },
+    { key: 'sponsor', label: '保荐人业绩' },
+    { key: 'cornerstone', label: '基石投资者' },
+    { key: 'lockup', label: 'Pre-IPO禁售' },
+    { key: 'industry', label: '行业赛道' },
+    { key: 'pe', label: 'PE估值' },
+    { key: 'ipoSize', label: '募资规模' },
+  ];
+
+  return defs
+    .map(def => {
+      const item = scores?.[def.key];
+      if (!item || !Number.isFinite(item.score)) return null;
+      return {
+        key: def.key,
+        label: def.label,
+        score: item.score,
+        summary: item.reason || '',
+        detail: item.details || '',
+        // 兼容旧字段（Phase 1 首页/后续页面可能已依赖）
+        reason: item.reason || '',
+        details: item.details || '',
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeRating(ratingLabel = '', score = 0) {
+  const text = String(ratingLabel || '').trim();
+  if (text === '强烈推荐' || text === '建议申购') return { rating: 'buy', ratingLabel: text };
+  if (text === '可以考虑' || text === '谨慎申购') return { rating: 'neutral', ratingLabel: text };
+  if (text === '不建议') return { rating: 'avoid', ratingLabel: text };
+
+  if (score >= 4) return { rating: 'buy', ratingLabel: '建议申购' };
+  if (score >= 0) return { rating: 'neutral', ratingLabel: '可以考虑' };
+  return { rating: 'avoid', ratingLabel: '不建议' };
+}
+
+function buildMiniProgramMarketStats() {
+  const HISTORY_JSON = path.join(DATA_DIR, 'ipo-history.json');
+  const fallback = {
+    avgReturn: null,
+    breakRate: null,
+    heatIndex: null,
+  };
+
+  try {
+    if (!fs.existsSync(HISTORY_JSON)) return fallback;
+    const history = JSON.parse(fs.readFileSync(HISTORY_JSON, 'utf-8'));
+    if (!history.recentIPOs || history.recentIPOs.length === 0) return fallback;
+
+    const recent10 = history.recentIPOs.slice(0, 10);
+    const returns = recent10.map(ipo => {
+      const match = String(ipo.firstDayReturn || '').match(/([+-]?\d+\.?\d*)/);
+      return match ? parseFloat(match[1]) : 0;
+    });
+    if (returns.length === 0) return fallback;
+
+    const avgReturnNum = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const breakCount = returns.filter(r => r < 0).length;
+    const positiveRate = (returns.filter(r => r > 0).length / returns.length) * 100;
+    const heatIndex = Math.round(positiveRate * 0.7 + Math.abs(avgReturnNum) * 0.3);
+
+    return {
+      avgReturn: Number(avgReturnNum.toFixed(1)),
+      breakRate: Math.round((breakCount / returns.length) * 100),
+      heatIndex,
+    };
+  } catch (error) {
+    console.warn(`[api/mp/home] market stats build failed: ${error.message}`);
+    return fallback;
+  }
+}
+
+// GET /api/mp/home
+// 小程序首页聚合接口：轻量榜单 + 时间表摘要 + 市场快照
+app.get('/api/mp/home', async (req, res) => {
+  const degraded = { topList: false, timeline: false, market: false };
+  const updatedAt = new Date().toISOString();
+
+  let timelineSummary = {
+    subscribing: [],
+    listingSoon: [],
+    recentListed: [],
+  };
+  let error = null;
+
+  try {
+    const current = await getCurrentIpoDataWithCache();
+    timelineSummary = {
+      subscribing: (current.data?.subscribing || []).slice(0, 5).map(item => ({
+        code: item.code || '',
+        name: item.name || '',
+        listingDate: item.listingDate || '',
+        offerEndDate: item.offerEndDate || '',
+        lotAmount: item.lotAmount ?? null,
+      })),
+      listingSoon: (current.data?.listingSoon || []).slice(0, 5).map(item => ({
+        code: item.code || '',
+        name: item.name || '',
+        listingDate: item.listingDate || '',
+        lotAmount: item.lotAmount ?? null,
+      })),
+      recentListed: (current.data?.recentListed || []).slice(0, 5).map(item => ({
+        code: item.code || '',
+        name: item.name || '',
+        listingDate: item.listingDate || '',
+        firstDayChangePct: item.firstDayChangePct ?? null,
+      })),
+    };
+
+    const timelineTotal = timelineSummary.subscribing.length
+      + timelineSummary.listingSoon.length
+      + timelineSummary.recentListed.length;
+    if (timelineTotal === 0) {
+      degraded.timeline = true;
+      error = {
+        type: 'timeline_empty',
+        message: 'timeline summary is empty',
+      };
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      updatedAt,
+      degraded: { topList: true, timeline: true, market: true },
+      topList: [],
+      timelineSummary,
+      market: { avgReturn: null, breakRate: null, heatIndex: null },
+      error: {
+        type: 'timeline_fetch_failed',
+        message: error.message,
+      },
+      errorMessage: `timeline fetch failed: ${error.message}`,
+    });
+  }
+
+  let topList = [];
+  try {
+    const top = await withTimeout(
+      getTopIpoDataWithCache(5),
+      2500,
+      'top list fetch timeout'
+    );
+    topList = (top.data || []).slice(0, 5).map(item => ({
+      ...normalizeRating(item.rating || '', item.totalScore),
+      code: item.code || '',
+      name: item.name || '',
+      score: Number.isFinite(item.totalScore) ? item.totalScore : 0,
+      listingDate: item.listingDate || '',
+      // 兼容旧字段（保留原语义字符串）
+      legacyRating: item.rating || '',
+    }));
+  } catch (error) {
+    degraded.topList = true;
+    console.warn(`[api/mp/home] top list degraded: ${error.message}`);
+  }
+
+  let market = { avgReturn: null, breakRate: null, heatIndex: null };
+  try {
+    market = buildMiniProgramMarketStats();
+  } catch (error) {
+    degraded.market = true;
+    console.warn(`[api/mp/home] market degraded: ${error.message}`);
+  }
+
+  if (market.avgReturn === null && market.breakRate === null && market.heatIndex === null) {
+    degraded.market = true;
+  }
+
+  res.json({
+    success: true,
+    updatedAt,
+    degraded,
+    topList,
+    timelineSummary,
+    market,
+    error,
+    errorMessage: error?.message || null,
+  });
+});
+
+// GET /api/mp/score/:code
+// 小程序评分接口：统一输出结构，便于前端直接渲染
+app.get('/api/mp/score/:code', async (req, res) => {
+  const rawCode = String(req.params.code || '').trim();
+  const code = formatStockCode(rawCode);
+  const startedAt = Date.now();
+
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      code: rawCode || '',
+      name: '',
+      totalScore: 0,
+      rating: '',
+      elapsed: 0,
+      dimensions: [],
+      display: {},
+      error: { type: 'invalid_code', message: 'invalid stock code' },
+      errorMessage: 'invalid stock code',
+    });
+  }
+
+  try {
+    let pdfText = readCache(code);
+    let prospectusInfo = null;
+
+    if (!pdfText) {
+      const searchResults = await withTimeout(
+        searchProspectus(code),
+        120000,
+        'search prospectus timeout'
+      );
+
+      if (!searchResults || searchResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          code,
+          name: '',
+          totalScore: 0,
+          rating: '',
+          elapsed: Math.round((Date.now() - startedAt) / 1000),
+          dimensions: [],
+          display: {},
+          error: { type: 'prospectus_not_found', message: 'prospectus not found' },
+          errorMessage: 'prospectus not found',
+        });
+      }
+
+      for (let i = 0; i < searchResults.length; i++) {
+        const candidate = searchResults[i];
+        try {
+          pdfText = await downloadAndParsePDF(candidate.link, code, candidate.name || '');
+          prospectusInfo = candidate;
+          break;
+        } catch (_) {
+          // continue
+        }
+      }
+    }
+
+    if (!pdfText) {
+      return res.status(502).json({
+        success: false,
+        code,
+        name: '',
+        totalScore: 0,
+        rating: '',
+        elapsed: Math.round((Date.now() - startedAt) / 1000),
+        dimensions: [],
+        display: {},
+        error: { type: 'pdf_candidates_failed', message: 'all prospectus candidates failed' },
+        errorMessage: 'all prospectus candidates failed',
+      });
+    }
+
+    const scoreResult = await scoreProspectus(pdfText, code);
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const normalizedRating = normalizeRating(scoreResult.rating, scoreResult.totalScore);
+
+    if (prospectusInfo) {
+      saveScoreToIPOList(code, scoreResult, prospectusInfo);
+    }
+
+    res.json({
+      success: true,
+      code,
+      name: prospectusInfo?.name || '',
+      totalScore: scoreResult.totalScore ?? 0,
+      rating: normalizedRating.rating,
+      ratingLabel: normalizedRating.ratingLabel,
+      elapsed,
+      dimensions: buildMiniProgramDimensions(scoreResult.scores || {}),
+      display: scoreResult.display || {},
+      error: null,
+      errorMessage: null,
+      // 兼容旧字段
+      legacyRating: scoreResult.rating || '',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code,
+      name: '',
+      totalScore: 0,
+      rating: '',
+      elapsed: Math.round((Date.now() - startedAt) / 1000),
+      dimensions: [],
+      display: {},
+      error: {
+        type: 'score_failed',
+        message: error.message || 'unknown error',
+      },
+      errorMessage: error.message || 'unknown error',
+    });
+  }
+});
+
 // 静态文件
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
