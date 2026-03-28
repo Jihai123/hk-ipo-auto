@@ -15,37 +15,27 @@ const STATUS_MAP = {
 };
 
 const MAX_NAME_LENGTH = 40;
+const RECENT_LIST_LIMIT = 30;
+const TOP_CARD_BROKERS = ['耀才', '輝立', '辉立', '富途'];
+const IPO_DEBUG_CODES = process.env.IPO_DEBUG_CODES === '1';
 
 const TABLE_TYPE = {
   subscribing: 'subscribing',
+  listingSoon: 'listingSoon',
   recentListed: 'recentListed',
 };
 
-const FIXED_TABLE_INDEX = {
-  subscribing: 4, // table#5
-  recentListed: 7, // table#8
+const SECTION_KEYWORDS = {
+  subscribing: ['招股中'],
+  listingSoon: ['即將上市', '即将上市', '明掛上市', '明挂上市'],
+  recentListed: ['新股消息', '新股資訊', '新股信息'],
+  topCards: ['昨上市', '今日上市', '暗盤', '暗盘'],
 };
 
-const FIXED_COLUMN_MAP = {
-  subscribing: {
-    code: 0,
-    name: 1,
-    offerEndDate: 3,
-    listingDate: 4,
-    currency: 5,
-    offerPrice: 6,
-    lotSize: 7,
-    lotAmount: 8,
-  },
-  recentListed: {
-    code: 0,
-    name: 1,
-    listingDate: 2,
-    offerPrice: 4,
-    subscriptionMultiple: 5,
-    allotmentRate: 7,
-    firstDayChangePct: 10,
-  },
+const TABLE_HEADER_KEYWORDS = {
+  subscribing: ['招股中', '招股價', '招股截止日', '上市日期'],
+  listingSoon: ['即將上市', '上市日期', '每手', '入場費'],
+  recentListed: ['新股消息', '上市日期', '認購倍數', '一手中籤率'],
 };
 
 function normalizeCode(raw = '') {
@@ -153,13 +143,10 @@ function getByIndex(columns = [], idx) {
   return columns[idx] || null;
 }
 
-function parseRowByFixedMap(columns = [], map = {}) {
-  const codeCandidate = getByIndex(columns, map.code) || null;
-  const nameCandidate = getByIndex(columns, map.name) || null;
-
+function parseRowByFlexibleMap(columns = [], map = {}) {
   return {
-    code: codeCandidate?.match(/\d{4,5}/)?.[0] || null,
-    name: getPrimaryText(nameCandidate || ''),
+    code: getByIndex(columns, map.code)?.match(/\d{4,5}/)?.[0] || null,
+    name: getPrimaryText(getByIndex(columns, map.name) || ''),
     offerEndDate: getByIndex(columns, map.offerEndDate),
     listingDate: getByIndex(columns, map.listingDate),
     currency: getByIndex(columns, map.currency),
@@ -170,6 +157,7 @@ function parseRowByFixedMap(columns = [], map = {}) {
     subscriptionMultiple: getByIndex(columns, map.subscriptionMultiple),
     allotmentRate: getByIndex(columns, map.allotmentRate),
     firstDayChangePct: getByIndex(columns, map.firstDayChangePct),
+    entryFee: getByIndex(columns, map.entryFee),
   };
 }
 
@@ -191,6 +179,23 @@ function normalizeSubscribingItem(item) {
   };
 }
 
+function normalizeListingSoonItem(item) {
+  const code = normalizeCode(item.code);
+  const name = sanitizeName(item.name);
+  if (!code || !name) return null;
+
+  return {
+    code,
+    name,
+    status: STATUS_MAP.listingSoon,
+    listingDate: normalizeDateOrRaw(item.listingDate),
+    currency: String(item.currency || '').trim() || null,
+    lotSize: parseLotSize(item.lotSize),
+    lotAmount: parseLotAmount(item.entryFee || item.lotAmount),
+    offerEndDate: normalizeDateOrRaw(item.offerEndDate),
+  };
+}
+
 function normalizeRecentListedItem(item) {
   const code = normalizeCode(item.code);
   const name = sanitizeName(item.name);
@@ -206,19 +211,147 @@ function normalizeRecentListedItem(item) {
     allotmentRate: parsePercentNumber(item.allotmentRate),
     firstDayChangePct: parsePercentNumber(item.firstDayChangePct),
     lotSize: null,
+    lotAmount: parseLotAmount(item.lotAmount),
+  };
+}
+
+function normalizeTopCardItem(item) {
+  const code = normalizeCode(item.code);
+  const name = sanitizeName(item.name);
+  if (!code || !name) return null;
+
+  return {
+    code,
+    name,
+    status: STATUS_MAP.recentListed,
+    listingDate: normalizeDateOrRaw(item.listingDate),
+    offerPrice: parseLotAmount(item.price),
+    subscriptionMultiple: null,
+    allotmentRate: null,
+    firstDayChangePct: parsePercentNumber(item.changePercent),
+    lotSize: null,
+    lotAmount: null,
+    source: 'top_card',
   };
 }
 
 function normalizeItemByStatus(item, status) {
   if (status === TABLE_TYPE.subscribing) return normalizeSubscribingItem(item);
+  if (status === TABLE_TYPE.listingSoon) return normalizeListingSoonItem(item);
   if (status === TABLE_TYPE.recentListed) return normalizeRecentListedItem(item);
   return null;
 }
 
-function parseFixedTable($, tableNode, status, debug = false) {
-  const map = FIXED_COLUMN_MAP[status];
-  if (!tableNode || !map) return [];
-  const rows = $(tableNode).find('tr');
+function getHeaderKey(raw = '') {
+  return String(raw).replace(/\s+/g, '').replace(/[()（）:：]/g, '').trim();
+}
+
+function resolveColumnMap(headerCells = [], status) {
+  const keys = headerCells.map(getHeaderKey);
+  const findIndex = (patterns = []) => keys.findIndex(k => patterns.some(p => k.includes(p)));
+
+  const map = {
+    code: findIndex(['代号', '股票编号', '編號']),
+    name: findIndex(['名称', '名稱']),
+    listingDate: findIndex(['上市日期']),
+    offerEndDate: findIndex(['招股截止', '截止认购', '截止認購']),
+    currency: findIndex(['货币', '貨幣']),
+    offerPrice: findIndex(['招股价', '上市价', '上市價', '发售价', '發售價']),
+    lotSize: findIndex(['每手股数', '每手']),
+    lotAmount: findIndex(['入场费', '入場費']),
+    subscriptionMultiple: findIndex(['认购倍数', '認購倍數']),
+    allotmentRate: findIndex(['一手中签率', '一手中籤率']),
+    firstDayChangePct: findIndex(['首日升跌', '累计升跌', '累計升跌']),
+    entryFee: findIndex(['入场费', '入場費']),
+  };
+
+  if (map.code < 0) map.code = 0;
+  if (map.name < 0) map.name = 1;
+
+  if (status === TABLE_TYPE.subscribing) {
+    if (map.offerEndDate < 0) map.offerEndDate = 3;
+    if (map.listingDate < 0) map.listingDate = 4;
+    if (map.currency < 0) map.currency = 5;
+    if (map.offerPrice < 0) map.offerPrice = 6;
+    if (map.lotSize < 0) map.lotSize = 7;
+    if (map.lotAmount < 0) map.lotAmount = 8;
+  }
+
+  if (status === TABLE_TYPE.listingSoon) {
+    if (map.listingDate < 0) map.listingDate = 2;
+    if (map.currency < 0) map.currency = 3;
+    if (map.lotSize < 0) map.lotSize = 5;
+    if (map.entryFee < 0) map.entryFee = map.lotAmount >= 0 ? map.lotAmount : 6;
+  }
+
+  if (status === TABLE_TYPE.recentListed) {
+    if (map.listingDate < 0) map.listingDate = 2;
+    if (map.offerPrice < 0) map.offerPrice = 4;
+    if (map.subscriptionMultiple < 0) map.subscriptionMultiple = 5;
+    if (map.allotmentRate < 0) map.allotmentRate = 7;
+    if (map.firstDayChangePct < 0) map.firstDayChangePct = 10;
+  }
+
+  return map;
+}
+
+function findSectionByTitle($, keywords = []) {
+  if (!keywords.length) return null;
+
+  const nodes = $('h1,h2,h3,h4,h5,strong,b,th,td,div,span,a').filter((_, el) => {
+    const text = $(el).text().replace(/\s+/g, '').trim();
+    if (!text || text.length > 30) return false;
+    return keywords.some(k => text.includes(k));
+  });
+
+  if (!nodes.length) return null;
+  return nodes.first();
+}
+
+function findNextTableFromSection($, sectionNode) {
+  if (!sectionNode || !sectionNode.length) return null;
+
+  const selfTable = sectionNode.is('table') ? sectionNode : sectionNode.find('table').first();
+  if (selfTable && selfTable.length) return selfTable;
+
+  const nextTable = sectionNode.nextAll('table').first();
+  if (nextTable && nextTable.length) return nextTable;
+
+  let parent = sectionNode.parent();
+  for (let i = 0; i < 5 && parent && parent.length; i += 1) {
+    const pNextTable = parent.nextAll('table').first();
+    if (pNextTable && pNextTable.length) return pNextTable;
+    const pTable = parent.find('table').first();
+    if (pTable && pTable.length) return pTable;
+    parent = parent.parent();
+  }
+
+  return null;
+}
+
+function findTableByHeaderKeywords($, keywords = []) {
+  const tables = $('table');
+  let matched = null;
+
+  tables.each((_, table) => {
+    if (matched) return;
+    const text = $(table).text().replace(/\s+/g, '');
+    if (keywords.some(k => text.includes(k))) {
+      matched = $(table);
+    }
+  });
+
+  return matched;
+}
+
+function parseTableRowsByStatus($, tableNode, status, debug = false) {
+  if (!tableNode || !tableNode.length) return [];
+
+  const rows = tableNode.find('tr');
+  if (!rows.length) return [];
+
+  const headerCells = rows.first().find('th,td').map((i, td) => $(td).text()).get();
+  const map = resolveColumnMap(headerCells, status);
   const list = [];
 
   rows.slice(1).each((rowIndex, row) => {
@@ -226,7 +359,7 @@ function parseFixedTable($, tableNode, status, debug = false) {
     if (!tds || tds.length < 2) return;
 
     const columns = tds.map((i, td) => $(td).text().replace(/\s+/g, ' ').trim()).get();
-    const parsedRow = parseRowByFixedMap(columns, map);
+    const parsedRow = parseRowByFlexibleMap(columns, map);
     const normalized = normalizeItemByStatus(parsedRow, status);
 
     if (debug) {
@@ -240,34 +373,94 @@ function parseFixedTable($, tableNode, status, debug = false) {
   return list;
 }
 
-function getTableByIndex($, idx) {
-  const tables = $('table');
-  if (!tables || tables.length <= idx) return null;
-  return tables.eq(idx);
+function parseSectionTable($, status, debug = false) {
+  const sectionKeywords = SECTION_KEYWORDS[status] || [];
+  const headerKeywords = TABLE_HEADER_KEYWORDS[status] || [];
+
+  const sectionNode = findSectionByTitle($, sectionKeywords);
+  const sectionTable = findNextTableFromSection($, sectionNode);
+
+  const table = (sectionTable && sectionTable.length)
+    ? sectionTable
+    : findTableByHeaderKeywords($, headerKeywords);
+
+  if (!table || !table.length) {
+    console.warn(`[etnet/ipoList] 区块定位失败: ${status}`);
+    return [];
+  }
+
+  return parseTableRowsByStatus($, table, status, debug);
 }
 
-function parseFixedTables($, debug = false) {
-  const subscribingTable = getTableByIndex($, FIXED_TABLE_INDEX.subscribing);
-  const recentTable = getTableByIndex($, FIXED_TABLE_INDEX.recentListed);
+function extractNameNearCode(text = '', code = '') {
+  if (!text || !code) return null;
+  const idx = text.indexOf(code);
+  if (idx < 0) return null;
 
-  const subscribing = subscribingTable
-    ? parseFixedTable($, subscribingTable, TABLE_TYPE.subscribing, debug)
-    : [];
-  const recentListed = recentTable
-    ? parseFixedTable($, recentTable, TABLE_TYPE.recentListed, debug)
-    : [];
+  const left = text.slice(Math.max(0, idx - 18), idx).replace(/[\d\s()（）/|]+/g, ' ').trim();
+  const right = text.slice(idx + code.length, idx + code.length + 24).replace(/[\d\s()（）/|]+/g, ' ').trim();
+  return sanitizeName(left || right || '');
+}
 
-  if (!subscribingTable) {
-    console.warn('[etnet/ipoList] 固定表定位失败: 招股中 table#5 不存在');
+function parseTopLatestCards($) {
+  const list = [];
+  const seenBlock = new Set();
+
+  $('div,section,article,tr,td,li').each((_, node) => {
+    const text = $(node).text().replace(/\s+/g, ' ').trim();
+    if (!text || text.length < 20) return;
+
+    const hasBroker = TOP_CARD_BROKERS.some(k => text.includes(k));
+    const hasTopTitle = SECTION_KEYWORDS.topCards.some(k => text.includes(k));
+    const codes = text.match(/\b\d{5}\b/g) || [];
+
+    if ((!hasBroker && !hasTopTitle) || !codes.length) return;
+
+    const blockKey = `${codes.join(',')}|${text.slice(0, 80)}`;
+    if (seenBlock.has(blockKey)) return;
+    seenBlock.add(blockKey);
+
+    const priceMatch = text.match(/(?:現價|成交|报|報|上市價)?\s*([\d]{1,4}(?:\.\d+)?)/);
+    const pctMatch = text.match(/([+-]\d+(?:\.\d+)?)\s*%/);
+    const dateMatch = text.match(/(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})/);
+
+    for (const rawCode of codes) {
+      const code = normalizeCode(rawCode);
+      const name = extractNameNearCode(text, rawCode);
+      if (!code || !name) continue;
+
+      list.push(normalizeTopCardItem({
+        code,
+        name,
+        price: priceMatch ? priceMatch[1] : null,
+        changePercent: pctMatch ? pctMatch[1] : null,
+        listingDate: dateMatch ? dateMatch[1] : null,
+      }));
+    }
+  });
+
+  return uniqByCode(list.filter(Boolean));
+}
+
+function mergeRecentListed(topCards = [], newsTable = []) {
+  const map = new Map();
+
+  for (const item of topCards) {
+    if (!item?.code) continue;
+    map.set(item.code, item);
   }
-  if (!recentTable) {
-    console.warn('[etnet/ipoList] 固定表定位失败: 近期上市 table#8 不存在');
+
+  for (const item of newsTable) {
+    if (!item?.code || map.has(item.code)) continue;
+    map.set(item.code, item);
   }
 
-  return {
-    subscribing,
-    recentListed,
-  };
+  return Array.from(map.values())
+    .sort((a, b) => {
+      const aTs = Date.parse(a.listingDate || '') || 0;
+      const bTs = Date.parse(b.listingDate || '') || 0;
+      return bTs - aTs;
+    });
 }
 
 function uniqByCode(items = []) {
@@ -312,20 +505,37 @@ async function crawlIPOListFromETNet() {
     fetchedAt: new Date().toISOString(),
   };
 
-  const parsed = parseFixedTables($);
-  result.subscribing = parsed.subscribing;
-  result.recentListed = parsed.recentListed;
+  const subscribing = parseSectionTable($, TABLE_TYPE.subscribing);
+  const listingSoon = parseSectionTable($, TABLE_TYPE.listingSoon);
+  const newsTableRecent = parseSectionTable($, TABLE_TYPE.recentListed);
+  const topCardsRecent = parseTopLatestCards($);
 
-  if (result.subscribing.length === 0) {
-    console.warn('[etnet/ipoList] 招股中表解析结果为空（table#5）');
-  }
-  if (result.recentListed.length === 0) {
-    console.warn('[etnet/ipoList] 近期上市表解析结果为空（table#8）');
+  result.subscribing = uniqByCode(subscribing);
+  result.listingSoon = uniqByCode(listingSoon);
+  result.recentListed = mergeRecentListed(topCardsRecent, newsTableRecent).slice(0, RECENT_LIST_LIMIT);
+
+  if (IPO_DEBUG_CODES) {
+    console.log('[IPO_DEBUG]', {
+      listingSoonCodes: result.listingSoon.map(x => x.code),
+      topCardsCodes: topCardsRecent.map(x => x.code),
+      recentListedCodes: result.recentListed.map(x => x.code),
+      listingSoonItems: result.listingSoon.slice(0, 5),
+      topCardsItems: topCardsRecent.slice(0, 5),
+      recentListedItems: result.recentListed.slice(0, 10),
+    });
   }
 
-  result.subscribing = uniqByCode(result.subscribing);
-  result.listingSoon = uniqByCode(result.listingSoon);
-  result.recentListed = uniqByCode(result.recentListed).slice(0, 12);
+  const stats = {
+    subscribingCount: result.subscribing.length,
+    listingSoonCount: result.listingSoon.length,
+    recentListedCount: result.recentListed.length,
+    topCardsCount: topCardsRecent.length,
+  };
+  console.log('[IPO]', stats);
+
+  if (result.listingSoon.length === 0 && result.recentListed.length === 0) {
+    throw new Error('ETNet解析异常：listingSoon与recentListed均为空，拒绝覆盖缓存');
+  }
 
   console.log(`[etnet/ipoList] 完成: subscribing=${result.subscribing.length}, listingSoon=${result.listingSoon.length}, recentListed=${result.recentListed.length}`);
   return result;
@@ -341,8 +551,16 @@ async function debugRun() {
   }
 
   const $ = cheerio.load(html);
-  const parsed = parseFixedTables($, true);
-  const debugItems = [...parsed.subscribing, ...parsed.recentListed];
+  const subscribing = parseSectionTable($, TABLE_TYPE.subscribing, true);
+  const listingSoon = parseSectionTable($, TABLE_TYPE.listingSoon, true);
+  const recent = parseSectionTable($, TABLE_TYPE.recentListed, true);
+  const topCards = parseTopLatestCards($);
+
+  const debugItems = [
+    ...subscribing,
+    ...listingSoon,
+    ...mergeRecentListed(topCards, recent),
+  ];
 
   const clean = uniqByCode(debugItems)
     .map(item => ({
@@ -351,8 +569,9 @@ async function debugRun() {
       status: item.status,
       listingDate: item.listingDate,
       lotSize: item.lotSize,
+      source: item.source || 'table',
     }))
-    .slice(0, 10);
+    .slice(0, 20);
 
   console.log('[etnet/ipoList][debug] sample=', clean);
   return clean;
