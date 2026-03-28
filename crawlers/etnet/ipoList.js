@@ -217,7 +217,23 @@ function normalizeItemByStatus(item, status) {
 }
 
 function getHeaderKey(raw = '') {
-  return String(raw).replace(/\s+/g, '').replace(/[()（）:：]/g, '').trim();
+  return String(raw)
+    .replace(/\s+/g, '')
+    .replace(/[()（）:：]/g, '')
+    .replace(/號/g, '号')
+    .replace(/稱/g, '称')
+    .replace(/幣/g, '币')
+    .replace(/價/g, '价')
+    .replace(/數/g, '数')
+    .replace(/場/g, '场')
+    .replace(/認購/g, '认购')
+    .replace(/籤/g, '签')
+    .replace(/盤/g, '盘')
+    .replace(/開/g, '开')
+    .replace(/掛/g, '挂')
+    .replace(/累計/g, '累积')
+    .replace(/資訊/g, '信息')
+    .trim();
 }
 
 function findHeaderIndex(keys = [], patterns = []) {
@@ -240,14 +256,14 @@ function getNearbyTitleText($, $table) {
   const collect = [];
   const prevSiblings = $table.prevAll('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th').slice(0, 8);
   prevSiblings.each((_, el) => {
-    const text = $(el).text().replace(/\s+/g, '').trim();
+    const text = getHeaderKey($(el).text());
     if (text && text.length <= 30) collect.push(text);
   });
 
   let parent = $table.parent();
   for (let i = 0; i < 3 && parent && parent.length; i += 1) {
     const pText = parent.prevAll('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th').first().text();
-    const text = String(pText || '').replace(/\s+/g, '').trim();
+    const text = getHeaderKey(String(pText || ''));
     if (text && text.length <= 30) collect.push(text);
     parent = parent.parent();
   }
@@ -264,7 +280,7 @@ function includesAny(text, keywords = []) {
 
 function matchTableType(headers = [], nearbyTitleText = '') {
   const mergedHeader = headers.join('|');
-  const titleText = String(nearbyTitleText || '');
+  const titleText = getHeaderKey(String(nearbyTitleText || ''));
   const reason = [];
 
   const isSubscribing = includesAll(mergedHeader, ['代号', '名称', '招股书', '截止认购日', '上市日期']);
@@ -274,7 +290,7 @@ function matchTableType(headers = [], nearbyTitleText = '') {
   if (newsRecentMust) return { type: TABLE_TYPE.recentListed, reason: 'headers:新股信息结构命中' };
 
   const greyMust = includesAll(mergedHeader, ['代号', '名称', '上市日期', '货币', '上市价', '每手股数', '入场费']);
-  const greyTitle = includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent);
+  const greyTitle = includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent.map(getHeaderKey));
   if (greyMust && greyTitle) {
     return { type: 'greyMarketRecent', reason: 'headers + nearbyTitleText: 暗盘/昨上市/今日上市结构命中' };
   }
@@ -286,7 +302,7 @@ function matchTableType(headers = [], nearbyTitleText = '') {
     return { type: TABLE_TYPE.listingSoon, reason: 'headers:即将上市结构命中且未命中新股信息特征列' };
   }
 
-  if (includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent)) reason.push('titleLikeGreyMarket');
+  if (includesAny(titleText, SECTION_KEYWORDS.greyMarketRecent.map(getHeaderKey))) reason.push('titleLikeGreyMarket');
   return { type: null, reason: reason.join(',') || 'unmatched' };
 }
 
@@ -323,7 +339,7 @@ function parseTableByMap($, $table, map, status, opts = {}) {
     if (!cols.length) return;
 
     const codeRaw = getCol(cols, map.code) || '';
-    const codeMatch = codeRaw.match(/\b\d{5}\b/);
+    const codeMatch = codeRaw.match(/(\d{5})/);
     if (!codeMatch) return;
 
     const nameRaw = getCol(cols, map.name) || '';
