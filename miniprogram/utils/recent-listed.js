@@ -15,6 +15,20 @@ function isListedStatus(item = {}) {
   return true;
 }
 
+
+function isAlreadyListed(item = {}) {
+  const rawDate = String(item.listingDate || '').trim();
+  if (!rawDate) return true;
+
+  const normalized = rawDate.replace(/\./g, '-').replace(/\//g, '-');
+  const date = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return true;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return date.getTime() <= today.getTime();
+}
+
 function pickMainPerformance(item = {}) {
   const firstDay = toNumber(item.firstDayChangePct);
   const cumulative = toNumber(item.cumulativeReturn);
@@ -28,7 +42,7 @@ function hasPerformanceData(item = {}) {
 }
 
 function isRecentListedPerformance(item = {}) {
-  return isListedStatus(item) && hasPerformanceData(item);
+  return isListedStatus(item) && isAlreadyListed(item) && hasPerformanceData(item);
 }
 
 function normalizeRecentListedPerformance(item = {}) {

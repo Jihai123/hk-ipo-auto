@@ -58,14 +58,21 @@ function formatSignedPercent(value) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 }
 
-function formatOldShareRatio(rawEvidence = {}) {
-  const newCount = Number(rawEvidence.newSharesCount);
-  const saleCount = Number(rawEvidence.saleSharesCount);
+function toCleanNumber(value) {
+  const text = String(value === null || value === undefined ? '' : value).replace(/,/g, '').trim();
+  if (!text) return NaN;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : NaN;
+}
 
-  if (!Number.isFinite(newCount) || !Number.isFinite(saleCount)) return '未提供';
+function formatOldShareRatio(rawEvidence = {}) {
+  const newCount = toCleanNumber(rawEvidence.newSharesCount);
+  const saleCount = toCleanNumber(rawEvidence.saleSharesCount);
+
+  if (!Number.isFinite(newCount) || !Number.isFinite(saleCount)) return '';
 
   const total = newCount + saleCount;
-  if (!total) return '未提供';
+  if (!total) return '';
 
   return `${(saleCount / total * 100).toFixed(1)}%`;
 }
@@ -85,9 +92,15 @@ function buildDimensionRows(key, rawEvidence = {}, fallbackEvidence = {}) {
   }
 
   if (key === 'oldShares') {
-    rows.push({ label: '新股数量', value: rawEvidence.newSharesCount ? `${Number(rawEvidence.newSharesCount).toLocaleString()} 股` : '未提供' });
-    rows.push({ label: '旧股数量', value: rawEvidence.saleSharesCount ? `${Number(rawEvidence.saleSharesCount).toLocaleString()} 股` : '未提供' });
-    rows.push({ label: '旧股占比', value: formatOldShareRatio(rawEvidence) });
+    const newCount = toCleanNumber(rawEvidence.newSharesCount);
+    const saleCount = toCleanNumber(rawEvidence.saleSharesCount);
+    const ratioText = formatOldShareRatio(rawEvidence);
+
+    if (Number.isFinite(newCount) && Number.isFinite(saleCount)) {
+      rows.push({ label: '新股数量', value: `${newCount.toLocaleString()} 股` });
+      rows.push({ label: '旧股数量', value: `${saleCount.toLocaleString()} 股` });
+      if (ratioText) rows.push({ label: '旧股占比', value: ratioText });
+    }
 
     if (Array.isArray(rawEvidence.sources) && rawEvidence.sources.length > 0) {
       rows.push({
@@ -127,13 +140,21 @@ function buildDimensionRows(key, rawEvidence = {}, fallbackEvidence = {}) {
   }
 
   if (key === 'lockup') {
-    rows.push({ label: 'Pre-IPO', value: rawEvidence.preIPOFound ? '发现 Pre-IPO 投资者' : '未发现' });
-    if (rawEvidence.preIPOFound && rawEvidence.lockupFound) {
-      rows.push({ label: '禁售期', value: rawEvidence.lockupPeriod ? `发现禁售安排（${rawEvidence.lockupPeriod}）` : '发现禁售安排' });
-    } else if (rawEvidence.preIPOFound) {
-      rows.push({ label: '禁售期', value: '未发现禁售期安排' });
+    const hasPreIPO = (typeof rawEvidence.preIPOFound === 'boolean')
+      ? rawEvidence.preIPOFound
+      : !!rawEvidence.hasPreIPO;
+    const hasLockup = (typeof rawEvidence.lockupFound === 'boolean')
+      ? rawEvidence.lockupFound
+      : !!rawEvidence.hasLockup;
+
+    rows.push({ label: 'Pre-IPO', value: hasPreIPO ? '发现 Pre-IPO 投资者' : '未发现 Pre-IPO 投资者' });
+
+    if (!hasPreIPO) {
+      rows.push({ label: '禁售期', value: '不适用（无 Pre-IPO 投资者）' });
+    } else if (hasLockup) {
+      rows.push({ label: '禁售期', value: rawEvidence.lockupPeriod ? `发现禁售安排（${rawEvidence.lockupPeriod}）` : '发现禁售安排（按规则 0 分）' });
     } else {
-      rows.push({ label: '禁售期', value: '未提供' });
+      rows.push({ label: '禁售期', value: '未发现禁售安排（按规则 -2 分）' });
     }
   }
 
