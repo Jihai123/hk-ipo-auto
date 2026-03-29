@@ -4736,6 +4736,9 @@ app.get('/api/mp/home', async (req, res) => {
         name: item.name || '',
         listingDate: item.listingDate || '',
         firstDayChangePct: item.firstDayChangePct ?? null,
+        offerPrice: item.offerPrice ?? null,
+        subscriptionMultiple: item.subscriptionMultiple ?? null,
+        allotmentRate: item.allotmentRate ?? null,
       })),
     };
 

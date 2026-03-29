@@ -41,8 +41,35 @@ function hasPerformanceData(item = {}) {
   return Number.isFinite(pickMainPerformance(item));
 }
 
+
+function hasDisplayIdentity(item = {}) {
+  const codeText = String(item.code || '').trim();
+  const nameText = String(item.name || '').trim().toLowerCase();
+  if (!codeText) return false;
+  if (!nameText || nameText === 'null' || nameText === 'undefined') return false;
+  return true;
+}
+
+function toDateValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\./g, '-').replace(/\//g, '-');
+  const date = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getTime();
+}
+
+function compareByListingDateDesc(a = {}, b = {}) {
+  const av = toDateValue(a.listingDate);
+  const bv = toDateValue(b.listingDate);
+  if (av === null && bv === null) return 0;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  return bv - av;
+}
+
 function isRecentListedPerformance(item = {}) {
-  return isListedStatus(item) && isAlreadyListed(item) && hasPerformanceData(item);
+  return hasDisplayIdentity(item) && isListedStatus(item) && isAlreadyListed(item) && hasPerformanceData(item);
 }
 
 function normalizeRecentListedPerformance(item = {}) {
@@ -65,12 +92,13 @@ function normalizeRecentListedPerformance(item = {}) {
       { label: '累积回报', value: Number.isFinite(cumulative) ? `${cumulative > 0 ? '+' : ''}${cumulative.toFixed(2)}%` : '' },
       { label: '首日表现', value: Number.isFinite(firstDay) ? `${firstDay > 0 ? '+' : ''}${firstDay.toFixed(2)}%` : '' },
       { label: '认购倍数', value: toText(item.subscriptionMultiple, '') },
-      { label: '中签率', value: toText(item.allotmentRate, '') },
-    ].filter((m) => m.value).slice(0, 2),
+      { label: '一手中签率', value: toText(item.allotmentRate, '') },
+    ].filter((m) => m.value),
   };
 }
 
 module.exports = {
   isRecentListedPerformance,
   normalizeRecentListedPerformance,
+  compareByListingDateDesc,
 };

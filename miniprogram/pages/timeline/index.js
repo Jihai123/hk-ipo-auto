@@ -3,6 +3,7 @@ const { formatUpdatedAt, normalizeText, buildGroups } = require('../../utils/tim
 const {
   isRecentListedPerformance,
   normalizeRecentListedPerformance,
+  compareByListingDateDesc,
 } = require('../../utils/recent-listed');
 
 Page({
@@ -69,6 +70,7 @@ Page({
       };
       const recentPerformance = groups.recentListed
         .filter(isRecentListedPerformance)
+        .sort(compareByListingDateDesc)
         .map(normalizeRecentListedPerformance);
       const totalForCurrentView = this.data.viewMode === 'recentPerformance'
         ? recentPerformance.length
