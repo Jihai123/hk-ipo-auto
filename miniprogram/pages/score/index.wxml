@@ -83,37 +83,15 @@
             </view>
             <view class="dimension-summary">{{item.summaryText}}</view>
 
-            <view wx:if="{{item.evidenceMode}}" class="evidence-detail">
-              <view class="evidence-line">
-                <text class="evidence-label">数据来源：</text>
-                <text class="evidence-value">{{item.evidence.sourceText}}</text>
+            <view class="evidence-detail">
+              <view class="evidence-line" wx:for="{{item.evidence.rows}}" wx:for-item="row" wx:key="label">
+                <text class="evidence-label">{{row.label}}：</text>
+                <text class="evidence-value">{{row.value}}</text>
               </view>
-              <view class="evidence-line">
-                <text class="evidence-label">命中关键词：</text>
-                <text class="evidence-value">{{item.evidence.keywordText}}</text>
-              </view>
+
               <view class="evidence-line">
                 <text class="evidence-label">原文片段：</text>
                 <text class="evidence-snippet">{{item.evidence.snippetText}}</text>
-              </view>
-            </view>
-
-            <view wx:else class="rule-detail">
-              <view class="evidence-line">
-                <text class="evidence-label">评分逻辑：</text>
-                <text class="evidence-value">{{item.rule.logicText}}</text>
-              </view>
-              <view class="evidence-line">
-                <text class="evidence-label">数据状态：</text>
-                <text class="evidence-value">{{item.rule.dataStatus}}</text>
-              </view>
-              <view class="evidence-line">
-                <text class="evidence-label">来源类型：</text>
-                <text class="evidence-value">{{item.rule.sourceType}}</text>
-              </view>
-              <view wx:if="{{item.rule.scoreRule}}" class="evidence-line">
-                <text class="evidence-label">评分规则：</text>
-                <text class="evidence-value">{{item.rule.scoreRule}}</text>
               </view>
             </view>
           </view>
