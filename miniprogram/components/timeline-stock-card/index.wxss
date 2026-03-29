@@ -1,0 +1,32 @@
+.stock-card {
+  background: #fff;
+  border-radius: 14rpx;
+  padding: 18rpx;
+  margin-bottom: 12rpx;
+}
+
+.row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.name {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.tag {
+  font-size: 22rpx;
+  color: #0f766e;
+  background: #ecfeff;
+  border-radius: 999rpx;
+  padding: 4rpx 12rpx;
+}
+
+.code,
+.meta {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 24rpx;
+}

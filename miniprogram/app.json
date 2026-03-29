@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/score/index",
+    "pages/timeline/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "港股打新",
+    "navigationBarBackgroundColor": "#0f172a",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f8fafc",
+    "backgroundTextStyle": "dark"
+  },
+  "style": "v2"
+}

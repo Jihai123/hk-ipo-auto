@@ -1,0 +1,23 @@
+.state-box {
+  margin-top: 20rpx;
+  padding: 32rpx 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  text-align: center;
+}
+
+.title {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.subtitle {
+  color: #64748b;
+  font-size: 24rpx;
+  margin-bottom: 14rpx;
+}
+
+.error .title {
+  color: #b91c1c;
+}

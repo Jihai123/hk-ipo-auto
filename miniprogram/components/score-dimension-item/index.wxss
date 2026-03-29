@@ -1,0 +1,45 @@
+.dim-card {
+  background: #fff;
+  border-radius: 14rpx;
+  padding: 20rpx;
+  margin-bottom: 14rpx;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.label {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.summary {
+  margin-top: 6rpx;
+  color: #475569;
+  font-size: 24rpx;
+}
+
+.score {
+  font-size: 36rpx;
+  font-weight: 800;
+}
+
+.score.pos { color: #0f766e; }
+.score.neg { color: #b91c1c; }
+.score.neu { color: #334155; }
+
+.detail {
+  margin-top: 12rpx;
+  color: #334155;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.hint {
+  margin-top: 8rpx;
+  color: #64748b;
+  font-size: 22rpx;
+}

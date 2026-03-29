@@ -1,0 +1,45 @@
+.container {
+  padding: 24rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 18rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 14rpx;
+}
+
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10rpx 0;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.field-row:last-child {
+  border-bottom: none;
+}
+
+.field-label {
+  color: #64748b;
+  font-size: 24rpx;
+}
+
+.field-value {
+  color: #0f172a;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.action-card .actions {
+  display: flex;
+  gap: 10rpx;
+  flex-wrap: wrap;
+  margin-top: 12rpx;
+}

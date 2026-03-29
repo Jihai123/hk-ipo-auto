@@ -1,0 +1,5 @@
+<view class="state-box {{mode}}">
+  <view class="title">{{title}}</view>
+  <view class="subtitle" wx:if="{{subtitle}}">{{subtitle}}</view>
+  <button wx:if="{{actionText}}" size="mini" bindtap="onActionTap">{{actionText}}</button>
+</view>

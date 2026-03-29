@@ -1,0 +1,57 @@
+.summary-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.name {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.code {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 24rpx;
+}
+
+.score-row {
+  margin-top: 20rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score {
+  font-size: 64rpx;
+  font-weight: 800;
+}
+
+.rating {
+  font-size: 30rpx;
+  font-weight: 700;
+  text-align: right;
+}
+
+.conclusion {
+  margin-top: 6rpx;
+  color: #475569;
+  font-size: 24rpx;
+  text-align: right;
+}
+
+.positive .score,
+.positive .rating {
+  color: #0f766e;
+}
+
+.negative .score,
+.negative .rating {
+  color: #b91c1c;
+}
+
+.neutral .score,
+.neutral .rating {
+  color: #1e293b;
+}
