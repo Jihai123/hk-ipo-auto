@@ -8,21 +8,27 @@
 
   <block wx:else>
     <view class="hero-card">
-      <text class="hero-title">港股打新决策台</text>
-      <text class="hero-subtitle">每日更新 · 评分与市场联动</text>
-      <text class="hero-conclusion">{{heroConclusion}}</text>
+      <view class="hero-top">
+        <text class="hero-title">港股打新专家</text>
+        <text class="hero-subtitle">新股评分 × 市场表现 × 关键依据</text>
+      </view>
 
-      <view class="hero-metrics">
-        <view class="hero-metric">
-          <text class="hero-metric-label">市场状态</text>
-          <text class="hero-metric-value">{{marketSentiment.text}}</text>
-        </view>
-        <view class="hero-metric">
-          <text class="hero-metric-label">高分标的</text>
-          <text class="hero-metric-value">{{hasHighScore ? '有' : '暂无'}}</text>
+      <view class="hero-market">
+        <text class="hero-conclusion">{{heroConclusion}}</text>
+        <text class="market-chip {{marketSentiment.className}}">市场 {{marketSentiment.text}}</text>
+      </view>
+
+      <view class="hero-search-row">
+        <input class="hero-input" placeholder="输入股票代码（如 02628）" maxlength="5" value="{{searchCode}}" bindinput="onSearchInput" />
+        <view class="hero-search-btn" bindtap="onSearchSubmit">查看评分</view>
+      </view>
+
+      <view wx:if="{{recentSearches.length > 0}}" class="recent-row">
+        <text class="recent-label">最近查询</text>
+        <view class="recent-tags">
+          <text class="recent-tag" wx:for="{{recentSearches}}" wx:key="*this" data-code="{{item}}" bindtap="onTapRecentSearch">{{item}}</text>
         </view>
       </view>
-      <view class="hero-cta" bindtap="onSearchSubmit">查看评分</view>
     </view>
 
     <view class="section">
@@ -32,26 +38,17 @@
       </view>
 
       <block wx:if="{{topRecommendations.length > 0}}">
-        <view
-          class="card recommend-card card-clickable"
-          wx:for="{{topRecommendations}}"
-          wx:key="code"
-          hover-class="card-hover"
-          hover-stay-time="80"
-          bindtap="onTapRecommendCard"
-          data-code="{{item.code}}"
-        >
+        <view class="card recommend-card card-clickable" wx:for="{{topRecommendations}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapRecommendCard" data-code="{{item.code}}">
           <view class="stock-line">
             <view class="stock-left">
               <text class="stock-name">{{item.nameText}}</text>
               <text class="stock-code">{{item.codeText}}</text>
             </view>
-            <text class="level-badge {{item.levelClass}}">{{item.levelText}}</text>
+            <text class="status-chip {{item.statusClass}}">{{item.statusText}}</text>
           </view>
 
           <view class="conclusion-line">
-            <text class="rating-label {{item.ratingToneClass}}">{{item.ratingLabelText}}</text>
-            <text class="status-chip {{item.statusClass}}">{{item.statusText}}</text>
+            <text class="rating-label {{item.mainRatingClass}}">{{item.mainRatingText}}</text>
           </view>
 
           <view class="reason-line">
@@ -60,7 +57,7 @@
 
           <view class="meta-line">
             <text class="meta-text">score {{item.scoreText}}</text>
-            <text class="meta-text">上市 {{item.listingDateText}}</text>
+            <text wx:if="{{item.listingDateText}}" class="meta-text">上市 {{item.listingDateText}}</text>
           </view>
         </view>
       </block>
@@ -73,7 +70,7 @@
     <view class="section">
       <view class="section-head">
         <view class="section-title">近期上市表现</view>
-        <view class="section-note">市场回测</view>
+        <view class="section-more" bindtap="onTapTimelineMore">查看全部</view>
       </view>
       <block wx:if="{{recentPerformance.length > 0}}">
         <view class="card listed-card" wx:for="{{recentPerformance}}" wx:key="code">
@@ -84,9 +81,6 @@
           <view class="listed-perf {{item.perfClass}}">
             <text class="listed-arrow">{{item.perfArrow}}</text>
             <text class="listed-perf-text">{{item.perfText}}</text>
-          </view>
-          <view class="listed-meta">
-            <text class="meta-text">上市 {{item.listingDateText}}</text>
           </view>
           <view class="listed-metrics" wx:if="{{item.metrics.length > 0}}">
             <view class="listed-metric" wx:for="{{item.metrics}}" wx:key="label">
@@ -110,15 +104,7 @@
       <view class="sub-section">
         <view class="sub-title">招股中</view>
         <block wx:if="{{windowGroups.subscribing.length > 0}}">
-          <view
-            class="card window-item-card card-clickable"
-            wx:for="{{windowGroups.subscribing}}"
-            wx:key="code"
-            hover-class="card-hover"
-            hover-stay-time="80"
-            bindtap="onTapWindowCard"
-            data-code="{{item.code}}"
-          >
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.subscribing}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
             <view class="window-row">
               <view class="window-left">
                 <text class="stock-name">{{item.nameText}}</text>
@@ -136,15 +122,7 @@
       <view class="sub-section">
         <view class="sub-title">待上市</view>
         <block wx:if="{{windowGroups.listingSoon.length > 0}}">
-          <view
-            class="card window-item-card card-clickable"
-            wx:for="{{windowGroups.listingSoon}}"
-            wx:key="code"
-            hover-class="card-hover"
-            hover-stay-time="80"
-            bindtap="onTapWindowCard"
-            data-code="{{item.code}}"
-          >
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.listingSoon}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
             <view class="window-row">
               <view class="window-left">
                 <text class="stock-name">{{item.nameText}}</text>
@@ -162,15 +140,7 @@
       <view class="sub-section">
         <view class="sub-title">近期上市</view>
         <block wx:if="{{windowGroups.recentListed.length > 0}}">
-          <view
-            class="card window-item-card card-clickable"
-            wx:for="{{windowGroups.recentListed}}"
-            wx:key="code"
-            hover-class="card-hover"
-            hover-stay-time="80"
-            bindtap="onTapWindowCard"
-            data-code="{{item.code}}"
-          >
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.recentListed}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
             <view class="window-row">
               <view class="window-left">
                 <text class="stock-name">{{item.nameText}}</text>
@@ -187,9 +157,22 @@
     </view>
 
     <view class="section">
-      <view class="method-entry card">
+      <view class="method-entry card card-clickable" bindtap="onOpenMethodPanel">
         <text class="method-title">评分方法轻入口</text>
-        <text class="method-text">评分怎么来的 · 5个维度分别看什么</text>
+        <text class="method-text">查看 6 个核心维度与一句话解释</text>
+      </view>
+    </view>
+
+    <view wx:if="{{showMethodPanel}}" class="method-mask" bindtap="onCloseMethodPanel">
+      <view class="method-panel" catchtap="onPanelTap">
+        <view class="method-head">
+          <text class="method-panel-title">评分方法（轻量）</text>
+          <text class="method-close" bindtap="onCloseMethodPanel">关闭</text>
+        </view>
+        <view class="method-item" wx:for="{{methodItems}}" wx:key="name">
+          <text class="method-item-name">{{item.name}}</text>
+          <text class="method-item-desc">{{item.desc}}</text>
+        </view>
       </view>
     </view>
   </block>

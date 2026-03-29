@@ -1,4 +1,4 @@
-const { fetchScore } = require('../../services/score');
+const { fetchScore } = require('../../services/score.js');
 const { mapErrorMessage } = require('../../utils/score');
 
 const LOADING_STEPS = [
@@ -16,16 +16,20 @@ function toText(value, fallback = '--') {
   return (value === null || value === undefined || value === '') ? fallback : String(value);
 }
 
-function getToneClass(score) {
+function getToneClassByRating(ratingLabel = '', score = 0) {
+  const text = String(ratingLabel || '');
+  if (/强烈关注|建议申购|强烈推荐|可以考虑/.test(text)) return 'rating-positive';
+  if (/谨慎|不建议|回避/.test(text)) return 'rating-negative';
   if (score > 0) return 'rating-positive';
   if (score < 0) return 'rating-negative';
   return 'rating-neutral';
 }
 
 function getDecisionSentence(score) {
-  if (score >= 2) return '可以考虑，优先看招股定价与市场热度';
-  if (score >= 0) return '中性观察，建议结合市场窗口决策';
-  return '谨慎/回避，等待更优标的';
+  if (score >= 4) return '信号偏强，可优先复核定价与认购结构';
+  if (score >= 0) return '可以考虑，建议结合市场窗口和中签预期';
+  if (score >= -2) return '中性观察，等待更多定价与市场确认';
+  return '谨慎申购，优先控制风险敞口';
 }
 
 function getStatusText(display = {}) {
@@ -36,43 +40,45 @@ function getStatusText(display = {}) {
   return '状态待更新';
 }
 
-function getSourceType(sourceText) {
-  if (/ETNet/i.test(sourceText)) return 'ETNet';
-  if (/招股书|Prospectus/i.test(sourceText)) return '招股书';
-  return '规则推断';
-}
-
 function hasMeaningfulEvidence(value) {
   const text = String(value || '').trim();
   return !!text && !['暂无', '暂无可展示原文', '--'].includes(text);
 }
 
+function getRawEvidence(item = {}) {
+  return item.evidence && typeof item.evidence === 'object'
+    ? (item.evidence.raw || item.evidence)
+    : {};
+}
+
 function normalizeDimension(item = {}, idx = 0) {
   const score = toNumber(item.score);
   const evidence = item.evidence || {};
+  const rawEvidence = getRawEvidence(item);
   const sourceText = String(evidence.source || item.source || '').trim();
   const keywordText = String(evidence.keywords || item.keywords || '').trim();
   const snippetText = String(evidence.snippet || item.detail || '').trim();
-  const evidenceMode = hasMeaningfulEvidence(sourceText) && hasMeaningfulEvidence(keywordText) && hasMeaningfulEvidence(snippetText);
+  const evidenceMode = hasMeaningfulEvidence(sourceText) || hasMeaningfulEvidence(keywordText) || hasMeaningfulEvidence(snippetText);
 
   return {
     key: item.key || item.label || `dimension_${idx}`,
     label: item.label || item.name || '未命名维度',
     score,
     scoreText: score > 0 ? `+${score}` : `${score}`,
-    summaryText: item.summary || '暂无明显信号',
+    summaryText: item.summary || item.reason || '暂无明显信号',
     barWidth: `${Math.min(100, Math.max(8, Math.abs(score) * 18 + 10))}%`,
     barClass: score > 0 ? 'bar-positive' : score < 0 ? 'bar-negative' : 'bar-neutral',
     evidenceMode,
     evidence: {
-      sourceText: toText(sourceText, '招股书 / ETNet'),
-      keywordText: toText(keywordText, '暂无'),
-      snippetText: toText(snippetText, '暂无可展示原文'),
+      sourceText: toText(sourceText, '未提供'),
+      keywordText: toText(keywordText, '未提供'),
+      snippetText: toText(snippetText, '未提供'),
     },
     rule: {
       logicText: item.summary || item.reason || '维度评分基于规则模型与公开信息综合计算',
-      sourceType: getSourceType(sourceText),
-      dataStatus: '暂未提取到完整证据',
+      sourceType: evidenceMode ? '接口证据' : '规则推断',
+      dataStatus: evidenceMode ? '已提取到证据字段' : '接口未返回证据字段',
+      scoreRule: rawEvidence.scoreRule || '',
     },
   };
 }
@@ -81,16 +87,18 @@ function buildMarketInfo(display = {}) {
   const candidates = [
     { key: 'offerPrice', label: '上市价', value: display.offerPrice },
     { key: 'cumulativeReturn', label: '累积回报', value: display.cumulativeReturn },
+    { key: 'firstDayChangePct', label: '首日表现', value: display.firstDayChangePct },
     { key: 'subscriptionMultiple', label: '认购倍数', value: display.subscriptionMultiple },
     { key: 'allotmentRate', label: '一手中签率', value: display.allotmentRate },
+    { key: 'listingDate', label: '上市日期', value: display.listingDate },
   ];
 
   const items = candidates
     .filter((item) => item.value !== null && item.value !== undefined && item.value !== '')
     .map((item) => ({ ...item, value: String(item.value) }));
 
-  if (items.length >= 3) return { mode: 'grid', items: items.slice(0, 4) };
-  if (items.length >= 1) return { mode: 'compact', items: items.slice(0, 2) };
+  if (items.length >= 3) return { mode: 'grid', items: items.slice(0, 6) };
+  if (items.length >= 1) return { mode: 'compact', items: items.slice(0, 3) };
   return { mode: 'empty', items: [] };
 }
 
@@ -113,7 +121,7 @@ Page({
   },
 
   onLoad(options) {
-    const code = String(options?.code || '').trim();
+    const code = String((options && options.code) || '').trim();
     this.setData({ code });
 
     if (!code) {
@@ -172,26 +180,26 @@ Page({
 
     try {
       const res = await fetchScore(this.data.code);
-      const dimensions = Array.isArray(res?.dimensions) ? res.dimensions : [];
-      const hasCoreContent = Number.isFinite(res?.totalScore) || dimensions.length > 0 || !!res?.ratingLabel;
+      const dimensions = Array.isArray(res && res.dimensions) ? res.dimensions : [];
+      const hasCoreContent = Number.isFinite(res && res.totalScore) || dimensions.length > 0 || !!(res && res.ratingLabel);
 
-      if (!res?.success && !hasCoreContent) {
+      if (!(res && res.success) && !hasCoreContent) {
         this.setData({
           status: 'empty',
           errorInfo: {
-            type: res?.error?.type || 'empty_result',
-            message: mapErrorMessage(res?.error || {}),
+            type: (res && res.error && res.error.type) || 'empty_result',
+            message: mapErrorMessage((res && res.error) || {}),
           },
         });
         return;
       }
 
-      if (!res?.success) {
+      if (!(res && res.success)) {
         this.setData({
           status: 'error',
           errorInfo: {
-            type: res?.error?.type || 'score_failed',
-            message: mapErrorMessage(res?.error || {}),
+            type: (res && res.error && res.error.type) || 'score_failed',
+            message: mapErrorMessage((res && res.error) || {}),
           },
         });
         return;
@@ -202,7 +210,7 @@ Page({
       const keyFactors = allDimensions
         .filter((item) => item.score !== 0)
         .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
-        .slice(0, 3);
+        .slice(0, 2);
 
       const marketInfo = buildMarketInfo(res.display || {});
 
@@ -214,10 +222,10 @@ Page({
           totalScore,
           totalScoreText: Number.isFinite(res.totalScore) ? String(res.totalScore) : '0',
           ratingLabel: res.ratingLabel || '中性观察',
-          toneClass: getToneClass(totalScore),
+          toneClass: getToneClassByRating(res.ratingLabel, totalScore),
           decisionSentence: getDecisionSentence(totalScore),
           statusText: getStatusText(res.display || {}),
-          performanceText: toText(res.display?.cumulativeReturn || res.display?.firstDayChangePct, ''),
+          performanceText: toText((res.display && res.display.cumulativeReturn) || (res.display && res.display.firstDayChangePct), ''),
         },
         keyFactors,
         allDimensions,
