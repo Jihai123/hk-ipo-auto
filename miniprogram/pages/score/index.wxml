@@ -1,0 +1,62 @@
+<view class="container">
+  <page-state
+    wx:if="{{status === 'loading'}}"
+    mode="loading"
+    title="评分生成中"
+    subtitle="{{loadingText}}"
+  />
+
+  <page-state
+    wx:elif="{{status === 'empty'}}"
+    mode="empty"
+    title="暂无可展示评分结果"
+    subtitle="{{errorInfo.message}}"
+    actionText="重试"
+    bindaction="onRetry"
+  />
+
+  <page-state
+    wx:elif="{{status === 'error'}}"
+    mode="error"
+    title="评分获取失败"
+    subtitle="{{errorInfo.message}}"
+    actionText="重试"
+    bindaction="onRetry"
+  />
+
+  <block wx:else>
+    <view class="overview-wrap">
+      <score-summary-card
+        name="{{scoreData.name}}"
+        code="{{scoreData.code}}"
+        totalScore="{{scoreData.totalScore}}"
+        ratingLabel="{{scoreData.ratingLabel}}"
+        conclusion="{{scoreData.conclusion}}"
+        tone="{{scoreData.tone}}"
+      />
+    </view>
+
+    <view class="card" wx:if="{{scoreData.dimensions.length > 0}}">
+      <view class="section-title">核心评分维度</view>
+      <view class="section-subtitle">点击条目可展开详细说明</view>
+      <score-dimension-item wx:for="{{scoreData.dimensions}}" wx:key="key" item="{{item}}" />
+    </view>
+
+    <view class="card" wx:if="{{displayFields.length > 0}}">
+      <view class="section-title">基础信息</view>
+      <view class="field-row" wx:for="{{displayFields}}" wx:key="key">
+        <view class="field-label">{{item.label}}</view>
+        <view class="field-value">{{item.value}}</view>
+      </view>
+    </view>
+
+    <view class="card action-card">
+      <view class="meta" wx:if="{{scoreData.elapsed !== undefined}}">耗时：{{scoreData.elapsed}}s</view>
+      <view class="actions">
+        <button size="mini" class="outline-btn" bindtap="onRetry">重新查询</button>
+        <button size="mini" class="outline-btn" bindtap="onBackHome">返回首页</button>
+        <button size="mini" class="primary-btn" bindtap="onSearchAgain">再查一个代码</button>
+      </view>
+    </view>
+  </block>
+</view>

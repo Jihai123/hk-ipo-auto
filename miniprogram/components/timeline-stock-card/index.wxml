@@ -1,0 +1,9 @@
+<view class="stock-card" bindtap="onTap">
+  <view class="row-top">
+    <view class="name">{{item.name || item.code}}</view>
+    <view class="tag">{{statusLabel}}</view>
+  </view>
+  <view class="code" wx:if="{{item.code}}">{{item.code}}</view>
+  <view class="meta" wx:if="{{item.listingDate}}">上市日期：{{item.listingDate}}</view>
+  <view class="meta" wx:if="{{item.offerEndDate}}">认购截止：{{item.offerEndDate}}</view>
+</view>

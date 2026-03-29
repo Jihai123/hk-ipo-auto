@@ -1,0 +1,71 @@
+.summary-card {
+  background: linear-gradient(150deg, #ffffff 0%, #f8fbff 100%);
+  border-radius: 24rpx;
+  padding: 26rpx;
+  margin-bottom: 18rpx;
+  box-shadow: 0 10rpx 28rpx rgba(30, 64, 175, 0.08);
+}
+
+.head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14rpx;
+}
+
+.name {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.code {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 24rpx;
+}
+
+.rating-chip {
+  border-radius: 999rpx;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 8rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.score-wrap {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
+.score {
+  font-size: 96rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-unit {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.conclusion {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  color: #334155;
+  text-align: center;
+}
+
+.positive .score {
+  color: #059669;
+}
+
+.negative .score {
+  color: #dc2626;
+}
+
+.neutral .score {
+  color: #1e293b;
+}
