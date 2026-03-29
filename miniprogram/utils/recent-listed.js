@@ -7,6 +7,16 @@ function toText(value, fallback = '--') {
   return (value === null || value === undefined || value === '') ? fallback : String(value);
 }
 
+function formatPercent(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  if (/%$/.test(raw)) return raw;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return `${n.toFixed(digits)}%`;
+}
+
 function isListedStatus(item = {}) {
   const statusText = String(item.status || item.stage || item.phase || item.tag || '').toLowerCase();
   if (!statusText) return true;
@@ -87,12 +97,13 @@ function normalizeRecentListedPerformance(item = {}) {
     perfText: Number.isFinite(perf) ? `${perf > 0 ? '+' : ''}${perf.toFixed(2)}%` : '--',
     perfArrow: isUp ? '▲' : isDown ? '▼' : '•',
     perfClass: isUp ? 'perf-up' : isDown ? 'perf-down' : 'perf-flat',
+    hasMainPerf: Number.isFinite(perf),
     metrics: [
       { label: '上市价', value: toText(item.offerPrice, '') },
       { label: '累积回报', value: Number.isFinite(cumulative) ? `${cumulative > 0 ? '+' : ''}${cumulative.toFixed(2)}%` : '' },
       { label: '首日表现', value: Number.isFinite(firstDay) ? `${firstDay > 0 ? '+' : ''}${firstDay.toFixed(2)}%` : '' },
       { label: '认购倍数', value: toText(item.subscriptionMultiple, '') },
-      { label: '一手中签率', value: toText(item.allotmentRate, '') },
+      { label: '一手中签率', value: formatPercent(item.allotmentRate, 2) },
     ].filter((m) => m.value),
   };
 }

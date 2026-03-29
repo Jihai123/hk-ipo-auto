@@ -79,7 +79,7 @@
           <text class="perf-label">上市日期</text>
           <text class="perf-value">{{item.listingDateText || '--'}}</text>
         </view>
-        <view class="perf-row">
+        <view class="perf-row" wx:if="{{item.hasMainPerf}}">
           <text class="perf-label">上市后表现</text>
           <text class="perf-main {{item.perfClass}}">{{item.perfArrow}} {{item.perfText}}</text>
         </view>

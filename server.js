@@ -4731,15 +4731,19 @@ app.get('/api/mp/home', async (req, res) => {
         listingDate: item.listingDate || '',
         lotAmount: item.lotAmount ?? null,
       })),
-      recentListed: (current.data?.recentListed || []).slice(0, 5).map(item => ({
-        code: item.code || '',
-        name: item.name || '',
-        listingDate: item.listingDate || '',
-        firstDayChangePct: item.firstDayChangePct ?? null,
-        offerPrice: item.offerPrice ?? null,
-        subscriptionMultiple: item.subscriptionMultiple ?? null,
-        allotmentRate: item.allotmentRate ?? null,
-      })),
+      recentListed: (current.data?.recentListed || [])
+        .slice()
+        .sort((a, b) => String(b?.listingDate || '').localeCompare(String(a?.listingDate || '')))
+        .slice(0, 20)
+        .map(item => ({
+          code: item.code || '',
+          name: item.name || '',
+          listingDate: item.listingDate || '',
+          firstDayChangePct: item.firstDayChangePct ?? null,
+          offerPrice: item.offerPrice ?? null,
+          subscriptionMultiple: item.subscriptionMultiple ?? null,
+          allotmentRate: item.allotmentRate ?? null,
+        })),
     };
 
     const timelineTotal = timelineSummary.subscribing.length
