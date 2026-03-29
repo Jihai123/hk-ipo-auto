@@ -7,8 +7,29 @@
   </view>
 
   <block wx:else>
+    <view class="hero-card">
+      <text class="hero-title">港股打新决策台</text>
+      <text class="hero-subtitle">每日更新 · 评分与市场联动</text>
+      <text class="hero-conclusion">{{heroConclusion}}</text>
+
+      <view class="hero-metrics">
+        <view class="hero-metric">
+          <text class="hero-metric-label">市场状态</text>
+          <text class="hero-metric-value">{{marketSentiment.text}}</text>
+        </view>
+        <view class="hero-metric">
+          <text class="hero-metric-label">高分标的</text>
+          <text class="hero-metric-value">{{hasHighScore ? '有' : '暂无'}}</text>
+        </view>
+      </view>
+      <view class="hero-cta" bindtap="onSearchSubmit">查看评分</view>
+    </view>
+
     <view class="section">
-      <view class="section-title">今日推荐</view>
+      <view class="section-head">
+        <view class="section-title">今日优先看</view>
+        <view class="section-note">聚焦个股</view>
+      </view>
 
       <block wx:if="{{topRecommendations.length > 0}}">
         <view
@@ -30,6 +51,7 @@
 
           <view class="conclusion-line">
             <text class="rating-label {{item.ratingToneClass}}">{{item.ratingLabelText}}</text>
+            <text class="status-chip {{item.statusClass}}">{{item.statusText}}</text>
           </view>
 
           <view class="reason-line">
@@ -49,7 +71,41 @@
     </view>
 
     <view class="section">
-      <view class="section-title">时间窗口</view>
+      <view class="section-head">
+        <view class="section-title">近期上市表现</view>
+        <view class="section-note">市场回测</view>
+      </view>
+      <block wx:if="{{recentPerformance.length > 0}}">
+        <view class="card listed-card" wx:for="{{recentPerformance}}" wx:key="code">
+          <view class="listed-head">
+            <text class="stock-name">{{item.nameText}}</text>
+            <text class="stock-code">{{item.codeText}}</text>
+          </view>
+          <view class="listed-perf {{item.perfClass}}">
+            <text class="listed-arrow">{{item.perfArrow}}</text>
+            <text class="listed-perf-text">{{item.perfText}}</text>
+          </view>
+          <view class="listed-meta">
+            <text class="meta-text">上市 {{item.listingDateText}}</text>
+          </view>
+          <view class="listed-metrics" wx:if="{{item.metrics.length > 0}}">
+            <view class="listed-metric" wx:for="{{item.metrics}}" wx:key="label">
+              <text class="listed-metric-label">{{item.label}}</text>
+              <text class="listed-metric-value">{{item.value}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+      <view wx:else class="card empty-card">
+        <text class="empty-text">近期暂无可展示上市样本</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-head">
+        <view class="section-title">新股时间表</view>
+        <view class="section-more" bindtap="onTapTimelineMore">查看全部</view>
+      </view>
 
       <view class="sub-section">
         <view class="sub-title">招股中</view>
@@ -131,12 +187,9 @@
     </view>
 
     <view class="section">
-      <view class="sentiment-bar">
-        <text class="sentiment-title">市场情绪</text>
-        <view class="sentiment-right">
-          <text class="sentiment-dot {{marketSentiment.className}}"></text>
-          <text class="sentiment-value">{{marketSentiment.text}}</text>
-        </view>
+      <view class="method-entry card">
+        <text class="method-title">评分方法轻入口</text>
+        <text class="method-text">评分怎么来的 · 5个维度分别看什么</text>
       </view>
     </view>
   </block>
