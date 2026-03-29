@@ -111,6 +111,10 @@
                 <text class="evidence-label">来源类型：</text>
                 <text class="evidence-value">{{item.rule.sourceType}}</text>
               </view>
+              <view wx:if="{{item.rule.scoreRule}}" class="evidence-line">
+                <text class="evidence-label">评分规则：</text>
+                <text class="evidence-value">{{item.rule.scoreRule}}</text>
+              </view>
             </view>
           </view>
         </view>
