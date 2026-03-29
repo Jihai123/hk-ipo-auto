@@ -15,24 +15,11 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function getRatingToneClass(ratingLabel = '') {
-  const text = String(ratingLabel);
-  if (/可打|积极|推荐|申购|正向|看好/.test(text)) return 'rating-positive';
-  if (/回避|谨慎|负向|不宜/.test(text)) return 'rating-negative';
-  return 'rating-neutral';
-}
-
-function getShortReasonText(item = {}) {
-  const raw = String(item.shortReason || item.reason || '').trim();
-  if (raw) return raw;
-  const score = toNumber(item.score);
-  return score >= 1 ? '暂无明显亮点' : '综合表现中性';
-}
-
-function getLevelMeta(score) {
-  if (score >= 2) return { text: '强推荐', className: 'level-strong' };
-  if (score >= 0) return { text: '可关注', className: 'level-watch' };
-  return { text: '观望', className: 'level-wait' };
+function getMainRating(score = 0) {
+  if (score >= 4) return { text: '强烈关注', className: 'rating-positive' };
+  if (score >= 0) return { text: '可以考虑', className: 'rating-positive' };
+  if (score >= -2) return { text: '中性观察', className: 'rating-neutral' };
+  return { text: '谨慎申购', className: 'rating-negative' };
 }
 
 function getStatusMeta(status = '') {
@@ -42,10 +29,19 @@ function getStatusMeta(status = '') {
   return { text: '状态待更新', className: 'status-unknown' };
 }
 
+function getShortReasonText(item = {}) {
+  const raw = String(item.shortReason || item.reason || '').trim();
+  if (raw) return raw;
+  const score = toNumber(item.score);
+  if (score >= 4) return '综合信号较强，优先跟踪定价与分配';
+  if (score >= 0) return '维度偏正向，建议结合市场热度判断';
+  if (score >= -2) return '暂无明确优势，建议继续观察';
+  return '维度偏弱，注意风险暴露';
+}
+
 function normalizeRecommendItem(item = {}, statusMap = {}) {
   const score = toNumber(item.score);
-  const levelMeta = getLevelMeta(score);
-  const ratingLabelText = item.ratingLabel || item.legacyRating || '中性观察';
+  const ratingMeta = getMainRating(score);
   const statusMeta = getStatusMeta(statusMap[item.code] || item.status || '');
   return {
     code: item.code || '',
@@ -53,12 +49,10 @@ function normalizeRecommendItem(item = {}, statusMap = {}) {
     nameText: item.name || item.code || '--',
     score,
     scoreText: toText(item.score, '0'),
-    listingDateText: toText(item.listingDate),
-    ratingLabelText,
-    ratingToneClass: getRatingToneClass(ratingLabelText),
+    listingDateText: toText(item.listingDate, ''),
+    mainRatingText: ratingMeta.text,
+    mainRatingClass: ratingMeta.className,
     shortReasonText: getShortReasonText(item),
-    levelText: levelMeta.text,
-    levelClass: levelMeta.className,
     statusText: statusMeta.text,
     statusClass: statusMeta.className,
   };
@@ -84,15 +78,15 @@ function normalizeRecentListedItem(item = {}) {
     code: item.code || '',
     codeText: item.code || '--',
     nameText: item.name || item.code || '--',
-    listingDateText: toText(item.listingDate),
     perfText: Number.isFinite(perf) ? `${perf > 0 ? '+' : ''}${perf.toFixed(2)}%` : '--',
     perfArrow: isUp ? '▲' : isDown ? '▼' : '•',
     perfClass: isUp ? 'perf-up' : isDown ? 'perf-down' : 'perf-flat',
     metrics: [
-      { label: '上市价', value: toText(item.offerPrice, '--') },
-      { label: '认购倍数', value: toText(item.subscriptionMultiple, '--') },
-      { label: '中签率', value: toText(item.allotmentRate, '--') },
-    ].filter((m) => m.value !== '--').slice(0, 3),
+      { label: '上市日', value: toText(item.listingDate, '') },
+      { label: '上市价', value: toText(item.offerPrice, '') },
+      { label: '认购倍数', value: toText(item.subscriptionMultiple, '') },
+      { label: '中签率', value: toText(item.allotmentRate, '') },
+    ].filter((m) => m.value),
   };
 }
 
@@ -116,10 +110,12 @@ function buildStatusMap(timelineSummary = {}) {
 }
 
 function buildHeroConclusion(topRecommendations, sentimentText) {
-  const highScoreCount = topRecommendations.filter((item) => item.score >= 2).length;
-  if (highScoreCount > 0) return `今日有 ${highScoreCount} 只可重点关注`;
-  if (sentimentText === '偏热') return '市场偏热，但高分标的不多';
-  return '今日暂无高分标的，建议观望';
+  const highScoreCount = topRecommendations.filter((item) => item.score >= 4).length;
+  const considerCount = topRecommendations.filter((item) => item.score >= 0).length;
+  if (highScoreCount > 0) return `今日有 ${highScoreCount} 只强势标的，优先复核定价与分配`; 
+  if (considerCount > 0 && sentimentText === '偏热') return `市场${sentimentText}，有 ${considerCount} 只可考虑标的`;
+  if (sentimentText === '偏冷') return '市场偏冷，建议控制仓位并精选标的';
+  return '今日暂无明确强信号，建议保持观察';
 }
 
 Page({
@@ -139,12 +135,20 @@ Page({
       text: '中性',
       className: 'sentiment-neutral',
     },
-    heroConclusion: '今日暂无高分标的，建议观望',
-    hasHighScore: false,
+    heroConclusion: '今日暂无明确强信号，建议保持观察',
+    showMethodPanel: false,
+    methodItems: [
+      { name: '旧股发售', desc: '判断是否存在老股东套现，识别资金流向。' },
+      { name: '保荐人业绩', desc: '观察保荐人历史项目首日表现与稳定性。' },
+      { name: '基石投资者', desc: '识别是否有高质量长期资金背书。' },
+      { name: 'Pre-IPO禁售', desc: '评估早期投资者短期减持压力。' },
+      { name: '行业赛道', desc: '根据行业景气度判断情绪加分或减分。' },
+      { name: 'PE估值', desc: '对比同行估值，衡量定价是否偏贵。' },
+    ],
   },
 
   onLoad() {
-    this.setData({ recentSearches: loadSearchHistory() });
+    this.setData({ recentSearches: loadSearchHistory().slice(0, 3) });
     this.loadHomeData();
   },
 
@@ -173,12 +177,11 @@ Page({
 
       const marketSentiment = mapSentiment(res.market || {});
       const heroConclusion = buildHeroConclusion(topRecommendations, marketSentiment.text);
-      const hasHighScore = topRecommendations.some((item) => item.score >= 2);
 
       this.setData({
         loading: false,
         topRecommendations,
-        recentPerformance: (timelineSummary.recentListed || []).map(normalizeRecentListedItem).slice(0, 5),
+        recentPerformance: (timelineSummary.recentListed || []).map(normalizeRecentListedItem).slice(0, 3),
         windowGroups: {
           subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
           listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
@@ -186,7 +189,6 @@ Page({
         },
         marketSentiment,
         heroConclusion,
-        hasHighScore,
       });
     } catch (err) {
       this.setData({
@@ -215,6 +217,12 @@ Page({
     this.goToScoreDetail(code);
   },
 
+  onTapRecentSearch(e) {
+    const code = e.currentTarget.dataset.code;
+    if (!code) return;
+    this.goToScoreDetail(code);
+  },
+
   onTapWindowCard(e) {
     const code = e.currentTarget.dataset.code;
     if (!code) return;
@@ -224,14 +232,22 @@ Page({
   onTapTimelineMore() {
     wx.navigateTo({
       url: '/pages/timeline/index',
-      fail: () => {
-        wx.showToast({ title: '无法打开时间表', icon: 'none' });
-      },
+      fail: () => wx.showToast({ title: '无法打开时间表', icon: 'none' }),
     });
   },
 
+  onOpenMethodPanel() {
+    this.setData({ showMethodPanel: true });
+  },
+
+  onCloseMethodPanel() {
+    this.setData({ showMethodPanel: false });
+  },
+
+  onPanelTap() {},
+
   goToScoreDetail(code) {
-    const nextHistory = pushSearchHistory(code);
+    const nextHistory = pushSearchHistory(code).slice(0, 3);
     this.setData({ recentSearches: nextHistory, searchCode: code });
 
     wx.navigateTo({
