@@ -37,3 +37,46 @@
   font-size: 24rpx;
   padding: 8rpx 0;
 }
+
+.perf-item {
+  border-top: 1rpx solid #e2e8f0;
+  padding: 14rpx 0;
+}
+
+.perf-item:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.perf-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.perf-name {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.perf-code,
+.perf-label {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.perf-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4rpx;
+}
+
+.perf-value,
+.perf-main {
+  font-size: 24rpx;
+  color: #0f172a;
+}
+
+.perf-up { color: #0f766e; }
+.perf-down { color: #b91c1c; }
+.perf-flat { color: #334155; }

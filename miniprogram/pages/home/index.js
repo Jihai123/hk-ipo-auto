@@ -5,6 +5,10 @@ const {
   loadSearchHistory,
   pushSearchHistory,
 } = require('../../utils/search');
+const {
+  isRecentListedPerformance,
+  normalizeRecentListedPerformance,
+} = require('../../utils/recent-listed');
 
 function toText(value, fallback = '--') {
   return (value === null || value === undefined || value === '') ? fallback : String(value);
@@ -64,29 +68,6 @@ function normalizeTimelineItem(item = {}) {
     codeText: item.code || '--',
     nameText: item.name || item.code || '--',
     listingDateText: toText(item.listingDate),
-  };
-}
-
-function normalizeRecentListedItem(item = {}) {
-  const change = toNumber(item.cumulativeReturn, null);
-  const firstDay = toNumber(item.firstDayChangePct, null);
-  const perf = Number.isFinite(change) ? change : firstDay;
-  const isUp = Number.isFinite(perf) && perf > 0;
-  const isDown = Number.isFinite(perf) && perf < 0;
-
-  return {
-    code: item.code || '',
-    codeText: item.code || '--',
-    nameText: item.name || item.code || '--',
-    perfText: Number.isFinite(perf) ? `${perf > 0 ? '+' : ''}${perf.toFixed(2)}%` : '--',
-    perfArrow: isUp ? '▲' : isDown ? '▼' : '•',
-    perfClass: isUp ? 'perf-up' : isDown ? 'perf-down' : 'perf-flat',
-    metrics: [
-      { label: '上市日', value: toText(item.listingDate, '') },
-      { label: '上市价', value: toText(item.offerPrice, '') },
-      { label: '认购倍数', value: toText(item.subscriptionMultiple, '') },
-      { label: '中签率', value: toText(item.allotmentRate, '') },
-    ].filter((m) => m.value),
   };
 }
 
@@ -181,7 +162,10 @@ Page({
       this.setData({
         loading: false,
         topRecommendations,
-        recentPerformance: (timelineSummary.recentListed || []).map(normalizeRecentListedItem).slice(0, 3),
+        recentPerformance: (timelineSummary.recentListed || [])
+          .filter(isRecentListedPerformance)
+          .map(normalizeRecentListedPerformance)
+          .slice(0, 3),
         windowGroups: {
           subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
           listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
@@ -229,9 +213,13 @@ Page({
     this.goToScoreDetail(code);
   },
 
-  onTapTimelineMore() {
+  onTapTimelineMore(e) {
+    const target = e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.target;
+    const url = target === 'recentPerformance'
+      ? '/pages/timeline/index?mode=recentPerformance'
+      : '/pages/timeline/index';
     wx.navigateTo({
-      url: '/pages/timeline/index',
+      url,
       fail: () => wx.showToast({ title: '无法打开时间表', icon: 'none' }),
     });
   },
