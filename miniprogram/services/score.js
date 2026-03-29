@@ -1,16 +1,22 @@
-const { request } = require('./api');
+const { request } = require('./api.js');
 
-function normalizeWebsiteDimension(key, raw = {}) {
-  const ev = raw.evidence;
+function safeJoin(arr, sep) {
+  if (!Array.isArray(arr)) return '';
+  return arr.filter(function (x) { return !!x; }).join(sep);
+}
+
+function normalizeWebsiteDimension(key, raw) {
+  const item = raw || {};
+  const ev = item.evidence;
   let source = '';
   let keywords = '';
   let snippet = '';
 
   if (ev && typeof ev === 'object') {
     if (Array.isArray(ev.sources) && ev.sources.length > 0) {
-      source = ev.sources.map((s) => s.source).filter(Boolean).join('；');
-      keywords = ev.sources.map((s) => s.keyword).filter(Boolean).join('、');
-      snippet = ev.sources.map((s) => s.context).filter(Boolean).join('；');
+      source = safeJoin(ev.sources.map(function (s) { return s && s.source; }), '；');
+      keywords = safeJoin(ev.sources.map(function (s) { return s && s.keyword; }), '、');
+      snippet = safeJoin(ev.sources.map(function (s) { return s && s.context; }), '；');
     }
 
     source = source || ev.source || ev.section || '';
@@ -19,53 +25,56 @@ function normalizeWebsiteDimension(key, raw = {}) {
   }
 
   return {
-    key,
-    score: Number(raw.score) || 0,
-    summary: raw.reason || '',
-    detail: raw.details || '',
-    reason: raw.reason || '',
-    details: raw.details || '',
+    key: key,
+    score: Number(item.score) || 0,
+    summary: item.reason || '',
+    detail: item.details || '',
+    reason: item.reason || '',
+    details: item.details || '',
     evidence: ev ? {
-      source,
-      keywords,
-      snippet,
+      source: source,
+      keywords: keywords,
+      snippet: snippet,
       scoreRule: ev.scoreRule || '',
       raw: ev,
     } : null,
   };
 }
 
-function normalizeWebsiteScoreResponse(resp = {}, code) {
-  const scores = resp.scores || {};
+function normalizeWebsiteScoreResponse(resp, code) {
+  const payload = resp || {};
+  const scores = payload.scores || {};
   const order = ['oldShares', 'sponsor', 'cornerstone', 'lockup', 'industry', 'pe', 'ipoSize'];
 
   const dimensions = order
-    .filter((k) => scores[k] && Number.isFinite(scores[k].score))
-    .map((k) => normalizeWebsiteDimension(k, scores[k]));
+    .filter(function (k) { return scores[k] && Number.isFinite(scores[k].score); })
+    .map(function (k) { return normalizeWebsiteDimension(k, scores[k]); });
 
   return {
     success: true,
-    code: resp.stockCode || code,
-    name: resp.prospectus?.name || code,
-    totalScore: Number(resp.totalScore) || 0,
-    ratingLabel: resp.rating || '',
-    dimensions,
-    display: resp.display || {},
-    legacyRating: resp.rating || '',
+    code: payload.stockCode || code,
+    name: (payload.prospectus && payload.prospectus.name) || code,
+    totalScore: Number(payload.totalScore) || 0,
+    ratingLabel: payload.rating || '',
+    dimensions: dimensions,
+    display: payload.display || {},
+    legacyRating: payload.rating || '',
   };
 }
 
-async function fetchScore(code) {
-  try {
-    const websiteResp = await request(`/api/score/${encodeURIComponent(code)}`);
-    if (websiteResp && websiteResp.success) {
-      return normalizeWebsiteScoreResponse(websiteResp, code);
-    }
-  } catch (_) {
-    // fallback below
-  }
+function fetchScore(code) {
+  const stockCode = encodeURIComponent(code);
 
-  return request(`/api/mp/score/${encodeURIComponent(code)}`);
+  return request('/api/score/' + stockCode)
+    .then(function (websiteResp) {
+      if (websiteResp && websiteResp.success) {
+        return normalizeWebsiteScoreResponse(websiteResp, code);
+      }
+      return request('/api/mp/score/' + stockCode);
+    })
+    .catch(function () {
+      return request('/api/mp/score/' + stockCode);
+    });
 }
 
 module.exports = {

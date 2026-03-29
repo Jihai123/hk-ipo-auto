@@ -1,4 +1,4 @@
-const { fetchScore } = require('../../services/score');
+const { fetchScore } = require('../../services/score.js');
 const { mapErrorMessage } = require('../../utils/score');
 
 const LOADING_STEPS = [
@@ -121,7 +121,7 @@ Page({
   },
 
   onLoad(options) {
-    const code = String(options?.code || '').trim();
+    const code = String((options && options.code) || '').trim();
     this.setData({ code });
 
     if (!code) {
@@ -180,26 +180,26 @@ Page({
 
     try {
       const res = await fetchScore(this.data.code);
-      const dimensions = Array.isArray(res?.dimensions) ? res.dimensions : [];
-      const hasCoreContent = Number.isFinite(res?.totalScore) || dimensions.length > 0 || !!res?.ratingLabel;
+      const dimensions = Array.isArray(res && res.dimensions) ? res.dimensions : [];
+      const hasCoreContent = Number.isFinite(res && res.totalScore) || dimensions.length > 0 || !!(res && res.ratingLabel);
 
-      if (!res?.success && !hasCoreContent) {
+      if (!(res && res.success) && !hasCoreContent) {
         this.setData({
           status: 'empty',
           errorInfo: {
-            type: res?.error?.type || 'empty_result',
-            message: mapErrorMessage(res?.error || {}),
+            type: (res && res.error && res.error.type) || 'empty_result',
+            message: mapErrorMessage((res && res.error) || {}),
           },
         });
         return;
       }
 
-      if (!res?.success) {
+      if (!(res && res.success)) {
         this.setData({
           status: 'error',
           errorInfo: {
-            type: res?.error?.type || 'score_failed',
-            message: mapErrorMessage(res?.error || {}),
+            type: (res && res.error && res.error.type) || 'score_failed',
+            message: mapErrorMessage((res && res.error) || {}),
           },
         });
         return;
@@ -225,7 +225,7 @@ Page({
           toneClass: getToneClassByRating(res.ratingLabel, totalScore),
           decisionSentence: getDecisionSentence(totalScore),
           statusText: getStatusText(res.display || {}),
-          performanceText: toText(res.display?.cumulativeReturn || res.display?.firstDayChangePct, ''),
+          performanceText: toText((res.display && res.display.cumulativeReturn) || (res.display && res.display.firstDayChangePct), ''),
         },
         keyFactors,
         allDimensions,
