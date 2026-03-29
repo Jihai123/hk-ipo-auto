@@ -1,11 +1,16 @@
 <view class="summary-card {{tone}}">
-  <view class="name">{{name || code}}</view>
-  <view class="code">股票代码：{{code}}</view>
-  <view class="score-row">
-    <view class="score">{{totalScore}}</view>
-    <view class="rating-wrap">
-      <view class="rating">{{ratingLabel}}</view>
-      <view class="conclusion">{{conclusion}}</view>
+  <view class="head-row">
+    <view>
+      <view class="name">{{name || code}}</view>
+      <view class="code">股票代码：{{code}}</view>
     </view>
+    <view class="rating-chip">{{ratingLabel}}</view>
   </view>
+
+  <view class="score-wrap">
+    <view class="score">{{totalScore}}</view>
+    <view class="score-unit">总分</view>
+  </view>
+
+  <view class="conclusion">{{conclusion}}</view>
 </view>

@@ -2,23 +2,35 @@
   padding: 24rpx;
 }
 
+.overview-wrap {
+  margin-bottom: 6rpx;
+}
+
 .card {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 20rpx;
+  border-radius: 24rpx;
+  padding: 24rpx;
   margin-bottom: 18rpx;
+  box-shadow: 0 8rpx 26rpx rgba(15, 23, 42, 0.06);
 }
 
 .section-title {
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 700;
+  margin-bottom: 6rpx;
+  color: #0f172a;
+}
+
+.section-subtitle {
+  color: #64748b;
+  font-size: 22rpx;
   margin-bottom: 14rpx;
 }
 
 .field-row {
   display: flex;
   justify-content: space-between;
-  padding: 10rpx 0;
+  padding: 12rpx 0;
   border-bottom: 1rpx solid #eef2f7;
 }
 
@@ -35,11 +47,31 @@
   color: #0f172a;
   font-size: 26rpx;
   font-weight: 600;
+  margin-left: 20rpx;
+  text-align: right;
+}
+
+.action-card .meta {
+  color: #64748b;
+  font-size: 24rpx;
+  margin-bottom: 12rpx;
 }
 
 .action-card .actions {
   display: flex;
   gap: 10rpx;
   flex-wrap: wrap;
-  margin-top: 12rpx;
+}
+
+.outline-btn {
+  border-radius: 999rpx;
+  border: 1rpx solid #cbd5e1;
+  color: #334155;
+  background: #fff;
+}
+
+.primary-btn {
+  border-radius: 999rpx;
+  color: #fff;
+  background: #1d4ed8;
 }

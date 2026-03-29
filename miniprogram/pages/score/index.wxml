@@ -25,17 +25,20 @@
   />
 
   <block wx:else>
-    <score-summary-card
-      name="{{scoreData.name}}"
-      code="{{scoreData.code}}"
-      totalScore="{{scoreData.totalScore}}"
-      ratingLabel="{{scoreData.ratingLabel}}"
-      conclusion="{{scoreData.conclusion}}"
-      tone="{{scoreData.tone}}"
-    />
+    <view class="overview-wrap">
+      <score-summary-card
+        name="{{scoreData.name}}"
+        code="{{scoreData.code}}"
+        totalScore="{{scoreData.totalScore}}"
+        ratingLabel="{{scoreData.ratingLabel}}"
+        conclusion="{{scoreData.conclusion}}"
+        tone="{{scoreData.tone}}"
+      />
+    </view>
 
     <view class="card" wx:if="{{scoreData.dimensions.length > 0}}">
       <view class="section-title">核心评分维度</view>
+      <view class="section-subtitle">点击条目可展开详细说明</view>
       <score-dimension-item wx:for="{{scoreData.dimensions}}" wx:key="key" item="{{item}}" />
     </view>
 
@@ -50,9 +53,9 @@
     <view class="card action-card">
       <view class="meta" wx:if="{{scoreData.elapsed !== undefined}}">耗时：{{scoreData.elapsed}}s</view>
       <view class="actions">
-        <button size="mini" bindtap="onRetry">重新查询</button>
-        <button size="mini" bindtap="onBackHome">返回首页</button>
-        <button size="mini" bindtap="onSearchAgain">再查一个代码</button>
+        <button size="mini" class="outline-btn" bindtap="onRetry">重新查询</button>
+        <button size="mini" class="outline-btn" bindtap="onBackHome">返回首页</button>
+        <button size="mini" class="primary-btn" bindtap="onSearchAgain">再查一个代码</button>
       </view>
     </view>
   </block>

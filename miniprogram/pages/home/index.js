@@ -6,6 +6,43 @@ const {
   pushSearchHistory,
 } = require('../../utils/search');
 
+function toText(value) {
+  return (value === null || value === undefined || value === '') ? '--' : value;
+}
+
+function normalizeTopItem(item = {}) {
+  const ratingLabelText = item.ratingLabel || item.legacyRating || '';
+  return {
+    ...item,
+    ratingLabelText,
+    listingDateText: toText(item.listingDate),
+    nameText: item.name || item.code || '--',
+    scoreText: toText(item.score),
+    statusText: ratingLabelText || '未评级',
+    extraText: `${ratingLabelText} · 上市日 ${toText(item.listingDate)}`,
+  };
+}
+
+function normalizeTimelineItem(item = {}) {
+  return {
+    ...item,
+    listingDateText: toText(item.listingDate),
+    offerEndDateText: toText(item.offerEndDate),
+    firstDayChangePctText: toText(item.firstDayChangePct),
+    nameText: item.name || item.code || '--',
+    codeText: item.code || '--',
+  };
+}
+
+function normalizeMarket(market = {}) {
+  return {
+    ...market,
+    avgReturnText: toText(market.avgReturn),
+    breakRateText: toText(market.breakRate),
+    heatIndexText: toText(market.heatIndex),
+  };
+}
+
 Page({
   data: {
     loading: true,
@@ -13,8 +50,10 @@ Page({
     searchCode: '',
     recentSearches: [],
     updatedAt: '',
+    updatedAtText: '--',
     degraded: {
       topList: false,
+      timeline: false,
       market: false,
     },
     topList: [],
@@ -27,6 +66,9 @@ Page({
       avgReturn: null,
       breakRate: null,
       heatIndex: null,
+      avgReturnText: '--',
+      breakRateText: '--',
+      heatIndexText: '--',
     },
   },
 
@@ -47,29 +89,28 @@ Page({
     try {
       const res = await fetchHome();
       if (!res || !res.success) {
-        throw new Error(res?.error || 'HOME_API_ERROR');
+        throw new Error(res && res.error && res.error.message ? res.error.message : 'HOME_API_ERROR');
       }
+
+      const timelineSummary = res.timelineSummary || {};
 
       this.setData({
         loading: false,
         updatedAt: res.updatedAt || '',
-        degraded: res.degraded || { topList: true, market: true },
-        topList: Array.isArray(res.topList) ? res.topList : [],
-        timelineSummary: res.timelineSummary || {
-          subscribing: [],
-          listingSoon: [],
-          recentListed: [],
+        updatedAtText: toText(res.updatedAt),
+        degraded: res.degraded || { topList: true, timeline: true, market: true },
+        topList: (Array.isArray(res.topList) ? res.topList : []).map(normalizeTopItem),
+        timelineSummary: {
+          subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem),
+          listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem),
+          recentListed: (timelineSummary.recentListed || []).map(normalizeTimelineItem),
         },
-        market: res.market || {
-          avgReturn: null,
-          breakRate: null,
-          heatIndex: null,
-        },
+        market: normalizeMarket(res.market),
       });
     } catch (err) {
       this.setData({
         loading: false,
-        error: err.message || '网络请求失败，请重试',
+        error: err && err.message ? err.message : '网络请求失败，请重试',
       });
     }
   },
@@ -103,7 +144,7 @@ Page({
   },
 
   onTapTopItem(e) {
-    const code = e.detail?.code;
+    const code = e.currentTarget.dataset.code;
     if (!code) return;
     this.goToScoreDetail(code);
   },
@@ -118,7 +159,6 @@ Page({
     const nextHistory = pushSearchHistory(code);
     this.setData({ recentSearches: nextHistory, searchCode: code });
 
-    // 统一跳转评分详情页
     wx.navigateTo({
       url: `/pages/score/index?code=${code}`,
       fail: () => {
