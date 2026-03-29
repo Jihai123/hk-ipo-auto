@@ -52,6 +52,111 @@ function getRawEvidence(item = {}) {
     : {};
 }
 
+function formatSignedPercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '未提供';
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+}
+
+function formatOldShareRatio(rawEvidence = {}) {
+  const newCount = Number(rawEvidence.newSharesCount);
+  const saleCount = Number(rawEvidence.saleSharesCount);
+
+  if (!Number.isFinite(newCount) || !Number.isFinite(saleCount)) return '未提供';
+
+  const total = newCount + saleCount;
+  if (!total) return '未提供';
+
+  return `${(saleCount / total * 100).toFixed(1)}%`;
+}
+
+function buildDimensionRows(key, rawEvidence = {}, fallbackEvidence = {}) {
+  const rows = [];
+
+  if (rawEvidence.section || fallbackEvidence.source) {
+    rows.push({
+      label: '搜索范围',
+      value: toText(rawEvidence.section || fallbackEvidence.source, '未提供'),
+    });
+  }
+
+  if (rawEvidence.scoreRule) {
+    rows.push({ label: '评分规则', value: toText(rawEvidence.scoreRule, '未提供') });
+  }
+
+  if (key === 'oldShares') {
+    rows.push({ label: '新股数量', value: rawEvidence.newSharesCount ? `${Number(rawEvidence.newSharesCount).toLocaleString()} 股` : '未提供' });
+    rows.push({ label: '旧股数量', value: rawEvidence.saleSharesCount ? `${Number(rawEvidence.saleSharesCount).toLocaleString()} 股` : '未提供' });
+    rows.push({ label: '旧股占比', value: formatOldShareRatio(rawEvidence) });
+
+    if (Array.isArray(rawEvidence.sources) && rawEvidence.sources.length > 0) {
+      rows.push({
+        label: '验证来源',
+        value: rawEvidence.sources.map((src) => `${toText(src && src.source, '未知来源')}｜关键词:${toText(src && src.keyword, '无')}`).join('；'),
+      });
+    }
+  }
+
+  if (key === 'sponsor') {
+    rows.push({ label: '识别数量', value: `${toNumber(rawEvidence.matchedCount, 0)} 个保荐人` });
+    rows.push({ label: '加权平均涨幅', value: formatSignedPercent(rawEvidence.weightedRate) });
+
+    if (Array.isArray(rawEvidence.allMatched) && rawEvidence.allMatched.length > 0) {
+      rows.push({
+        label: '匹配列表',
+        value: rawEvidence.allMatched.slice(0, 5).map((s) => {
+          const name = toText(s && s.name, '未知');
+          const count = Number(s && s.count);
+          const rate = Number(s && s.rate);
+          const countText = Number.isFinite(count) ? `${count}单` : '0单';
+          const rateText = Number.isFinite(rate) ? `${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%` : '0.0%';
+          return `${name} (${countText}, ${rateText})`;
+        }).join('；'),
+      });
+    }
+  }
+
+  if (key === 'cornerstone') {
+    if (Array.isArray(rawEvidence.matchedKeywords) && rawEvidence.matchedKeywords.length > 0) {
+      rows.push({ label: '匹配关键词', value: rawEvidence.matchedKeywords.join('、') });
+    } else if (fallbackEvidence.keywordText) {
+      rows.push({ label: '匹配关键词', value: fallbackEvidence.keywordText });
+    }
+
+    rows.push({ label: '明星基石名单', value: toText(rawEvidence.starList, '未提供') });
+  }
+
+  if (key === 'lockup') {
+    rows.push({ label: 'Pre-IPO', value: rawEvidence.preIPOFound ? '发现 Pre-IPO 投资者' : '未发现' });
+    if (rawEvidence.preIPOFound && rawEvidence.lockupFound) {
+      rows.push({ label: '禁售期', value: rawEvidence.lockupPeriod ? `发现禁售安排（${rawEvidence.lockupPeriod}）` : '发现禁售安排' });
+    } else if (rawEvidence.preIPOFound) {
+      rows.push({ label: '禁售期', value: '未发现禁售期安排' });
+    } else {
+      rows.push({ label: '禁售期', value: '未提供' });
+    }
+  }
+
+  if (key === 'industry') {
+    if (rawEvidence.matchedKeyword || fallbackEvidence.keywordText) {
+      rows.push({ label: '匹配关键词', value: toText(rawEvidence.matchedKeyword || fallbackEvidence.keywordText, '未提供') });
+    }
+    if (rawEvidence.trackCategories) {
+      const t = rawEvidence.trackCategories;
+      rows.push({
+        label: '赛道分类',
+        value: `热门:${toText(t.hot, '-')}｜成长:${toText(t.growth, '-')}｜中性:${toText(t.neutral, '-')}｜低弹:${toText(t.low, '-')}｜回避:${toText(t.avoid, '-')}`,
+      });
+    }
+  }
+
+  if (rows.length === 0) {
+    rows.push({ label: '评分逻辑', value: '维度评分基于规则模型与公开信息综合计算' });
+  }
+
+  return rows;
+}
+
 function normalizeDimension(item = {}, idx = 0) {
   const score = toNumber(item.score);
   const evidence = item.evidence || {};
@@ -60,9 +165,10 @@ function normalizeDimension(item = {}, idx = 0) {
   const keywordText = String(evidence.keywords || item.keywords || '').trim();
   const snippetText = String(evidence.snippet || item.detail || '').trim();
   const evidenceMode = hasMeaningfulEvidence(sourceText) || hasMeaningfulEvidence(keywordText) || hasMeaningfulEvidence(snippetText);
+  const key = item.key || item.label || `dimension_${idx}`;
 
   return {
-    key: item.key || item.label || `dimension_${idx}`,
+    key,
     label: normalizeDimensionName(item) || item.key || `dimension_${idx}`,
     score,
     scoreText: score > 0 ? `+${score}` : `${score}`,
@@ -74,12 +180,10 @@ function normalizeDimension(item = {}, idx = 0) {
       sourceText: toText(sourceText, '未提供'),
       keywordText: toText(keywordText, '未提供'),
       snippetText: toText(snippetText, '未提供'),
-    },
-    rule: {
-      logicText: item.summary || item.reason || '维度评分基于规则模型与公开信息综合计算',
-      sourceType: evidenceMode ? '接口证据' : '规则推断',
-      dataStatus: evidenceMode ? '已提取到证据字段' : '接口未返回证据字段',
-      scoreRule: rawEvidence.scoreRule || '',
+      rows: buildDimensionRows(key, rawEvidence, {
+        source: sourceText,
+        keywordText,
+      }),
     },
   };
 }
