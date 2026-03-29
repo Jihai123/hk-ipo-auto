@@ -7,40 +7,71 @@ const {
 } = require('../../utils/search');
 
 function toText(value) {
-  return (value === null || value === undefined || value === '') ? '--' : value;
+  return (value === null || value === undefined || value === '') ? '--' : String(value);
 }
 
-function normalizeTopItem(item = {}) {
-  const ratingLabelText = item.ratingLabel || item.legacyRating || '';
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getRatingToneClass(ratingLabel = '') {
+  const text = String(ratingLabel);
+  if (/可打|积极|推荐|申购|正向|看好/.test(text)) return 'rating-positive';
+  if (/回避|谨慎|负向|不宜/.test(text)) return 'rating-negative';
+  return 'rating-neutral';
+}
+
+function getShortReasonText(item = {}) {
+  const raw = String(item.shortReason || item.reason || '').trim();
+  if (raw) return raw;
+  const score = toNumber(item.score);
+  return score >= 1 ? '暂无明显亮点' : '综合表现中性';
+}
+
+function getLevelMeta(score) {
+  if (score >= 2) return { text: '强推荐', className: 'level-strong' };
+  if (score >= 0) return { text: '可关注', className: 'level-watch' };
+  return { text: '观望', className: 'level-wait' };
+}
+
+function normalizeRecommendItem(item = {}) {
+  const score = toNumber(item.score);
+  const levelMeta = getLevelMeta(score);
+  const ratingLabelText = item.ratingLabel || item.legacyRating || '中性观察';
   return {
-    ...item,
-    ratingLabelText,
-    listingDateText: toText(item.listingDate),
+    code: item.code || '',
+    codeText: item.code || '--',
     nameText: item.name || item.code || '--',
+    score,
     scoreText: toText(item.score),
-    statusText: ratingLabelText || '未评级',
-    extraText: `${ratingLabelText} · 上市日 ${toText(item.listingDate)}`,
+    listingDateText: toText(item.listingDate),
+    ratingLabelText,
+    ratingToneClass: getRatingToneClass(ratingLabelText),
+    shortReasonText: getShortReasonText(item),
+    levelText: levelMeta.text,
+    levelClass: levelMeta.className,
   };
 }
 
 function normalizeTimelineItem(item = {}) {
   return {
-    ...item,
-    listingDateText: toText(item.listingDate),
-    offerEndDateText: toText(item.offerEndDate),
-    firstDayChangePctText: toText(item.firstDayChangePct),
-    nameText: item.name || item.code || '--',
+    code: item.code || '',
     codeText: item.code || '--',
+    nameText: item.name || item.code || '--',
+    listingDateText: toText(item.listingDate),
   };
 }
 
-function normalizeMarket(market = {}) {
-  return {
-    ...market,
-    avgReturnText: toText(market.avgReturn),
-    breakRateText: toText(market.breakRate),
-    heatIndexText: toText(market.heatIndex),
-  };
+function mapSentiment(market = {}) {
+  const heat = Number(market.heatIndex);
+  if (Number.isFinite(heat) && heat >= 70) {
+    return { text: '偏热', className: 'sentiment-hot' };
+  }
+  if (Number.isFinite(heat) && heat <= 35) {
+    return { text: '偏冷', className: 'sentiment-cold' };
+  }
+  return { text: '中性', className: 'sentiment-neutral' };
 }
 
 Page({
@@ -49,26 +80,15 @@ Page({
     error: '',
     searchCode: '',
     recentSearches: [],
-    updatedAt: '',
-    updatedAtText: '--',
-    degraded: {
-      topList: false,
-      timeline: false,
-      market: false,
-    },
-    topList: [],
-    timelineSummary: {
+    topRecommendations: [],
+    windowGroups: {
       subscribing: [],
       listingSoon: [],
       recentListed: [],
     },
-    market: {
-      avgReturn: null,
-      breakRate: null,
-      heatIndex: null,
-      avgReturnText: '--',
-      breakRateText: '--',
-      heatIndexText: '--',
+    marketSentiment: {
+      text: '中性',
+      className: 'sentiment-neutral',
     },
   },
 
@@ -92,20 +112,22 @@ Page({
         throw new Error(res && res.error && res.error.message ? res.error.message : 'HOME_API_ERROR');
       }
 
+      const topRecommendations = (Array.isArray(res.topList) ? res.topList : [])
+        .map(normalizeRecommendItem)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
       const timelineSummary = res.timelineSummary || {};
 
       this.setData({
         loading: false,
-        updatedAt: res.updatedAt || '',
-        updatedAtText: toText(res.updatedAt),
-        degraded: res.degraded || { topList: true, timeline: true, market: true },
-        topList: (Array.isArray(res.topList) ? res.topList : []).map(normalizeTopItem),
-        timelineSummary: {
-          subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem),
-          listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem),
-          recentListed: (timelineSummary.recentListed || []).map(normalizeTimelineItem),
+        topRecommendations,
+        windowGroups: {
+          subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
+          listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
+          recentListed: (timelineSummary.recentListed || []).map(normalizeTimelineItem).slice(0, 3),
         },
-        market: normalizeMarket(res.market),
+        marketSentiment: mapSentiment(res.market || {}),
       });
     } catch (err) {
       this.setData({
@@ -128,28 +150,13 @@ Page({
     this.goToScoreDetail(normalized.code);
   },
 
-  onTapRecent(e) {
+  onTapRecommendCard(e) {
     const code = e.currentTarget.dataset.code;
     if (!code) return;
     this.goToScoreDetail(code);
   },
 
-  goToTimeline() {
-    wx.navigateTo({
-      url: '/pages/timeline/index',
-      fail: () => {
-        wx.showToast({ title: '时间表页面暂不可用', icon: 'none' });
-      },
-    });
-  },
-
-  onTapTopItem(e) {
-    const code = e.currentTarget.dataset.code;
-    if (!code) return;
-    this.goToScoreDetail(code);
-  },
-
-  onTapTimelineItem(e) {
+  onTapWindowCard(e) {
     const code = e.currentTarget.dataset.code;
     if (!code) return;
     this.goToScoreDetail(code);

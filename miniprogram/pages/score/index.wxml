@@ -1,4 +1,4 @@
-<view class="container">
+<view class="page detail-page">
   <page-state
     wx:if="{{status === 'loading'}}"
     mode="loading"
@@ -25,37 +25,83 @@
   />
 
   <block wx:else>
-    <view class="overview-wrap">
-      <score-summary-card
-        name="{{scoreData.name}}"
-        code="{{scoreData.code}}"
-        totalScore="{{scoreData.totalScore}}"
-        ratingLabel="{{scoreData.ratingLabel}}"
-        conclusion="{{scoreData.conclusion}}"
-        tone="{{scoreData.tone}}"
-      />
+    <view class="card conclusion-card">
+      <view class="conclusion-top">
+        <text class="rating-label {{scoreData.toneClass}}">{{scoreData.ratingLabel}}</text>
+        <view class="score-badge">
+          <text class="score-badge-label">Score</text>
+          <text class="score-badge-value">{{scoreData.totalScoreText}}</text>
+        </view>
+      </view>
+
+      <text class="decision-text">{{scoreData.decisionSentence}}</text>
+      <text class="meta-text">score {{scoreData.totalScoreText}}</text>
+
+      <view class="back-hint" bindtap="onBackHome">返回首页</view>
     </view>
 
-    <view class="card" wx:if="{{scoreData.dimensions.length > 0}}">
-      <view class="section-title">核心评分维度</view>
-      <view class="section-subtitle">点击条目可展开详细说明</view>
-      <score-dimension-item wx:for="{{scoreData.dimensions}}" wx:key="key" item="{{item}}" />
-    </view>
-
-    <view class="card" wx:if="{{displayFields.length > 0}}">
-      <view class="section-title">基础信息</view>
-      <view class="field-row" wx:for="{{displayFields}}" wx:key="key">
-        <view class="field-label">{{item.label}}</view>
-        <view class="field-value">{{item.value}}</view>
+    <view class="section">
+      <view class="section-title">关键维度</view>
+      <view class="card key-card">
+        <block wx:if="{{keyFactors.length > 0}}">
+          <view class="key-row" wx:for="{{keyFactors}}" wx:key="key">
+            <view class="key-main">
+              <text class="key-icon">{{item.icon}}</text>
+              <text class="key-name">{{item.label}}</text>
+              <text class="key-reason">：{{item.summaryText}}</text>
+            </view>
+            <text class="key-score">{{item.scoreText}}</text>
+          </view>
+        </block>
+        <view wx:else class="empty-row">
+          <text class="empty-text">暂无关键维度</text>
+        </view>
       </view>
     </view>
 
-    <view class="card action-card">
-      <view class="meta" wx:if="{{scoreData.elapsed !== undefined}}">耗时：{{scoreData.elapsed}}s</view>
-      <view class="actions">
-        <button size="mini" class="outline-btn" bindtap="onRetry">重新查询</button>
-        <button size="mini" class="outline-btn" bindtap="onBackHome">返回首页</button>
-        <button size="mini" class="primary-btn" bindtap="onSearchAgain">再查一个代码</button>
+    <view class="section">
+      <view class="card">
+        <text class="other-line">其他维度暂无明显优势</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="card evidence-card">
+        <view class="collapse-header" bindtap="toggleEvidenceOpen">
+          <text class="collapse-title">评分依据</text>
+          <text class="collapse-arrow">{{evidenceOpen ? '⌃' : '⌄'}}</text>
+        </view>
+
+        <view wx:if="{{evidenceOpen}}" class="collapse-body">
+          <view class="dimension-item" wx:for="{{allDimensions}}" wx:key="key">
+            <view class="dimension-head">
+              <text class="dimension-name">{{item.label}}</text>
+              <text class="dimension-score">{{item.scoreText}}</text>
+            </view>
+
+            <view class="dimension-summary">{{item.summaryText}}</view>
+
+            <view class="sub-collapse-header" bindtap="toggleDimensionEvidence" data-index="{{index}}">
+              <text class="sub-title">证据</text>
+              <text class="collapse-arrow">{{item.evidenceOpen ? '⌃' : '⌄'}}</text>
+            </view>
+
+            <view wx:if="{{item.evidenceOpen}}" class="evidence-detail">
+              <view class="evidence-line">
+                <text class="evidence-label">数据来源：</text>
+                <text class="evidence-value">{{item.sourceText}}</text>
+              </view>
+              <view class="evidence-line">
+                <text class="evidence-label">命中关键词：</text>
+                <text class="evidence-value">{{item.keywordText}}</text>
+              </view>
+              <view class="evidence-line">
+                <text class="evidence-label">原文片段：</text>
+                <text class="evidence-snippet">{{item.snippetText}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
   </block>
