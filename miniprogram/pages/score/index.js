@@ -7,9 +7,13 @@ const LOADING_STEPS = [
   '正在整理结果...',
 ];
 
-function toNumber(value) {
+function toNumber(value, fallback = 0) {
   const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toText(value, fallback = '--') {
+  return (value === null || value === undefined || value === '') ? fallback : String(value);
 }
 
 function getToneClass(score) {
@@ -19,29 +23,75 @@ function getToneClass(score) {
 }
 
 function getDecisionSentence(score) {
-  if (score >= 2) return '可以考虑';
-  if (score >= 0) return '中性观察';
-  return '谨慎/回避';
+  if (score >= 2) return '可以考虑，优先看招股定价与市场热度';
+  if (score >= 0) return '中性观察，建议结合市场窗口决策';
+  return '谨慎/回避，等待更优标的';
+}
+
+function getStatusText(display = {}) {
+  const status = String(display.status || '').trim();
+  if (/subscribing|招股/.test(status)) return '招股中';
+  if (/listingSoon|待上市/.test(status)) return '待上市';
+  if (/recentListed|listed|已上市/.test(status)) return '已上市';
+  return '状态待更新';
+}
+
+function getSourceType(sourceText) {
+  if (/ETNet/i.test(sourceText)) return 'ETNet';
+  if (/招股书|Prospectus/i.test(sourceText)) return '招股书';
+  return '规则推断';
+}
+
+function hasMeaningfulEvidence(value) {
+  const text = String(value || '').trim();
+  return !!text && !['暂无', '暂无可展示原文', '--'].includes(text);
 }
 
 function normalizeDimension(item = {}, idx = 0) {
   const score = toNumber(item.score);
   const evidence = item.evidence || {};
-  const sourceText = evidence.source || item.source || '招股书 / ETNet';
-  const keywordText = evidence.keywords || item.keywords || '暂无';
-  const snippetText = evidence.snippet || item.detail || '暂无可展示原文';
+  const sourceText = String(evidence.source || item.source || '').trim();
+  const keywordText = String(evidence.keywords || item.keywords || '').trim();
+  const snippetText = String(evidence.snippet || item.detail || '').trim();
+  const evidenceMode = hasMeaningfulEvidence(sourceText) && hasMeaningfulEvidence(keywordText) && hasMeaningfulEvidence(snippetText);
+
   return {
     key: item.key || item.label || `dimension_${idx}`,
     label: item.label || item.name || '未命名维度',
     score,
     scoreText: score > 0 ? `+${score}` : `${score}`,
     summaryText: item.summary || '暂无明显信号',
-    sourceText,
-    keywordText,
-    snippetText,
-    evidenceOpen: false,
-    icon: score > 0 ? '🔥' : score < 0 ? '⚠️' : '•',
+    barWidth: `${Math.min(100, Math.max(8, Math.abs(score) * 18 + 10))}%`,
+    barClass: score > 0 ? 'bar-positive' : score < 0 ? 'bar-negative' : 'bar-neutral',
+    evidenceMode,
+    evidence: {
+      sourceText: toText(sourceText, '招股书 / ETNet'),
+      keywordText: toText(keywordText, '暂无'),
+      snippetText: toText(snippetText, '暂无可展示原文'),
+    },
+    rule: {
+      logicText: item.summary || item.reason || '维度评分基于规则模型与公开信息综合计算',
+      sourceType: getSourceType(sourceText),
+      dataStatus: '暂未提取到完整证据',
+    },
   };
+}
+
+function buildMarketInfo(display = {}) {
+  const candidates = [
+    { key: 'offerPrice', label: '上市价', value: display.offerPrice },
+    { key: 'cumulativeReturn', label: '累积回报', value: display.cumulativeReturn },
+    { key: 'subscriptionMultiple', label: '认购倍数', value: display.subscriptionMultiple },
+    { key: 'allotmentRate', label: '一手中签率', value: display.allotmentRate },
+  ];
+
+  const items = candidates
+    .filter((item) => item.value !== null && item.value !== undefined && item.value !== '')
+    .map((item) => ({ ...item, value: String(item.value) }));
+
+  if (items.length >= 3) return { mode: 'grid', items: items.slice(0, 4) };
+  if (items.length >= 1) return { mode: 'compact', items: items.slice(0, 2) };
+  return { mode: 'empty', items: [] };
 }
 
 Page({
@@ -56,6 +106,10 @@ Page({
     allDimensions: [],
     evidenceOpen: false,
     errorInfo: null,
+    marketInfo: {
+      mode: 'empty',
+      items: [],
+    },
   },
 
   onLoad(options) {
@@ -148,7 +202,9 @@ Page({
       const keyFactors = allDimensions
         .filter((item) => item.score !== 0)
         .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
-        .slice(0, 2);
+        .slice(0, 3);
+
+      const marketInfo = buildMarketInfo(res.display || {});
 
       this.setData({
         status: 'success',
@@ -160,9 +216,12 @@ Page({
           ratingLabel: res.ratingLabel || '中性观察',
           toneClass: getToneClass(totalScore),
           decisionSentence: getDecisionSentence(totalScore),
+          statusText: getStatusText(res.display || {}),
+          performanceText: toText(res.display?.cumulativeReturn || res.display?.firstDayChangePct, ''),
         },
         keyFactors,
         allDimensions,
+        marketInfo,
       });
     } catch (err) {
       this.setData({
@@ -194,12 +253,5 @@ Page({
 
   toggleEvidenceOpen() {
     this.setData({ evidenceOpen: !this.data.evidenceOpen });
-  },
-
-  toggleDimensionEvidence(e) {
-    const index = Number(e.currentTarget.dataset.index);
-    if (!Number.isInteger(index) || index < 0) return;
-    const key = `allDimensions[${index}].evidenceOpen`;
-    this.setData({ [key]: !this.data.allDimensions[index].evidenceOpen });
   },
 });

@@ -25,8 +25,13 @@
   />
 
   <block wx:else>
-    <view class="card conclusion-card">
-      <view class="conclusion-top">
+    <view class="hero-card">
+      <view class="hero-stock">
+        <text class="stock-name">{{scoreData.name}}</text>
+        <text class="stock-code">{{scoreData.code}}</text>
+      </view>
+
+      <view class="hero-main">
         <text class="rating-label {{scoreData.toneClass}}">{{scoreData.ratingLabel}}</text>
         <view class="score-badge">
           <text class="score-badge-label">Score</text>
@@ -35,40 +40,38 @@
       </view>
 
       <text class="decision-text">{{scoreData.decisionSentence}}</text>
-      <text class="meta-text">score {{scoreData.totalScoreText}}</text>
-
+      <view class="hero-meta">
+        <text class="status-chip">{{scoreData.statusText}}</text>
+        <text wx:if="{{scoreData.performanceText}}" class="perf-text">上市后表现 {{scoreData.performanceText}}</text>
+      </view>
       <view class="back-hint" bindtap="onBackHome">返回首页</view>
     </view>
 
     <view class="section">
       <view class="section-title">关键维度</view>
-      <view class="card key-card">
+      <view class="key-list">
         <block wx:if="{{keyFactors.length > 0}}">
-          <view class="key-row" wx:for="{{keyFactors}}" wx:key="key">
-            <view class="key-main">
-              <text class="key-icon">{{item.icon}}</text>
+          <view class="card key-card" wx:for="{{keyFactors}}" wx:key="key">
+            <view class="key-head">
               <text class="key-name">{{item.label}}</text>
-              <text class="key-reason">：{{item.summaryText}}</text>
+              <text class="key-score">{{item.scoreText}}</text>
             </view>
-            <text class="key-score">{{item.scoreText}}</text>
+            <text class="key-summary">{{item.summaryText}}</text>
+            <view class="bar-track">
+              <view class="bar-fill {{item.barClass}}" style="width: {{item.barWidth}};"></view>
+            </view>
           </view>
         </block>
-        <view wx:else class="empty-row">
-          <text class="empty-text">暂无关键维度</text>
+        <view wx:else class="card empty-row">
+          <text class="empty-text">当前维度信号不突出，建议结合市场信息判断</text>
         </view>
-      </view>
-    </view>
-
-    <view class="section">
-      <view class="card">
-        <text class="other-line">其他维度暂无明显优势</text>
       </view>
     </view>
 
     <view class="section">
       <view class="card evidence-card">
         <view class="collapse-header" bindtap="toggleEvidenceOpen">
-          <text class="collapse-title">评分依据</text>
+          <text class="collapse-title">完整评分依据</text>
           <text class="collapse-arrow">{{evidenceOpen ? '⌃' : '⌄'}}</text>
         </view>
 
@@ -78,30 +81,58 @@
               <text class="dimension-name">{{item.label}}</text>
               <text class="dimension-score">{{item.scoreText}}</text>
             </view>
-
             <view class="dimension-summary">{{item.summaryText}}</view>
 
-            <view class="sub-collapse-header" bindtap="toggleDimensionEvidence" data-index="{{index}}">
-              <text class="sub-title">证据</text>
-              <text class="collapse-arrow">{{item.evidenceOpen ? '⌃' : '⌄'}}</text>
-            </view>
-
-            <view wx:if="{{item.evidenceOpen}}" class="evidence-detail">
+            <view wx:if="{{item.evidenceMode}}" class="evidence-detail">
               <view class="evidence-line">
                 <text class="evidence-label">数据来源：</text>
-                <text class="evidence-value">{{item.sourceText}}</text>
+                <text class="evidence-value">{{item.evidence.sourceText}}</text>
               </view>
               <view class="evidence-line">
                 <text class="evidence-label">命中关键词：</text>
-                <text class="evidence-value">{{item.keywordText}}</text>
+                <text class="evidence-value">{{item.evidence.keywordText}}</text>
               </view>
               <view class="evidence-line">
                 <text class="evidence-label">原文片段：</text>
-                <text class="evidence-snippet">{{item.snippetText}}</text>
+                <text class="evidence-snippet">{{item.evidence.snippetText}}</text>
+              </view>
+            </view>
+
+            <view wx:else class="rule-detail">
+              <view class="evidence-line">
+                <text class="evidence-label">评分逻辑：</text>
+                <text class="evidence-value">{{item.rule.logicText}}</text>
+              </view>
+              <view class="evidence-line">
+                <text class="evidence-label">数据状态：</text>
+                <text class="evidence-value">{{item.rule.dataStatus}}</text>
+              </view>
+              <view class="evidence-line">
+                <text class="evidence-label">来源类型：</text>
+                <text class="evidence-value">{{item.rule.sourceType}}</text>
               </view>
             </view>
           </view>
         </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">相关市场信息</view>
+      <view wx:if="{{marketInfo.mode === 'grid'}}" class="card market-grid">
+        <view class="market-item" wx:for="{{marketInfo.items}}" wx:key="key">
+          <text class="market-label">{{item.label}}</text>
+          <text class="market-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:elif="{{marketInfo.mode === 'compact'}}" class="card market-compact">
+        <view class="market-row" wx:for="{{marketInfo.items}}" wx:key="key">
+          <text class="market-label">{{item.label}}</text>
+          <text class="market-value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:else class="card market-empty">
+        <text class="empty-text">市场数据待更新</text>
       </view>
     </view>
   </block>
