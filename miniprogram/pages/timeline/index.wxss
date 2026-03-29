@@ -30,6 +30,7 @@
   font-size: 30rpx;
   font-weight: 700;
   margin-bottom: 12rpx;
+  color: #0f172a;
 }
 
 .empty {
@@ -40,7 +41,7 @@
 
 .perf-item {
   border-top: 1rpx solid #e2e8f0;
-  padding: 14rpx 0;
+  padding: 16rpx 0;
 }
 
 .perf-item:first-of-type {
@@ -51,7 +52,8 @@
 .perf-head {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8rpx;
+  align-items: baseline;
+  margin-bottom: 10rpx;
 }
 
 .perf-name {
@@ -80,3 +82,18 @@
 .perf-up { color: #0f766e; }
 .perf-down { color: #b91c1c; }
 .perf-flat { color: #334155; }
+
+.perf-item {
+  background: #fbfdff;
+  border-radius: 12rpx;
+  padding-left: 12rpx;
+  padding-right: 12rpx;
+}
+
+.perf-row {
+  padding: 3rpx 0;
+}
+
+.perf-main {
+  font-weight: 600;
+}

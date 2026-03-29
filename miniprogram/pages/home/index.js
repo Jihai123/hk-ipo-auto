@@ -8,6 +8,7 @@ const {
 const {
   isRecentListedPerformance,
   normalizeRecentListedPerformance,
+  compareByListingDateDesc,
 } = require('../../utils/recent-listed');
 
 function toText(value, fallback = '--') {
@@ -164,6 +165,7 @@ Page({
         topRecommendations,
         recentPerformance: (timelineSummary.recentListed || [])
           .filter(isRecentListedPerformance)
+          .sort(compareByListingDateDesc)
           .map(normalizeRecentListedPerformance)
           .slice(0, 3),
         windowGroups: {

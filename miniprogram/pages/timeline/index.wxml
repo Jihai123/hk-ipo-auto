@@ -1,6 +1,6 @@
 <view class="container">
   <view class="header card">
-    <view class="title">新股时间表</view>
+    <view class="title">{{viewMode === 'recentPerformance' ? '近期上市表现' : '新股时间表'}}</view>
     <view class="meta">更新时间：{{updatedAtText}}</view>
     <view class="warn" wx:if="{{degradedTimeline}}">当前时间表数据为降级结果，请谨慎参考</view>
   </view>
@@ -79,7 +79,7 @@
           <text class="perf-label">上市日期</text>
           <text class="perf-value">{{item.listingDateText || '--'}}</text>
         </view>
-        <view class="perf-row">
+        <view class="perf-row" wx:if="{{item.hasMainPerf}}">
           <text class="perf-label">上市后表现</text>
           <text class="perf-main {{item.perfClass}}">{{item.perfArrow}} {{item.perfText}}</text>
         </view>
