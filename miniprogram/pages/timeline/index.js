@@ -1,4 +1,4 @@
-const { fetchTimelineHome } = require('../../services/timeline');
+const { fetchTimelineHome, fetchTimelineCurrent } = require('../../services/timeline');
 const { formatUpdatedAt, normalizeText, buildGroups } = require('../../utils/timeline');
 const {
   isRecentListedPerformance,
@@ -39,11 +39,13 @@ Page({
     this.setData({ status: 'loading', errorInfo: null });
 
     try {
-      const res = await fetchTimelineHome();
-      const groups = buildGroups(res?.timelineSummary || {});
+      const isRecentPerformanceMode = this.data.viewMode === 'recentPerformance';
+      const res = isRecentPerformanceMode ? await fetchTimelineCurrent() : await fetchTimelineHome();
+      const summary = isRecentPerformanceMode ? (res?.data || {}) : (res?.timelineSummary || {});
+      const groups = buildGroups(summary);
       const total = groups.subscribing.length + groups.listingSoon.length + groups.recentListed.length;
-      const degradedTimeline = !!res?.degraded?.timeline;
-      const errorObj = res?.error || null;
+      const degradedTimeline = isRecentPerformanceMode ? false : !!res?.degraded?.timeline;
+      const errorObj = isRecentPerformanceMode ? null : (res?.error || null);
 
       const normalizedGroups = {
         subscribing: groups.subscribing.map(item => ({
