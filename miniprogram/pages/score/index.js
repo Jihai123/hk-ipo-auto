@@ -1,5 +1,6 @@
 const { fetchScore } = require('../../services/score.js');
 const { mapErrorMessage } = require('../../utils/score');
+const { normalizeDimensionName } = require('../../utils/dimensions');
 
 const LOADING_STEPS = [
   '正在获取评分...',
@@ -62,7 +63,7 @@ function normalizeDimension(item = {}, idx = 0) {
 
   return {
     key: item.key || item.label || `dimension_${idx}`,
-    label: item.label || item.name || '未命名维度',
+    label: normalizeDimensionName(item) || item.key || `dimension_${idx}`,
     score,
     scoreText: score > 0 ? `+${score}` : `${score}`,
     summaryText: item.summary || item.reason || '暂无明显信号',

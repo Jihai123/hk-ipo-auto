@@ -70,7 +70,7 @@
     <view class="section">
       <view class="section-head">
         <view class="section-title">近期上市表现</view>
-        <view class="section-more" bindtap="onTapTimelineMore">查看全部</view>
+        <view class="section-more" bindtap="onTapTimelineMore" data-target="recentPerformance">查看全部</view>
       </view>
       <block wx:if="{{recentPerformance.length > 0}}">
         <view class="card listed-card" wx:for="{{recentPerformance}}" wx:key="code">
@@ -98,7 +98,7 @@
     <view class="section">
       <view class="section-head">
         <view class="section-title">新股时间表</view>
-        <view class="section-more" bindtap="onTapTimelineMore">查看全部</view>
+        <view class="section-more" bindtap="onTapTimelineMore" data-target="timeline">查看全部</view>
       </view>
 
       <view class="sub-section">

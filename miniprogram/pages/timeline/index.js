@@ -1,5 +1,9 @@
 const { fetchTimelineHome } = require('../../services/timeline');
 const { formatUpdatedAt, normalizeText, buildGroups } = require('../../utils/timeline');
+const {
+  isRecentListedPerformance,
+  normalizeRecentListedPerformance,
+} = require('../../utils/recent-listed');
 
 Page({
   data: {
@@ -11,10 +15,17 @@ Page({
       listingSoon: [],
       recentListed: [],
     },
+    recentPerformance: [],
+    viewMode: 'timeline', // timeline | recentPerformance
     errorInfo: null,
   },
 
-  onLoad() {
+  onLoad(options = {}) {
+    const viewMode = options.mode === 'recentPerformance' ? 'recentPerformance' : 'timeline';
+    this.setData({ viewMode });
+    wx.setNavigationBarTitle({
+      title: viewMode === 'recentPerformance' ? '近期上市表现' : '新股时间表',
+    });
     this.loadTimeline();
   },
 
@@ -54,13 +65,20 @@ Page({
           offerEndDate: normalizeText(item.offerEndDate, ''),
         })),
       };
+      const recentPerformance = groups.recentListed
+        .filter(isRecentListedPerformance)
+        .map(normalizeRecentListedPerformance);
+      const totalForCurrentView = this.data.viewMode === 'recentPerformance'
+        ? recentPerformance.length
+        : total;
 
-      if (total === 0 && degradedTimeline) {
+      if (totalForCurrentView === 0 && degradedTimeline) {
         this.setData({
           status: 'error',
           degradedTimeline,
           updatedAtText: formatUpdatedAt(res?.updatedAt),
           groups: normalizedGroups,
+          recentPerformance,
           errorInfo: {
             type: errorObj?.type || 'timeline_degraded',
             message: errorObj?.message || '时间表数据降级，请稍后刷新重试',
@@ -69,12 +87,13 @@ Page({
         return;
       }
 
-      if (total === 0) {
+      if (totalForCurrentView === 0) {
         this.setData({
           status: 'empty',
           degradedTimeline,
           updatedAtText: formatUpdatedAt(res?.updatedAt),
           groups: normalizedGroups,
+          recentPerformance,
           errorInfo: null,
         });
         return;
@@ -85,6 +104,7 @@ Page({
         degradedTimeline,
         updatedAtText: formatUpdatedAt(res?.updatedAt),
         groups: normalizedGroups,
+        recentPerformance,
         errorInfo: errorObj,
       });
     } catch (err) {
@@ -103,7 +123,7 @@ Page({
   },
 
   onTapStock(e) {
-    const code = e.detail?.code;
+    const code = (e.detail && e.detail.code) || (e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.code);
     if (!code) return;
     wx.navigateTo({
       url: `/pages/score/index?code=${code}`,
