@@ -1,4 +1,34 @@
 (function () {
+  const IPO_FRONT_DEBUG = true;
+
+  function debugLog(prefix, payload) {
+    if (!IPO_FRONT_DEBUG) return;
+    console.log(prefix, JSON.stringify(payload, null, 2));
+  }
+
+  function getCount(source, key) {
+    return Array.isArray(source?.[key]) ? source[key].length : 0;
+  }
+
+  function summarizeLayer(source) {
+    return {
+      counts: {
+        todayGreyMarket: getCount(source, 'todayGreyMarket'),
+        todayListed: getCount(source, 'todayListed'),
+        subscribing: getCount(source, 'subscribing'),
+        listingSoon: getCount(source, 'listingSoon'),
+        hearingPassed: getCount(source, 'hearingPassed'),
+        recentNewStocks: getCount(source, 'recentNewStocks'),
+        recentListed: getCount(source, 'recentListed'),
+      },
+      samples: {
+        todayGreyMarketFirst: summarizeItem(source?.todayGreyMarket?.[0]),
+        todayListedFirst: summarizeItem(source?.todayListed?.[0]),
+        recentNewStocksFirst: summarizeItem(source?.recentNewStocks?.[0]),
+      },
+    };
+  }
+
   async function fetchWithPathFallback(path, init) {
     const primary = path.replace(/^\//, '');
     const fallback = `/${primary}`;
@@ -189,7 +219,37 @@
 
   function timelineCard(title, items, mode) {
     const timelineItems = (items || []).slice(0, 8);
-    console.log(`[home.js] timelineCard mode=${mode}, preview=${JSON.stringify(timelineItems.slice(0, 2).map(summarizeItem))}`);
+    if (['todayGreyMarket', 'todayListed', 'recentNewStocks'].includes(mode)) {
+      debugLog('[ipo/front/web][field-map]', {
+        module: mode,
+        title,
+        rawSample: summarizeItem((items || [])[0]),
+        mappedSample: (() => {
+          const sample = (items || [])[0] || {};
+          return {
+            offerPrice: sample.offerPrice,
+            boardLot: sample.boardLot,
+            lotSize: sample.lotSize,
+            entryFee: sample.entryFee,
+            lotAmount: sample.lotAmount,
+            allotmentRate: sample.allotmentRate,
+            firstDayChangePct: sample.firstDayChangePct,
+            statusText: sample.statusText || getStatusLabel(sample.status, mode),
+          };
+        })(),
+        fieldPathCheck: {
+          offerPrice: (items || [])[0]?.offerPrice,
+          boardLotVsLotSize: {
+            boardLot: (items || [])[0]?.boardLot,
+            lotSize: (items || [])[0]?.lotSize,
+          },
+          entryFeeVsLotAmount: {
+            entryFee: (items || [])[0]?.entryFee,
+            lotAmount: (items || [])[0]?.lotAmount,
+          },
+        },
+      });
+    }
 
     const rows = timelineItems.map((ipo) => {
       const fallback = '--';
@@ -366,7 +426,35 @@
   function renderTimeline(data) {
     const container = document.getElementById('ipoTimeline');
     if (!container) return;
-    console.log(`[home.js] renderTimeline groups: subscribingFirst=${JSON.stringify(summarizeItem(data?.subscribing?.[0]))}, listingSoonFirst=${JSON.stringify(summarizeItem(data?.listingSoon?.[0]))}, recentListedFirst=${JSON.stringify(summarizeItem(data?.recentListed?.[0]))}`);
+    debugLog('[ipo/front/web][render-source]', {
+      renderPath: 'getCurrentData(json) -> root.data preferred, fallback root fields',
+      groups: {
+        todayGreyMarket: {
+          count: getCount(data, 'todayGreyMarket'),
+          first: summarizeItem(data?.todayGreyMarket?.[0]),
+        },
+        todayListed: {
+          count: getCount(data, 'todayListed'),
+          first: summarizeItem(data?.todayListed?.[0]),
+        },
+        subscribing: {
+          count: getCount(data, 'subscribing'),
+          first: summarizeItem(data?.subscribing?.[0]),
+        },
+        listingSoon: {
+          count: getCount(data, 'listingSoon'),
+          first: summarizeItem(data?.listingSoon?.[0]),
+        },
+        hearingPassed: {
+          count: getCount(data, 'hearingPassed'),
+          first: summarizeItem(data?.hearingPassed?.[0]),
+        },
+        recentNewStocks: {
+          count: getCount(data, 'recentNewStocks'),
+          first: summarizeItem(data?.recentNewStocks?.[0]),
+        },
+      },
+    });
 
     container.innerHTML = [
       timelineCard('今日暗盘', data.todayGreyMarket, 'todayGreyMarket'),
@@ -405,17 +493,36 @@
       const response = await fetchWithPathFallback('api/ipo/current');
       const json = await response.json();
       const currentData = getCurrentData(json);
-      console.log(`[home.js] /api/ipo/current loaded: counts=${JSON.stringify({
-        todayGreyMarketCount: currentData?.todayGreyMarket?.length || 0,
-        todayListedCount: currentData?.todayListed?.length || 0,
-        subscribingCount: currentData?.subscribing?.length || 0,
-        listingSoonCount: currentData?.listingSoon?.length || 0,
-        hearingPassedCount: currentData?.hearingPassed?.length || 0,
-        recentNewStocksCount: currentData?.recentNewStocks?.length || 0,
-      })}, sample=${JSON.stringify({
-        todayGreyMarketFirst: summarizeItem(currentData?.todayGreyMarket?.[0]),
-        todayListedFirst: summarizeItem(currentData?.todayListed?.[0]),
-      })}`);
+      debugLog('[ipo/front/web][fetch-success]', {
+        responseRootKeys: Object.keys(json || {}),
+        responseDataKeys: json?.data && typeof json.data === 'object' ? Object.keys(json.data) : null,
+        responseDataDataKeys: json?.data?.data && typeof json.data.data === 'object' ? Object.keys(json.data.data) : null,
+        rootLayer: summarizeLayer(json),
+        dataLayer: summarizeLayer(json?.data),
+        dataDataLayer: summarizeLayer(json?.data?.data),
+        fieldNameCheck: {
+          boardLotVsLotSize: {
+            root: {
+              boardLot: json?.todayGreyMarket?.[0]?.boardLot,
+              lotSize: json?.todayGreyMarket?.[0]?.lotSize,
+            },
+            data: {
+              boardLot: json?.data?.todayGreyMarket?.[0]?.boardLot,
+              lotSize: json?.data?.todayGreyMarket?.[0]?.lotSize,
+            },
+          },
+          entryFeeVsLotAmount: {
+            root: {
+              entryFee: json?.todayGreyMarket?.[0]?.entryFee,
+              lotAmount: json?.todayGreyMarket?.[0]?.lotAmount,
+            },
+            data: {
+              entryFee: json?.data?.todayGreyMarket?.[0]?.entryFee,
+              lotAmount: json?.data?.todayGreyMarket?.[0]?.lotAmount,
+            },
+          },
+        },
+      });
       renderTimeline(currentData);
     } catch (err) {
       if (container) {

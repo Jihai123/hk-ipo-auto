@@ -41,6 +41,7 @@ const { crawlIPOListFromETNet } = require('./crawlers/etnet/ipoList');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
+const IPO_DEBUG = process.env.IPO_DEBUG === '1';
 
 // 目录配置
 const CACHE_DIR = path.join(__dirname, 'cache');
@@ -4213,8 +4214,49 @@ function readCachePayload(cfg) {
   };
 }
 
+function getArrayCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function pickIpoSample(item) {
+  if (!item) return null;
+  return {
+    code: item.code ?? null,
+    name: item.name ?? null,
+    status: item.status ?? null,
+    statusText: item.statusText ?? null,
+    listingDate: item.listingDate ?? null,
+    offerEndDate: item.offerEndDate ?? null,
+    offerPrice: item.offerPrice ?? null,
+    boardLot: item.boardLot ?? null,
+    lotSize: item.lotSize ?? null,
+    entryFee: item.entryFee ?? null,
+    lotAmount: item.lotAmount ?? null,
+    allotmentRate: item.allotmentRate ?? null,
+    firstDayChangePct: item.firstDayChangePct ?? null,
+  };
+}
+
 function normalizeCurrentIpoData(raw) {
   const safe = raw || {};
+  if (IPO_DEBUG) {
+    console.log('[ipo/debug][normalize-start]', JSON.stringify({
+      entered: true,
+      inputKeys: Object.keys(safe),
+      inputDataKeys: safe && safe.data && typeof safe.data === 'object' ? Object.keys(safe.data) : null,
+      legacyCounts: {
+        subscribing: getArrayCount(safe.subscribing),
+        listingSoon: getArrayCount(safe.listingSoon),
+        recentListed: getArrayCount(safe.recentListed),
+      },
+      newGroupInitialCounts: {
+        todayGreyMarket: getArrayCount(safe.todayGreyMarket),
+        todayListed: getArrayCount(safe.todayListed),
+        hearingPassed: getArrayCount(safe.hearingPassed),
+        recentNewStocks: getArrayCount(safe.recentNewStocks),
+      },
+    }, null, 2));
+  }
   const subscribing = Array.isArray(safe.subscribing) ? safe.subscribing : [];
   const listingSoon = Array.isArray(safe.listingSoon) ? safe.listingSoon : [];
   const recentListed = Array.isArray(safe.recentListed) ? safe.recentListed : [];
@@ -4315,7 +4357,7 @@ function normalizeCurrentIpoData(raw) {
   const todayListed = todayListedRaw.length > 0 ? todayListedRaw : derivedTodayListed;
   const recentNewStocks = recentNewStocksRaw.length > 0 ? recentNewStocksRaw : derivedRecentNewStocks;
 
-  return {
+  const normalizedResult = {
     subscribing,
     listingSoon,
     recentListed: normalizedRecentListed,
@@ -4357,6 +4399,27 @@ function normalizeCurrentIpoData(raw) {
       firstDayChangePct: item.firstDayChangePct ?? null,
     })),
   };
+  if (IPO_DEBUG) {
+    console.log('[ipo/debug][normalize-end]', JSON.stringify({
+      counts: {
+        subscribingCount: getArrayCount(normalizedResult.subscribing),
+        listingSoonCount: getArrayCount(normalizedResult.listingSoon),
+        recentListedCount: getArrayCount(normalizedResult.recentListed),
+        todayGreyMarketCount: getArrayCount(normalizedResult.todayGreyMarket),
+        todayListedCount: getArrayCount(normalizedResult.todayListed),
+        hearingPassedCount: getArrayCount(normalizedResult.hearingPassed),
+        recentNewStocksCount: getArrayCount(normalizedResult.recentNewStocks),
+      },
+      samples: {
+        todayGreyMarketFirst: pickIpoSample(normalizedResult.todayGreyMarket[0]),
+        todayListedFirst: pickIpoSample(normalizedResult.todayListed[0]),
+        hearingPassedFirst: pickIpoSample(normalizedResult.hearingPassed[0]),
+        recentNewStocksFirst: pickIpoSample(normalizedResult.recentNewStocks[0]),
+        recentListedFirst: pickIpoSample(normalizedResult.recentListed[0]),
+      },
+    }, null, 2));
+  }
+  return normalizedResult;
 }
 
 function toLegacyCurrentFields(currentData, updatedAt) {
@@ -4397,6 +4460,31 @@ async function rebuildCurrentIpoData() {
 async function getCurrentIpoDataWithCache(options = {}) {
   const forceRefresh = options.forceRefresh === true;
   const cache = readCachePayload(HOME_IPO_CACHE_CONFIG.current);
+  if (cache && IPO_DEBUG) {
+    const raw = cache.raw || {};
+    const rawData = raw.data || {};
+    console.log('[ipo/debug][cache-raw]', JSON.stringify({
+      cacheExpired: cache.expired,
+      forceRefresh,
+      rawKeys: Object.keys(raw),
+      rawDataKeys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : null,
+      counts: {
+        subscribing: getArrayCount(rawData.subscribing),
+        listingSoon: getArrayCount(rawData.listingSoon),
+        recentListed: getArrayCount(rawData.recentListed),
+        todayGreyMarket: getArrayCount(rawData.todayGreyMarket),
+        todayListed: getArrayCount(rawData.todayListed),
+        hearingPassed: getArrayCount(rawData.hearingPassed),
+        recentNewStocks: getArrayCount(rawData.recentNewStocks),
+      },
+      samples: {
+        recentListedFirst: pickIpoSample((rawData.recentListed || [])[0]),
+        todayGreyMarketFirst: pickIpoSample((rawData.todayGreyMarket || [])[0]),
+        todayListedFirst: pickIpoSample((rawData.todayListed || [])[0]),
+        recentNewStocksFirst: pickIpoSample((rawData.recentNewStocks || [])[0]),
+      },
+    }, null, 2));
+  }
   if (cache && !cache.expired && !forceRefresh) {
     const counts = {
       subscribing: cache.raw.data?.subscribing?.length || 0,
@@ -4643,7 +4731,7 @@ app.get('/api/ipo/current', async (req, res) => {
       recentListed: counts.recentListedCount,
     })}`);
 
-    res.json({
+    const responsePayload = {
       success: true,
       data: current.data,
       updatedAt: current.updatedAt,
@@ -4651,7 +4739,33 @@ app.get('/api/ipo/current', async (req, res) => {
       fromCache: current.fromCache,
       // 兼容旧字段
       ...legacy,
-    });
+    };
+    if (IPO_DEBUG) {
+      console.log('[ipo/debug][api-response]', JSON.stringify({
+        responseRootKeys: Object.keys(responsePayload),
+        responseDataKeys: responsePayload.data && typeof responsePayload.data === 'object' ? Object.keys(responsePayload.data) : null,
+        responseDataCounts: {
+          todayGreyMarket: getArrayCount(responsePayload.data?.todayGreyMarket),
+          todayListed: getArrayCount(responsePayload.data?.todayListed),
+          subscribing: getArrayCount(responsePayload.data?.subscribing),
+          listingSoon: getArrayCount(responsePayload.data?.listingSoon),
+          hearingPassed: getArrayCount(responsePayload.data?.hearingPassed),
+          recentNewStocks: getArrayCount(responsePayload.data?.recentNewStocks),
+          recentListed: getArrayCount(responsePayload.data?.recentListed),
+        },
+        rootLevelCounts: {
+          subscribing: getArrayCount(responsePayload.subscribing),
+          coming: getArrayCount(responsePayload.coming),
+          listed: getArrayCount(responsePayload.listed),
+        },
+        samples: {
+          todayGreyMarketFirst: pickIpoSample((responsePayload.data?.todayGreyMarket || [])[0]),
+          todayListedFirst: pickIpoSample((responsePayload.data?.todayListed || [])[0]),
+          recentNewStocksFirst: pickIpoSample((responsePayload.data?.recentNewStocks || [])[0]),
+        },
+      }, null, 2));
+    }
+    res.json(responsePayload);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
