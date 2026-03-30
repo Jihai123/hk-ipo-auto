@@ -6,6 +6,36 @@ const {
   compareByListingDateDesc,
 } = require('../../utils/recent-listed');
 
+const IPO_FRONT_DEBUG = true;
+
+function debugLog(prefix, payload) {
+  if (!IPO_FRONT_DEBUG) return;
+  console.log(prefix, JSON.stringify(payload, null, 2));
+}
+
+function getCount(source, key) {
+  return Array.isArray(source && source[key]) ? source[key].length : 0;
+}
+
+function summarizeLayer(source = {}) {
+  return {
+    counts: {
+      todayGreyMarket: getCount(source, 'todayGreyMarket'),
+      todayListed: getCount(source, 'todayListed'),
+      subscribing: getCount(source, 'subscribing'),
+      listingSoon: getCount(source, 'listingSoon'),
+      hearingPassed: getCount(source, 'hearingPassed'),
+      recentNewStocks: getCount(source, 'recentNewStocks'),
+      recentListed: getCount(source, 'recentListed'),
+    },
+    samples: {
+      todayGreyMarketFirst: source?.todayGreyMarket?.[0] || null,
+      todayListedFirst: source?.todayListed?.[0] || null,
+      recentNewStocksFirst: source?.recentNewStocks?.[0] || null,
+    },
+  };
+}
+
 Page({
   data: {
     status: 'loading', // loading | success | empty | error
@@ -47,6 +77,28 @@ Page({
       const isRecentPerformanceMode = this.data.viewMode === 'recentPerformance';
       const res = await fetchTimelineCurrent();
       const summary = res?.data || {};
+      debugLog('[ipo/front/mp][fetch-success]', {
+        responseRootKeys: Object.keys(res || {}),
+        responseDataKeys: res && res.data && typeof res.data === 'object' ? Object.keys(res.data) : null,
+        responseDataDataKeys: res && res.data && res.data.data && typeof res.data.data === 'object' ? Object.keys(res.data.data) : null,
+        rootLayer: summarizeLayer(res || {}),
+        dataLayer: summarizeLayer(res?.data || {}),
+        dataDataLayer: summarizeLayer(res?.data?.data || {}),
+        fieldNameCheck: {
+          boardLotVsLotSize: {
+            root: { boardLot: res?.todayGreyMarket?.[0]?.boardLot, lotSize: res?.todayGreyMarket?.[0]?.lotSize },
+            data: { boardLot: res?.data?.todayGreyMarket?.[0]?.boardLot, lotSize: res?.data?.todayGreyMarket?.[0]?.lotSize },
+          },
+          entryFeeVsLotAmount: {
+            root: { entryFee: res?.todayGreyMarket?.[0]?.entryFee, lotAmount: res?.todayGreyMarket?.[0]?.lotAmount },
+            data: { entryFee: res?.data?.todayGreyMarket?.[0]?.entryFee, lotAmount: res?.data?.todayGreyMarket?.[0]?.lotAmount },
+          },
+          pathCheck: {
+            responseData: res?.data ?? null,
+            responseDataData: res?.data?.data ?? null,
+          },
+        },
+      });
       const groups = buildGroups(summary);
       const total = groups.todayGreyMarket.length
         + groups.todayListed.length
@@ -134,6 +186,22 @@ Page({
         : total;
 
       if (totalForCurrentView === 0 && degradedTimeline) {
+        debugLog('[ipo/front/mp][empty-state-check]', {
+          mode: this.data.viewMode,
+          statusWillSet: 'error',
+          degradedTimeline,
+          totalForCurrentView,
+          reason: 'totalForCurrentView === 0 && degradedTimeline === true',
+        });
+        debugLog('[ipo/front/mp][setData-before]', {
+          keys: ['status', 'degradedTimeline', 'updatedAtText', 'groups', 'recentPerformance', 'errorInfo'],
+          groupsLength: Object.keys(normalizedGroups).length,
+          groups: Object.keys(normalizedGroups).map((key) => ({
+            title: key,
+            itemsLength: Array.isArray(normalizedGroups[key]) ? normalizedGroups[key].length : 0,
+          })),
+          firstGroupSample: normalizedGroups.todayGreyMarket?.[0] || null,
+        });
         this.setData({
           status: 'error',
           degradedTimeline,
@@ -149,6 +217,31 @@ Page({
       }
 
       if (totalForCurrentView === 0) {
+        debugLog('[ipo/front/mp][empty-state-check]', {
+          mode: this.data.viewMode,
+          statusWillSet: 'empty',
+          degradedTimeline,
+          totalForCurrentView,
+          reason: 'totalForCurrentView === 0',
+          checks: {
+            totalForCurrentView,
+            todayGreyMarketLength: normalizedGroups.todayGreyMarket.length,
+            todayListedLength: normalizedGroups.todayListed.length,
+            subscribingLength: normalizedGroups.subscribing.length,
+            listingSoonLength: normalizedGroups.listingSoon.length,
+            hearingPassedLength: normalizedGroups.hearingPassed.length,
+            recentNewStocksLength: normalizedGroups.recentNewStocks.length,
+          },
+        });
+        debugLog('[ipo/front/mp][setData-before]', {
+          keys: ['status', 'degradedTimeline', 'updatedAtText', 'groups', 'recentPerformance', 'errorInfo'],
+          groupsLength: Object.keys(normalizedGroups).length,
+          groups: Object.keys(normalizedGroups).map((key) => ({
+            title: key,
+            itemsLength: Array.isArray(normalizedGroups[key]) ? normalizedGroups[key].length : 0,
+          })),
+          firstGroupSample: normalizedGroups.todayGreyMarket?.[0] || null,
+        });
         this.setData({
           status: 'empty',
           degradedTimeline,
@@ -160,6 +253,21 @@ Page({
         return;
       }
 
+      debugLog('[ipo/front/mp][empty-state-check]', {
+        mode: this.data.viewMode,
+        statusWillSet: 'success',
+        totalForCurrentView,
+        reason: 'totalForCurrentView > 0',
+      });
+      debugLog('[ipo/front/mp][setData-before]', {
+        keys: ['status', 'degradedTimeline', 'updatedAtText', 'groups', 'recentPerformance', 'errorInfo'],
+        groupsLength: Object.keys(normalizedGroups).length,
+        groups: Object.keys(normalizedGroups).map((key) => ({
+          title: key,
+          itemsLength: Array.isArray(normalizedGroups[key]) ? normalizedGroups[key].length : 0,
+        })),
+        firstGroupSample: normalizedGroups.todayGreyMarket?.[0] || null,
+      });
       this.setData({
         status: 'success',
         degradedTimeline,

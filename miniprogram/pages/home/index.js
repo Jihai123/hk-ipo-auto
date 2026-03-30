@@ -12,6 +12,36 @@ const {
   compareByListingDateDesc,
 } = require('../../utils/recent-listed');
 
+const IPO_FRONT_DEBUG = true;
+
+function debugLog(prefix, payload) {
+  if (!IPO_FRONT_DEBUG) return;
+  console.log(prefix, JSON.stringify(payload, null, 2));
+}
+
+function getCount(source, key) {
+  return Array.isArray(source && source[key]) ? source[key].length : 0;
+}
+
+function summarizeLayer(source = {}) {
+  return {
+    counts: {
+      todayGreyMarket: getCount(source, 'todayGreyMarket'),
+      todayListed: getCount(source, 'todayListed'),
+      subscribing: getCount(source, 'subscribing'),
+      listingSoon: getCount(source, 'listingSoon'),
+      hearingPassed: getCount(source, 'hearingPassed'),
+      recentNewStocks: getCount(source, 'recentNewStocks'),
+      recentListed: getCount(source, 'recentListed'),
+    },
+    samples: {
+      todayGreyMarketFirst: source?.todayGreyMarket?.[0] || null,
+      todayListedFirst: source?.todayListed?.[0] || null,
+      recentNewStocksFirst: source?.recentNewStocks?.[0] || null,
+    },
+  };
+}
+
 function toText(value, fallback = '--') {
   return (value === null || value === undefined || value === '') ? fallback : String(value);
 }
@@ -163,6 +193,32 @@ Page({
 
       const timelineRes = await fetchTimelineCurrent();
       const timelineSummary = (timelineRes && timelineRes.data) || res.timelineSummary || {};
+      debugLog('[ipo/front/mp][fetch-success]', {
+        responseRootKeys: Object.keys(timelineRes || {}),
+        responseDataKeys: timelineRes && timelineRes.data && typeof timelineRes.data === 'object' ? Object.keys(timelineRes.data) : null,
+        responseDataDataKeys: timelineRes && timelineRes.data && timelineRes.data.data && typeof timelineRes.data.data === 'object' ? Object.keys(timelineRes.data.data) : null,
+        rootLayer: summarizeLayer(timelineRes || {}),
+        dataLayer: summarizeLayer(timelineRes?.data || {}),
+        dataDataLayer: summarizeLayer(timelineRes?.data?.data || {}),
+        fieldNameCheck: {
+          boardLotVsLotSize: {
+            data: {
+              boardLot: timelineRes?.data?.todayGreyMarket?.[0]?.boardLot,
+              lotSize: timelineRes?.data?.todayGreyMarket?.[0]?.lotSize,
+            },
+          },
+          entryFeeVsLotAmount: {
+            data: {
+              entryFee: timelineRes?.data?.todayGreyMarket?.[0]?.entryFee,
+              lotAmount: timelineRes?.data?.todayGreyMarket?.[0]?.lotAmount,
+            },
+          },
+          pathCheck: {
+            responseData: timelineRes?.data ?? null,
+            responseDataData: timelineRes?.data?.data ?? null,
+          },
+        },
+      });
       const statusMap = buildStatusMap(timelineSummary);
 
       const topRecommendations = (Array.isArray(res.topList) ? res.topList : [])
@@ -173,6 +229,30 @@ Page({
       const marketSentiment = mapSentiment(res.market || {});
       const heroConclusion = buildHeroConclusion(topRecommendations, marketSentiment.text);
 
+      const nextWindowGroups = {
+        todayGreyMarket: (timelineSummary.todayGreyMarket || []).map(normalizeTimelineItem).slice(0, 3),
+        todayListed: (timelineSummary.todayListed || []).map(normalizeTimelineItem).slice(0, 3),
+        subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
+        listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
+        hearingPassed: (timelineSummary.hearingPassed || []).map(normalizeTimelineItem).slice(0, 3),
+        recentNewStocks: (timelineSummary.recentNewStocks || []).map(normalizeTimelineItem).slice(0, 3),
+      };
+      const windowGroupEntries = Object.keys(nextWindowGroups).map((key) => ({
+        key,
+        title: key,
+        itemsLength: nextWindowGroups[key].length,
+      }));
+      debugLog('[ipo/front/mp][empty-state-check]', {
+        scope: 'home-window-groups',
+        checks: windowGroupEntries,
+        reason: 'home卡片是否展示由各 group length 决定',
+      });
+      debugLog('[ipo/front/mp][setData-before]', {
+        keys: ['loading', 'topRecommendations', 'recentPerformance', 'windowGroups', 'marketSentiment', 'heroConclusion'],
+        windowGroupsLength: windowGroupEntries.length,
+        groups: windowGroupEntries,
+        firstGroupSample: nextWindowGroups.todayGreyMarket?.[0] || null,
+      });
       this.setData({
         loading: false,
         topRecommendations,
@@ -181,14 +261,7 @@ Page({
           .sort(compareByListingDateDesc)
           .map(normalizeRecentListedPerformance)
           .slice(0, 3),
-        windowGroups: {
-          todayGreyMarket: (timelineSummary.todayGreyMarket || []).map(normalizeTimelineItem).slice(0, 3),
-          todayListed: (timelineSummary.todayListed || []).map(normalizeTimelineItem).slice(0, 3),
-          subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
-          listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
-          hearingPassed: (timelineSummary.hearingPassed || []).map(normalizeTimelineItem).slice(0, 3),
-          recentNewStocks: (timelineSummary.recentNewStocks || []).map(normalizeTimelineItem).slice(0, 3),
-        },
+        windowGroups: nextWindowGroups,
         marketSentiment,
         heroConclusion,
       });
