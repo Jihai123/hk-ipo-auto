@@ -4260,10 +4260,13 @@ function normalizeCurrentIpoData(raw) {
   const subscribing = Array.isArray(safe.subscribing) ? safe.subscribing : [];
   const listingSoon = Array.isArray(safe.listingSoon) ? safe.listingSoon : [];
   const recentListed = Array.isArray(safe.recentListed) ? safe.recentListed : [];
-  const todayGreyMarketRaw = Array.isArray(safe.todayGreyMarket) ? safe.todayGreyMarket : [];
-  const todayListedRaw = Array.isArray(safe.todayListed) ? safe.todayListed : [];
+  const hasTodayGreyMarket = Array.isArray(safe.todayGreyMarket);
+  const hasTodayListed = Array.isArray(safe.todayListed);
+  const hasRecentNewStocks = Array.isArray(safe.recentNewStocks);
+  const todayGreyMarketRaw = hasTodayGreyMarket ? safe.todayGreyMarket : [];
+  const todayListedRaw = hasTodayListed ? safe.todayListed : [];
   const hearingPassed = Array.isArray(safe.hearingPassed) ? safe.hearingPassed : [];
-  const recentNewStocksRaw = Array.isArray(safe.recentNewStocks) ? safe.recentNewStocks : [];
+  const recentNewStocksRaw = hasRecentNewStocks ? safe.recentNewStocks : [];
 
   const hkToday = (() => {
     const now = new Date();
@@ -4353,9 +4356,9 @@ function normalizeCurrentIpoData(raw) {
       entryFee: item.entryFee ?? item.lotAmount ?? null,
     }));
 
-  const todayGreyMarket = todayGreyMarketRaw.length > 0 ? todayGreyMarketRaw : derivedTodayGreyMarket;
-  const todayListed = todayListedRaw.length > 0 ? todayListedRaw : derivedTodayListed;
-  const recentNewStocks = recentNewStocksRaw.length > 0 ? recentNewStocksRaw : derivedRecentNewStocks;
+  const todayGreyMarket = hasTodayGreyMarket ? todayGreyMarketRaw : derivedTodayGreyMarket;
+  const todayListed = hasTodayListed ? todayListedRaw : derivedTodayListed;
+  const recentNewStocks = hasRecentNewStocks ? recentNewStocksRaw : derivedRecentNewStocks;
 
   const normalizedResult = {
     subscribing,
@@ -4375,6 +4378,12 @@ function normalizeCurrentIpoData(raw) {
       code: item.code || '',
       name: item.name || '',
       listingDate: item.listingDate || null,
+      currency: item.currency || null,
+      offerPrice: item.offerPrice ?? null,
+      boardLot: item.boardLot ?? null,
+      entryFee: item.entryFee ?? null,
+      subscriptionMultiple: item.subscriptionMultiple ?? null,
+      allotmentRate: item.allotmentRate ?? null,
       firstDayOpen: item.firstDayOpen ?? null,
       firstDayClose: item.firstDayClose ?? null,
       firstDayChangePct: item.firstDayChangePct ?? null,
@@ -4396,7 +4405,10 @@ function normalizeCurrentIpoData(raw) {
       entryFee: item.entryFee ?? null,
       subscriptionMultiple: item.subscriptionMultiple ?? null,
       allotmentRate: item.allotmentRate ?? null,
+      firstDayOpen: item.firstDayOpen ?? null,
+      firstDayClose: item.firstDayClose ?? null,
       firstDayChangePct: item.firstDayChangePct ?? null,
+      lotProfit: item.lotProfit ?? null,
     })),
   };
   if (IPO_DEBUG) {
