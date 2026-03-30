@@ -4218,6 +4218,10 @@ function normalizeCurrentIpoData(raw) {
   const subscribing = Array.isArray(safe.subscribing) ? safe.subscribing : [];
   const listingSoon = Array.isArray(safe.listingSoon) ? safe.listingSoon : [];
   const recentListed = Array.isArray(safe.recentListed) ? safe.recentListed : [];
+  const todayGreyMarket = Array.isArray(safe.todayGreyMarket) ? safe.todayGreyMarket : [];
+  const todayListed = Array.isArray(safe.todayListed) ? safe.todayListed : [];
+  const hearingPassed = Array.isArray(safe.hearingPassed) ? safe.hearingPassed : [];
+  const recentNewStocks = Array.isArray(safe.recentNewStocks) ? safe.recentNewStocks : [];
 
   return {
     subscribing,
@@ -4232,8 +4236,50 @@ function normalizeCurrentIpoData(raw) {
       subscriptionMultiple: item.subscriptionMultiple || null,
       allotmentRate: item.allotmentRate || null,
       firstDayChangePct: item.firstDayChangePct || null,
+      firstDayOpen: item.firstDayOpen || null,
+      firstDayClose: item.firstDayClose || null,
+      lotProfit: item.lotProfit || null,
       lotSize: item.lotSize || null,
       lotAmount: item.lotAmount || null,
+      boardLot: item.boardLot || null,
+      entryFee: item.entryFee || null,
+    })),
+    todayGreyMarket: todayGreyMarket.map(item => ({
+      code: item.code || '',
+      name: item.name || '',
+      statusText: item.statusText || '暗盘/待上市',
+      listingDate: item.listingDate || null,
+      currency: item.currency || null,
+      offerPrice: item.offerPrice ?? null,
+      boardLot: item.boardLot ?? null,
+      entryFee: item.entryFee ?? null,
+    })),
+    todayListed: todayListed.map(item => ({
+      code: item.code || '',
+      name: item.name || '',
+      listingDate: item.listingDate || null,
+      firstDayOpen: item.firstDayOpen ?? null,
+      firstDayClose: item.firstDayClose ?? null,
+      firstDayChangePct: item.firstDayChangePct ?? null,
+      lotProfit: item.lotProfit ?? null,
+    })),
+    hearingPassed: hearingPassed.map(item => ({
+      code: item.code || '',
+      name: item.name || '',
+      statusText: item.statusText || '',
+      listingDate: item.listingDate || null,
+    })),
+    recentNewStocks: recentNewStocks.map(item => ({
+      code: item.code || '',
+      name: item.name || '',
+      listingDate: item.listingDate || null,
+      currency: item.currency || null,
+      offerPrice: item.offerPrice ?? null,
+      boardLot: item.boardLot ?? null,
+      entryFee: item.entryFee ?? null,
+      subscriptionMultiple: item.subscriptionMultiple ?? null,
+      allotmentRate: item.allotmentRate ?? null,
+      firstDayChangePct: item.firstDayChangePct ?? null,
     })),
   };
 }
@@ -4281,6 +4327,10 @@ async function getCurrentIpoDataWithCache(options = {}) {
       subscribing: cache.raw.data?.subscribing?.length || 0,
       listingSoon: cache.raw.data?.listingSoon?.length || 0,
       recentListed: cache.raw.data?.recentListed?.length || 0,
+      todayGreyMarket: cache.raw.data?.todayGreyMarket?.length || 0,
+      todayListed: cache.raw.data?.todayListed?.length || 0,
+      hearingPassed: cache.raw.data?.hearingPassed?.length || 0,
+      recentNewStocks: cache.raw.data?.recentNewStocks?.length || 0,
     };
     console.log(`[home-ipo] current cache命中: updatedAt=${cache.raw.meta.updatedAt}, counts=${JSON.stringify(counts)}`);
     return {
@@ -4297,6 +4347,10 @@ async function getCurrentIpoDataWithCache(options = {}) {
       subscribing: rebuilt.data?.subscribing?.length || 0,
       listingSoon: rebuilt.data?.listingSoon?.length || 0,
       recentListed: rebuilt.data?.recentListed?.length || 0,
+      todayGreyMarket: rebuilt.data?.todayGreyMarket?.length || 0,
+      todayListed: rebuilt.data?.todayListed?.length || 0,
+      hearingPassed: rebuilt.data?.hearingPassed?.length || 0,
+      recentNewStocks: rebuilt.data?.recentNewStocks?.length || 0,
     };
     console.log(`[home-ipo] current 刷新成功: updatedAt=${rebuilt.meta.updatedAt}, counts=${JSON.stringify(counts)}, forceRefresh=${forceRefresh}`);
     return {
@@ -4473,6 +4527,10 @@ app.get('/api/ipo/current', async (req, res) => {
       subscribingCount: subscribing.length,
       listingSoonCount: listingSoon.length,
       recentListedCount: recentListed.length,
+      todayGreyMarketCount: current.data?.todayGreyMarket?.length || 0,
+      todayListedCount: current.data?.todayListed?.length || 0,
+      hearingPassedCount: current.data?.hearingPassed?.length || 0,
+      recentNewStocksCount: current.data?.recentNewStocks?.length || 0,
     };
     const summarizeCurrentItem = (item) => item ? ({
       code: item.code || '--',
@@ -4487,6 +4545,9 @@ app.get('/api/ipo/current', async (req, res) => {
       subscriptionMultiple: item.subscriptionMultiple ?? '--',
       allotmentRate: item.allotmentRate ?? '--',
       firstDayChangePct: item.firstDayChangePct ?? '--',
+      firstDayOpen: item.firstDayOpen ?? '--',
+      firstDayClose: item.firstDayClose ?? '--',
+      lotProfit: item.lotProfit ?? '--',
     }) : null;
     console.log(`[ipo/current] summary fromCache=${current.fromCache}, stale=${current.stale}, forceRefresh=${forceRefresh}, counts=${JSON.stringify(counts)}, samples=${JSON.stringify({
       subscribingFirst: summarizeCurrentItem(subscribing[0]),

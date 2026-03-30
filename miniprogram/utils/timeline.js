@@ -19,8 +19,12 @@ function normalizeText(value, fallback = '') {
 
 function buildGroups(summary = {}) {
   return {
+    todayGreyMarket: Array.isArray(summary.todayGreyMarket) ? summary.todayGreyMarket : [],
+    todayListed: Array.isArray(summary.todayListed) ? summary.todayListed : [],
     subscribing: Array.isArray(summary.subscribing) ? summary.subscribing : [],
     listingSoon: Array.isArray(summary.listingSoon) ? summary.listingSoon : [],
+    hearingPassed: Array.isArray(summary.hearingPassed) ? summary.hearingPassed : [],
+    recentNewStocks: Array.isArray(summary.recentNewStocks) ? summary.recentNewStocks : [],
     recentListed: Array.isArray(summary.recentListed) ? summary.recentListed : [],
   };
 }

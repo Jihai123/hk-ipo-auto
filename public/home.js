@@ -17,8 +17,12 @@
   }
 
   const STATUS_LABEL_MAP = {
+    todayGreyMarket: '今日暗盘',
+    todayListed: '今日上市',
     subscribing: '招股中',
-    listingSoon: '待上市',
+    listingSoon: '即将上市',
+    hearingPassed: '申请上市（通过聆讯）',
+    recentNewStocks: '近期新股信息',
     recentListed: '近期上市',
   };
 
@@ -42,6 +46,13 @@
       subscriptionMultiple: item.subscriptionMultiple ?? '--',
       allotmentRate: item.allotmentRate ?? '--',
       firstDayChangePct: item.firstDayChangePct ?? '--',
+      firstDayOpen: item.firstDayOpen ?? '--',
+      firstDayClose: item.firstDayClose ?? '--',
+      lotProfit: item.lotProfit ?? '--',
+      boardLot: item.boardLot ?? '--',
+      entryFee: item.entryFee ?? '--',
+      currency: item.currency ?? '--',
+      statusText: item.statusText ?? '--',
     };
   }
 
@@ -86,8 +97,12 @@
   function getCurrentData(data) {
     if (data?.data) return data.data;
     return {
+      todayGreyMarket: data?.todayGreyMarket || [],
+      todayListed: data?.todayListed || [],
       subscribing: data?.subscribing || [],
       listingSoon: data?.coming || [],
+      hearingPassed: data?.hearingPassed || [],
+      recentNewStocks: data?.recentNewStocks || [],
       recentListed: data?.listed || [],
     };
   }
@@ -186,7 +201,51 @@
       const subscriptionMultiple = ipo.subscriptionMultiple ?? fallback;
       const allotmentRate = ipo.allotmentRate ?? fallback;
       const change = getChangeDisplay(ipo.firstDayChangePct);
+      const firstDayOpen = ipo.firstDayOpen ?? fallback;
+      const firstDayClose = ipo.firstDayClose ?? fallback;
+      const lotProfit = ipo.lotProfit ?? fallback;
+      const boardLot = ipo.boardLot ?? ipo.lotSize ?? fallback;
+      const entryFee = ipo.entryFee ?? ipo.lotAmount ?? fallback;
+      const currency = ipo.currency ?? fallback;
+      const statusText = ipo.statusText || getStatusLabel(ipo.status, mode);
       const status = escapeHtml(getStatusLabel(ipo.status, mode));
+
+      if (mode === 'todayGreyMarket') {
+        return `
+          <div class="home-ipo-row">
+            <div class="home-stock-title">
+              <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+              <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+            </div>
+            <div class="home-row-sub">${escapeHtml(statusText)} · 上市日 ${escapeHtml(listing)}</div>
+            <div class="home-row-metric">货币 <span class="home-num">${escapeHtml(String(currency))}</span> · 上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+            <div class="home-row-metric">每手 <span class="home-num">${escapeHtml(String(boardLot))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(entryFee))}</span></div>
+          </div>
+        `;
+      }
+
+      if (mode === 'todayListed') {
+        return `
+          <div class="home-ipo-row home-result-row">
+            <div class="home-result-main">
+              <div class="home-stock-title home-stock-title-strong">
+                <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+                <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+              </div>
+              <div class="home-row-sub">今日上市 · 上市日 ${escapeHtml(listing)}</div>
+              <div class="home-recent-metrics">
+                <div class="home-recent-metric"><span>开盘价</span><strong class="home-num">${escapeHtml(String(firstDayOpen))}</strong></div>
+                <div class="home-recent-metric"><span>收盘价</span><strong class="home-num">${escapeHtml(String(firstDayClose))}</strong></div>
+                <div class="home-recent-metric"><span>一手收益</span><strong class="home-num">${escapeHtml(String(lotProfit))}</strong></div>
+              </div>
+            </div>
+            <div class="home-result-change ${change.className}" style="color:${change.color};">
+              <div class="home-result-label">首日升跌</div>
+              <div class="home-result-value">${escapeHtml(change.arrow)} ${escapeHtml(change.text)}</div>
+            </div>
+          </div>
+        `;
+      }
 
       if (mode === 'recentListed') {
         return `
@@ -243,6 +302,39 @@
         `;
       }
 
+      if (mode === 'hearingPassed') {
+        return `
+          <div class="home-ipo-row">
+            <div class="home-stock-title">
+              <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+              <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+            </div>
+            <div class="home-row-sub">申请上市（通过聆讯） · 上市日 ${escapeHtml(listing)}</div>
+          </div>
+        `;
+      }
+
+      if (mode === 'recentNewStocks') {
+        return `
+          <div class="home-ipo-row home-result-row">
+            <div class="home-result-main">
+              <div class="home-stock-title home-stock-title-strong">
+                <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
+                <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
+              </div>
+              <div class="home-row-sub">近期新股信息 · 上市日 ${escapeHtml(listing)}</div>
+              <div class="home-listing-price">货币 <span class="home-num">${escapeHtml(String(currency))}</span> · 上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
+              <div class="home-row-metric">每手 <span class="home-num">${escapeHtml(String(boardLot))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(entryFee))}</span></div>
+              <div class="home-recent-metrics">
+                <div class="home-recent-metric"><span>认购倍数</span><strong class="home-num">${escapeHtml(String(subscriptionMultiple))}</strong></div>
+                <div class="home-recent-metric"><span>一手中签率</span><strong class="home-num">${escapeHtml(String(allotmentRate))}${allotmentRate === fallback ? '' : '%'}</strong></div>
+                <div class="home-recent-metric"><span>首日表现</span><strong class="home-num">${escapeHtml(change.text)}</strong></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="home-ipo-row">
           <div class="home-stock-title">
@@ -259,6 +351,8 @@
     const count = timelineItems.length;
     const emptyText = mode === 'listingSoon'
       ? '<div class="home-empty-state-box"><div class="home-empty-icon">🕒</div><div class="home-empty-title">暂无待上市新股</div></div>'
+      : mode === 'hearingPassed'
+        ? '<div style="padding:12px 0;color:var(--color-text-muted);font-size:13px;">当前无通过聆讯项目</div>'
       : '<div style="padding:12px 0;color:var(--color-text-muted);font-size:13px;">暂无数据</div>';
 
     return `
@@ -275,9 +369,12 @@
     console.log(`[home.js] renderTimeline groups: subscribingFirst=${JSON.stringify(summarizeItem(data?.subscribing?.[0]))}, listingSoonFirst=${JSON.stringify(summarizeItem(data?.listingSoon?.[0]))}, recentListedFirst=${JSON.stringify(summarizeItem(data?.recentListed?.[0]))}`);
 
     container.innerHTML = [
+      timelineCard('今日暗盘', data.todayGreyMarket, 'todayGreyMarket'),
+      timelineCard('今日上市', data.todayListed, 'todayListed'),
       timelineCard('招股中', data.subscribing, 'subscribing'),
-      timelineCard('待上市', data.listingSoon, 'listingSoon'),
-      timelineCard('近期上市', data.recentListed, 'recentListed'),
+      timelineCard('即将上市', data.listingSoon, 'listingSoon'),
+      timelineCard('申请上市（通过聆讯）', data.hearingPassed, 'hearingPassed'),
+      timelineCard('近期新股信息', data.recentNewStocks, 'recentNewStocks'),
     ].join('');
   }
 
@@ -309,12 +406,15 @@
       const json = await response.json();
       const currentData = getCurrentData(json);
       console.log(`[home.js] /api/ipo/current loaded: counts=${JSON.stringify({
+        todayGreyMarketCount: currentData?.todayGreyMarket?.length || 0,
+        todayListedCount: currentData?.todayListed?.length || 0,
         subscribingCount: currentData?.subscribing?.length || 0,
         listingSoonCount: currentData?.listingSoon?.length || 0,
-        recentListedCount: currentData?.recentListed?.length || 0,
+        hearingPassedCount: currentData?.hearingPassed?.length || 0,
+        recentNewStocksCount: currentData?.recentNewStocks?.length || 0,
       })}, sample=${JSON.stringify({
-        subscribingFirst: summarizeItem(currentData?.subscribing?.[0]),
-        recentListedFirst: summarizeItem(currentData?.recentListed?.[0]),
+        todayGreyMarketFirst: summarizeItem(currentData?.todayGreyMarket?.[0]),
+        todayListedFirst: summarizeItem(currentData?.todayListed?.[0]),
       })}`);
       renderTimeline(currentData);
     } catch (err) {
