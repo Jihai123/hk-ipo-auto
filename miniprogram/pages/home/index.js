@@ -1,4 +1,5 @@
 const { fetchHome } = require('../../services/home');
+const { fetchTimelineCurrent } = require('../../services/timeline');
 const {
   sanitizeCodeInput,
   normalizeStockCode,
@@ -28,8 +29,12 @@ function getMainRating(score = 0) {
 }
 
 function getStatusMeta(status = '') {
+  if (status === 'todayGreyMarket') return { text: '今日暗盘', className: 'status-soon' };
+  if (status === 'todayListed') return { text: '今日上市', className: 'status-listed' };
   if (status === 'subscribing') return { text: '招股中', className: 'status-sub' };
   if (status === 'listingSoon') return { text: '待上市', className: 'status-soon' };
+  if (status === 'hearingPassed') return { text: '通过聆讯', className: 'status-soon' };
+  if (status === 'recentNewStocks') return { text: '近期新股信息', className: 'status-listed' };
   if (status === 'recentListed') return { text: '已上市', className: 'status-listed' };
   return { text: '状态待更新', className: 'status-unknown' };
 }
@@ -85,8 +90,12 @@ function mapSentiment(market = {}) {
 
 function buildStatusMap(timelineSummary = {}) {
   const map = {};
+  (timelineSummary.todayGreyMarket || []).forEach((item) => { if (item.code) map[item.code] = 'todayGreyMarket'; });
+  (timelineSummary.todayListed || []).forEach((item) => { if (item.code) map[item.code] = 'todayListed'; });
   (timelineSummary.subscribing || []).forEach((item) => { if (item.code) map[item.code] = 'subscribing'; });
   (timelineSummary.listingSoon || []).forEach((item) => { if (item.code) map[item.code] = 'listingSoon'; });
+  (timelineSummary.hearingPassed || []).forEach((item) => { if (item.code) map[item.code] = 'hearingPassed'; });
+  (timelineSummary.recentNewStocks || []).forEach((item) => { if (item.code) map[item.code] = 'recentNewStocks'; });
   (timelineSummary.recentListed || []).forEach((item) => { if (item.code) map[item.code] = 'recentListed'; });
   return map;
 }
@@ -109,9 +118,12 @@ Page({
     topRecommendations: [],
     recentPerformance: [],
     windowGroups: {
+      todayGreyMarket: [],
+      todayListed: [],
       subscribing: [],
       listingSoon: [],
-      recentListed: [],
+      hearingPassed: [],
+      recentNewStocks: [],
     },
     marketSentiment: {
       text: '中性',
@@ -149,7 +161,8 @@ Page({
         throw new Error(res && res.error && res.error.message ? res.error.message : 'HOME_API_ERROR');
       }
 
-      const timelineSummary = res.timelineSummary || {};
+      const timelineRes = await fetchTimelineCurrent();
+      const timelineSummary = (timelineRes && timelineRes.data) || res.timelineSummary || {};
       const statusMap = buildStatusMap(timelineSummary);
 
       const topRecommendations = (Array.isArray(res.topList) ? res.topList : [])
@@ -163,15 +176,18 @@ Page({
       this.setData({
         loading: false,
         topRecommendations,
-        recentPerformance: (timelineSummary.recentListed || [])
+        recentPerformance: (timelineSummary.recentNewStocks || timelineSummary.recentListed || [])
           .filter(isRecentListedPerformance)
           .sort(compareByListingDateDesc)
           .map(normalizeRecentListedPerformance)
           .slice(0, 3),
         windowGroups: {
+          todayGreyMarket: (timelineSummary.todayGreyMarket || []).map(normalizeTimelineItem).slice(0, 3),
+          todayListed: (timelineSummary.todayListed || []).map(normalizeTimelineItem).slice(0, 3),
           subscribing: (timelineSummary.subscribing || []).map(normalizeTimelineItem).slice(0, 3),
           listingSoon: (timelineSummary.listingSoon || []).map(normalizeTimelineItem).slice(0, 3),
-          recentListed: (timelineSummary.recentListed || []).map(normalizeTimelineItem).slice(0, 3),
+          hearingPassed: (timelineSummary.hearingPassed || []).map(normalizeTimelineItem).slice(0, 3),
+          recentNewStocks: (timelineSummary.recentNewStocks || []).map(normalizeTimelineItem).slice(0, 3),
         },
         marketSentiment,
         heroConclusion,

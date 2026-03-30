@@ -32,6 +32,48 @@
 
   <block wx:else>
     <view class="group card" wx:if="{{viewMode === 'timeline'}}">
+      <view class="group-title">今日暗盘</view>
+      <view class="empty" wx:if="{{groups.todayGreyMarket.length === 0}}">暂无数据</view>
+      <view class="perf-item" wx:for="{{groups.todayGreyMarket}}" wx:key="code" bindtap="onTapStock" data-code="{{item.code}}">
+        <view class="perf-head">
+          <text class="perf-name">{{item.name}}</text>
+          <text class="perf-code">{{item.code}}</text>
+        </view>
+        <view class="perf-row">
+          <text class="perf-label">状态</text>
+          <text class="perf-value">{{item.statusText || '--'}}</text>
+        </view>
+        <view class="perf-row">
+          <text class="perf-label">上市日期</text>
+          <text class="perf-value">{{item.listingDate || '--'}}</text>
+        </view>
+        <view class="perf-row" wx:for="{{item.metrics}}" wx:key="label">
+          <text class="perf-label">{{item.label}}</text>
+          <text class="perf-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="group card" wx:if="{{viewMode === 'timeline'}}">
+      <view class="group-title">今日上市</view>
+      <view class="empty" wx:if="{{groups.todayListed.length === 0}}">暂无数据</view>
+      <view class="perf-item" wx:for="{{groups.todayListed}}" wx:key="code" bindtap="onTapStock" data-code="{{item.code}}">
+        <view class="perf-head">
+          <text class="perf-name">{{item.name}}</text>
+          <text class="perf-code">{{item.code}}</text>
+        </view>
+        <view class="perf-row">
+          <text class="perf-label">上市日期</text>
+          <text class="perf-value">{{item.listingDate || '--'}}</text>
+        </view>
+        <view class="perf-row" wx:for="{{item.metrics}}" wx:key="label">
+          <text class="perf-label">{{item.label}}</text>
+          <text class="perf-value">{{item.value}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="group card" wx:if="{{viewMode === 'timeline'}}">
       <view class="group-title">招股中</view>
       <view class="empty" wx:if="{{groups.subscribing.length === 0}}">暂无数据</view>
       <timeline-stock-card
@@ -44,7 +86,7 @@
     </view>
 
     <view class="group card" wx:if="{{viewMode === 'timeline'}}">
-      <view class="group-title">待上市</view>
+      <view class="group-title">即将上市</view>
       <view class="empty" wx:if="{{groups.listingSoon.length === 0}}">暂无数据</view>
       <timeline-stock-card
         wx:for="{{groups.listingSoon}}"
@@ -56,15 +98,34 @@
     </view>
 
     <view class="group card" wx:if="{{viewMode === 'timeline'}}">
-      <view class="group-title">近期上市</view>
-      <view class="empty" wx:if="{{groups.recentListed.length === 0}}">暂无数据</view>
+      <view class="group-title">申请上市（通过聆讯）</view>
+      <view class="empty" wx:if="{{groups.hearingPassed.length === 0}}">当前无通过聆讯项目</view>
       <timeline-stock-card
-        wx:for="{{groups.recentListed}}"
+        wx:for="{{groups.hearingPassed}}"
         wx:key="code"
         item="{{item}}"
-        statusLabel="近期上市"
+        statusLabel="通过聆讯"
         bindtapitem="onTapStock"
       />
+    </view>
+
+    <view class="group card" wx:if="{{viewMode === 'timeline'}}">
+      <view class="group-title">近期新股信息</view>
+      <view class="empty" wx:if="{{groups.recentNewStocks.length === 0}}">暂无数据</view>
+      <view class="perf-item" wx:for="{{groups.recentNewStocks}}" wx:key="code" bindtap="onTapStock" data-code="{{item.code}}">
+        <view class="perf-head">
+          <text class="perf-name">{{item.name}}</text>
+          <text class="perf-code">{{item.code}}</text>
+        </view>
+        <view class="perf-row">
+          <text class="perf-label">上市日期</text>
+          <text class="perf-value">{{item.listingDate || '--'}}</text>
+        </view>
+        <view class="perf-row" wx:for="{{item.metrics}}" wx:key="label">
+          <text class="perf-label">{{item.label}}</text>
+          <text class="perf-value">{{item.value}}</text>
+        </view>
+      </view>
     </view>
 
     <view class="group card" wx:if="{{viewMode === 'recentPerformance'}}">

@@ -102,6 +102,42 @@
       </view>
 
       <view class="sub-section">
+        <view class="sub-title">今日暗盘</view>
+        <block wx:if="{{windowGroups.todayGreyMarket.length > 0}}">
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.todayGreyMarket}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
+            <view class="window-row">
+              <view class="window-left">
+                <text class="stock-name">{{item.nameText}}</text>
+                <text class="stock-code">{{item.codeText}}</text>
+              </view>
+              <text class="meta-text">{{item.listingDateText}}</text>
+            </view>
+          </view>
+        </block>
+        <view wx:else class="card window-empty-card">
+          <text class="empty-text">当前无今日暗盘项目</text>
+        </view>
+      </view>
+
+      <view class="sub-section">
+        <view class="sub-title">今日上市</view>
+        <block wx:if="{{windowGroups.todayListed.length > 0}}">
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.todayListed}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
+            <view class="window-row">
+              <view class="window-left">
+                <text class="stock-name">{{item.nameText}}</text>
+                <text class="stock-code">{{item.codeText}}</text>
+              </view>
+              <text class="meta-text">{{item.listingDateText}}</text>
+            </view>
+          </view>
+        </block>
+        <view wx:else class="card window-empty-card">
+          <text class="empty-text">当前无今日上市项目</text>
+        </view>
+      </view>
+
+      <view class="sub-section">
         <view class="sub-title">招股中</view>
         <block wx:if="{{windowGroups.subscribing.length > 0}}">
           <view class="card window-item-card card-clickable" wx:for="{{windowGroups.subscribing}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
@@ -120,7 +156,7 @@
       </view>
 
       <view class="sub-section">
-        <view class="sub-title">待上市</view>
+        <view class="sub-title">即将上市</view>
         <block wx:if="{{windowGroups.listingSoon.length > 0}}">
           <view class="card window-item-card card-clickable" wx:for="{{windowGroups.listingSoon}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
             <view class="window-row">
@@ -133,14 +169,14 @@
           </view>
         </block>
         <view wx:else class="card window-empty-card">
-          <text class="empty-text">当前无待上市项目</text>
+          <text class="empty-text">当前无即将上市项目</text>
         </view>
       </view>
 
       <view class="sub-section">
-        <view class="sub-title">近期上市</view>
-        <block wx:if="{{windowGroups.recentListed.length > 0}}">
-          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.recentListed}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
+        <view class="sub-title">申请上市（通过聆讯）</view>
+        <block wx:if="{{windowGroups.hearingPassed.length > 0}}">
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.hearingPassed}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
             <view class="window-row">
               <view class="window-left">
                 <text class="stock-name">{{item.nameText}}</text>
@@ -151,7 +187,25 @@
           </view>
         </block>
         <view wx:else class="card window-empty-card">
-          <text class="empty-text">当前无近期上市项目</text>
+          <text class="empty-text">当前无通过聆讯项目</text>
+        </view>
+      </view>
+
+      <view class="sub-section">
+        <view class="sub-title">近期新股信息</view>
+        <block wx:if="{{windowGroups.recentNewStocks.length > 0}}">
+          <view class="card window-item-card card-clickable" wx:for="{{windowGroups.recentNewStocks}}" wx:key="code" hover-class="card-hover" hover-stay-time="80" bindtap="onTapWindowCard" data-code="{{item.code}}">
+            <view class="window-row">
+              <view class="window-left">
+                <text class="stock-name">{{item.nameText}}</text>
+                <text class="stock-code">{{item.codeText}}</text>
+              </view>
+              <text class="meta-text">{{item.listingDateText}}</text>
+            </view>
+          </view>
+        </block>
+        <view wx:else class="card window-empty-card">
+          <text class="empty-text">当前无近期新股信息</text>
         </view>
       </view>
     </view>

@@ -12,6 +12,8 @@ const STATUS_MAP = {
   subscribing: 'subscribing',
   listingSoon: 'listingSoon',
   recentListed: 'recentListed',
+  todayGreyMarket: 'todayGreyMarket',
+  todayListed: 'todayListed',
 };
 
 const MAX_NAME_LENGTH = 40;
@@ -104,6 +106,15 @@ function parsePercentNumber(raw = '') {
   return Number.isNaN(value) ? null : value;
 }
 
+function parseNumeric(raw = '') {
+  const text = String(raw).replace(/,/g, '').trim();
+  if (!text) return null;
+  const m = text.match(/([+-]?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const value = parseFloat(m[1]);
+  return Number.isNaN(value) ? null : value;
+}
+
 function sanitizeName(raw = '') {
   const text = String(raw).replace(/\s+/g, ' ').trim();
   if (!text) return null;
@@ -151,6 +162,9 @@ function parseRowByFlexibleMap(columns = [], map = {}) {
     subscriptionMultiple: getByIndex(columns, map.subscriptionMultiple),
     allotmentRate: getByIndex(columns, map.allotmentRate),
     firstDayChangePct: getByIndex(columns, map.firstDayChangePct),
+    firstDayOpen: getByIndex(columns, map.firstDayOpen),
+    firstDayClose: getByIndex(columns, map.firstDayClose),
+    lotProfit: getByIndex(columns, map.lotProfit),
     entryFee: getByIndex(columns, map.entryFee),
   };
 }
@@ -186,6 +200,9 @@ function normalizeListingSoonItem(item) {
     currency: String(item.currency || '').trim() || null,
     lotSize: parseLotSize(item.lotSize),
     lotAmount: parseLotAmount(item.entryFee || item.lotAmount),
+    boardLot: parseLotSize(item.lotSize),
+    entryFee: parseLotAmount(item.entryFee || item.lotAmount),
+    offerPrice: parsePriceRange(item.offerPriceRaw || item.offerPrice).offerPrice,
     offerEndDate: normalizeDateOrRaw(item.offerEndDate),
   };
 }
@@ -201,12 +218,72 @@ function normalizeRecentListedItem(item) {
     status: STATUS_MAP.recentListed,
     listingDate: normalizeDateOrRaw(item.listingDate),
     offerPrice: parsePriceRange(item.offerPriceRaw || item.offerPrice).offerPrice,
+    currency: String(item.currency || '').trim() || null,
     subscriptionMultiple: parseLotAmount(item.subscriptionMultiple),
     allotmentRate: parsePercentNumber(item.allotmentRate),
     firstDayChangePct: parsePercentNumber(item.firstDayChangePct),
+    firstDayOpen: parseNumeric(item.firstDayOpen),
+    firstDayClose: parseNumeric(item.firstDayClose),
+    lotProfit: parseNumeric(item.lotProfit),
     lotSize: null,
     lotAmount: parseLotAmount(item.lotAmount),
+    boardLot: null,
+    entryFee: parseLotAmount(item.lotAmount),
   };
+}
+
+function normalizeGreyMarketItem(item) {
+  const code = normalizeCode(item.code);
+  const name = sanitizeName(item.name);
+  if (!code || !name) return null;
+
+  return {
+    code,
+    name,
+    status: STATUS_MAP.todayGreyMarket,
+    statusText: '暗盘/待上市',
+    listingDate: normalizeDateOrRaw(item.listingDate),
+    currency: String(item.currency || '').trim() || null,
+    offerPrice: parsePriceRange(item.offerPriceRaw || item.offerPrice).offerPrice,
+    boardLot: parseLotSize(item.lotSize),
+    entryFee: parseLotAmount(item.entryFee || item.lotAmount),
+    lotSize: parseLotSize(item.lotSize),
+    lotAmount: parseLotAmount(item.entryFee || item.lotAmount),
+  };
+}
+
+function toDateOnly(input) {
+  if (!input) return null;
+  const text = String(input).trim();
+  if (!text) return null;
+  const normalized = normalizeDate(text);
+  if (normalized) return normalized;
+  return null;
+}
+
+function getTodayInHK() {
+  const now = new Date();
+  const hk = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }));
+  const year = hk.getFullYear();
+  const month = String(hk.getMonth() + 1).padStart(2, '0');
+  const day = String(hk.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildTodayListed(items = []) {
+  const today = getTodayInHK();
+  return items
+    .filter(item => toDateOnly(item.listingDate) === today)
+    .map(item => ({
+      code: item.code,
+      name: item.name,
+      status: STATUS_MAP.todayListed,
+      listingDate: item.listingDate || null,
+      firstDayOpen: item.firstDayOpen ?? null,
+      firstDayClose: item.firstDayClose ?? null,
+      firstDayChangePct: item.firstDayChangePct ?? null,
+      lotProfit: item.lotProfit ?? null,
+    }));
 }
 
 function normalizeItemByStatus(item, status) {
@@ -319,6 +396,9 @@ function resolveColumnMapByHeaders(headers = []) {
     subscriptionMultiple: findHeaderIndex(headers, ['认购倍数', '認購倍數']),
     allotmentRate: findHeaderIndex(headers, ['一手中签率', '一手中籤率']),
     firstDayChangePct: findHeaderIndex(headers, ['首日升跌', '累积升跌', '累計升跌']),
+    firstDayOpen: findHeaderIndex(headers, ['首日开市价', '首日開市價', '开市价', '開市價', '开盘价', '開盤價']),
+    firstDayClose: findHeaderIndex(headers, ['按盘价', '按盤價', '收盘价', '收盤價', '现价', '現價']),
+    lotProfit: findHeaderIndex(headers, ['一手收益', '每手收益', '每手赚蚀', '每手賺蝕', '每手盈利']),
   };
 }
 
@@ -356,6 +436,9 @@ function parseTableByMap($, $table, map, status, opts = {}) {
       subscriptionMultiple: getCol(cols, map.subscriptionMultiple),
       allotmentRate: getCol(cols, map.allotmentRate),
       firstDayChangePct: getCol(cols, map.firstDayChangePct),
+      firstDayOpen: getCol(cols, map.firstDayOpen),
+      firstDayClose: getCol(cols, map.firstDayClose),
+      lotProfit: getCol(cols, map.lotProfit),
       entryFee: getCol(cols, map.lotAmount),
     };
 
@@ -413,11 +496,7 @@ function parseGreyMarketRecentTable($, tableInfo) {
   if (!tableInfo || !tableInfo.tableNode || isNoDataTable($, tableInfo.tableNode)) return [];
   const map = resolveColumnMapByHeaders(tableInfo.headers);
   const parsed = parseTableByMap($, tableInfo.tableNode, map, TABLE_TYPE.listingSoon, { keepOfferPriceRaw: true });
-  const converted = parsed.map(item => ({
-    ...item,
-    status: STATUS_MAP.recentListed,
-  }));
-  return converted.map(item => validateItem(item, 'recent')).filter(Boolean);
+  return parsed.map(item => normalizeGreyMarketItem(item)).filter(Boolean);
 }
 
 function mergeRecentListed(greyMarketRecent = [], newsTable = []) {
@@ -442,9 +521,14 @@ function mergeRecentListed(greyMarketRecent = [], newsTable = []) {
       subscriptionMultiple: existing.subscriptionMultiple || item.subscriptionMultiple || null,
       allotmentRate: existing.allotmentRate || item.allotmentRate || null,
       firstDayChangePct: existing.firstDayChangePct || item.firstDayChangePct || null,
+      firstDayOpen: existing.firstDayOpen || item.firstDayOpen || null,
+      firstDayClose: existing.firstDayClose || item.firstDayClose || null,
+      lotProfit: existing.lotProfit || item.lotProfit || null,
       offerPrice: existing.offerPrice || item.offerPrice || null,
       lotSize: existing.lotSize || item.lotSize || null,
       lotAmount: existing.lotAmount || item.lotAmount || null,
+      boardLot: existing.boardLot || item.boardLot || null,
+      entryFee: existing.entryFee || item.entryFee || null,
     });
   }
 
@@ -494,6 +578,10 @@ async function crawlIPOListFromETNet() {
     subscribing: [],
     listingSoon: [],
     recentListed: [],
+    todayGreyMarket: [],
+    todayListed: [],
+    hearingPassed: [], // ETNet ci_ipo.php 当前页面未见稳定“通过聆讯”分区，先保留空数组占位
+    recentNewStocks: [],
     source: 'etnet',
     fetchedAt: new Date().toISOString(),
   };
@@ -523,6 +611,29 @@ async function crawlIPOListFromETNet() {
   result.subscribing = uniqByCode(subscribing);
   result.listingSoon = uniqByCode(listingSoon);
   result.recentListed = mergeRecentListed(greyMarketRecent, newsRecent).slice(0, RECENT_LIST_LIMIT);
+  result.todayGreyMarket = uniqByCode(greyMarketRecent).map(item => ({
+    code: item.code,
+    name: item.name,
+    statusText: item.statusText || '暗盘/待上市',
+    listingDate: item.listingDate || null,
+    currency: item.currency || null,
+    offerPrice: item.offerPrice ?? null,
+    boardLot: item.boardLot ?? null,
+    entryFee: item.entryFee ?? null,
+  }));
+  result.recentNewStocks = result.recentListed.map(item => ({
+    code: item.code,
+    name: item.name,
+    listingDate: item.listingDate || null,
+    currency: item.currency || null,
+    offerPrice: item.offerPrice ?? null,
+    boardLot: item.boardLot ?? item.lotSize ?? null,
+    entryFee: item.entryFee ?? item.lotAmount ?? null,
+    subscriptionMultiple: item.subscriptionMultiple ?? null,
+    allotmentRate: item.allotmentRate ?? null,
+    firstDayChangePct: item.firstDayChangePct ?? null,
+  }));
+  result.todayListed = buildTodayListed(result.recentListed);
 
   if (IPO_DEBUG_CODES) {
     console.log('[IPO_DEBUG]', {
