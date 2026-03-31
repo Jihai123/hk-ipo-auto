@@ -433,6 +433,10 @@ function getRowsLogPrefix(moduleType) {
   return null;
 }
 
+function logRowsDebug(prefix, payload) {
+  console.log(`${prefix} ${JSON.stringify(payload, null, 2)}`);
+}
+
 function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
   const code = normalizeCode(raw.code);
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
@@ -547,7 +551,7 @@ function parseModuleTable(tableInfo, moduleType) {
     emptyStateRows: 0,
   };
   if (enableRowsLog) {
-    console.log(rowsLogPrefix, {
+    logRowsDebug(rowsLogPrefix, {
       stage: 'tableSelected',
       tableIndex: tableInfo.tableIndex ?? null,
       rowsCount: Math.max((tableInfo.dataRows?.length || 0) - 1, 0),
@@ -557,7 +561,7 @@ function parseModuleTable(tableInfo, moduleType) {
       columnMap: map,
     });
     if (moduleType === TABLE_TYPE.recentNewStocks) {
-      console.log(rowsLogPrefix, {
+      logRowsDebug(rowsLogPrefix, {
         stage: 'headerAliasMapping',
         mapping: {
           每手股数: map.lotSize,
@@ -580,7 +584,7 @@ function parseModuleTable(tableInfo, moduleType) {
     const rowText = cells.join(' ');
 
     if (enableRowsLog) {
-      console.log(rowsLogPrefix, {
+      logRowsDebug(rowsLogPrefix, {
         stage: 'rowRaw',
         rowIndex,
         rawText: rowText || null,
@@ -595,7 +599,7 @@ function parseModuleTable(tableInfo, moduleType) {
         filterStats.obviousNoiseRow += 1;
       }
       if (enableRowsLog) {
-        console.log(rowsLogPrefix, {
+        logRowsDebug(rowsLogPrefix, {
           stage: 'rowFiltered',
           rowIndex,
           kept: false,
@@ -667,7 +671,7 @@ function parseModuleTable(tableInfo, moduleType) {
                   : (parseNumeric(raw.entryFee) === null ? 'parseNumberFailed' : null))),
       } : null;
 
-      console.log(rowsLogPrefix, {
+      logRowsDebug(rowsLogPrefix, {
         stage: 'rowParsed',
         rowIndex,
         extracted: rowExtracted,
