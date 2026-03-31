@@ -21,7 +21,6 @@ const TABLE_TYPE = {
 
 const REQUIRED_LISTING_DATE_MODULES = new Set([
   TABLE_TYPE.todayGreyMarket,
-  TABLE_TYPE.todayListed,
   TABLE_TYPE.subscribing,
   TABLE_TYPE.listingSoon,
   TABLE_TYPE.recentNewStocks,
@@ -34,7 +33,7 @@ const HEADER_ALIASES = {
   offerEndDate: ['截止日期', '截止认购日', '截止認購日', '招股截止', '认购截止', '認購截止'],
   currency: ['货币', '貨幣', '币别', '幣別'],
   offerPrice: ['上市价', '上市價', '招股价', '招股價', '发售价', '發售價', '定价', '定價'],
-  lotSize: ['每手股数', '每手', '每手股數', 'lotsize'],
+  lotSize: ['每手股数', '每手', '每手股數', 'lotsize', '稳中一手', '穩中一手'],
   entryFee: ['入场费', '入場費', '每手入场费', '每手入場費', 'lotamount', '每手金额'],
   subscriptionMultiple: ['认购倍数', '認購倍數', '超额认购', '超額認購'],
   allotmentRate: ['一手中签率', '一手中籤率', '中签率', '中籤率', '分配比率'],
@@ -175,8 +174,8 @@ function findHeaderIndex(headers = [], aliases = []) {
   return headers.findIndex(h => aliases.some(alias => h.includes(normalizeHeaderKey(alias))));
 }
 
-function resolveColumnMap(headers = []) {
-  return {
+function resolveColumnMap(headers = [], moduleType = '') {
+  const baseMap = {
     code: findHeaderIndex(headers, HEADER_ALIASES.code),
     name: findHeaderIndex(headers, HEADER_ALIASES.name),
     listingDate: findHeaderIndex(headers, HEADER_ALIASES.listingDate),
@@ -193,6 +192,30 @@ function resolveColumnMap(headers = []) {
     lotProfit: findHeaderIndex(headers, HEADER_ALIASES.lotProfit),
     statusText: findHeaderIndex(headers, HEADER_ALIASES.statusText),
   };
+
+  if (moduleType === TABLE_TYPE.todayListed) {
+    return {
+      ...baseMap,
+      code: findHeaderIndex(headers, ['代号']),
+      name: findHeaderIndex(headers, ['名称']),
+      firstDayClose: findHeaderIndex(headers, ['按盘价', '按盤價']),
+      offerPrice: findHeaderIndex(headers, ['上市价', '上市價']),
+      firstDayOpen: findHeaderIndex(headers, ['开市价', '開市價']),
+      currency: findHeaderIndex(headers, ['货币', '貨幣']),
+    };
+  }
+
+  if (moduleType === TABLE_TYPE.hearingPassed) {
+    return {
+      ...baseMap,
+      name: findHeaderIndex(headers, ['名称', '名稱']),
+      statusText: findHeaderIndex(headers, ['市场', '市場']),
+      listingDate: -1,
+      code: -1,
+    };
+  }
+
+  return baseMap;
 }
 
 function getNearbyTitleText($, $table) {
@@ -426,6 +449,14 @@ function getCell(cells, idx) {
   return cells[idx];
 }
 
+function getCellByModule(cells, idx, headers, moduleType) {
+  if (moduleType !== TABLE_TYPE.todayListed) return getCell(cells, idx);
+  if (typeof idx !== 'number' || idx < 0) return null;
+  const blankBefore = headers.slice(0, idx).filter(h => !h).length;
+  const adjustedIdx = headers.length > cells.length ? idx - blankBefore : idx;
+  return getCell(cells, adjustedIdx);
+}
+
 function getRowsLogPrefix(moduleType) {
   if (moduleType === TABLE_TYPE.todayListed) return '[IPO][parser][rows][todayListed]';
   if (moduleType === TABLE_TYPE.hearingPassed) return '[IPO][parser][rows][hearingPassed]';
@@ -442,8 +473,10 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
   const listingDate = normalizeDateOrRaw(raw.listingDate);
   const rowText = String(raw.rowText || '').replace(/\s+/g, ' ');
+  const requireCode = moduleType !== TABLE_TYPE.hearingPassed;
+  const requireListingDate = REQUIRED_LISTING_DATE_MODULES.has(moduleType);
 
-  if (!code) {
+  if (requireCode && !code) {
     filterStats.invalidCode += 1;
     if (rowDebug) rowDebug.filterReason = 'invalidCode';
     return null;
@@ -453,7 +486,7 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
     if (rowDebug) rowDebug.filterReason = 'invalidName';
     return null;
   }
-  if (REQUIRED_LISTING_DATE_MODULES.has(moduleType) && isNullLike(listingDate)) {
+  if (requireListingDate && isNullLike(listingDate)) {
     filterStats.invalidListingDate += 1;
     if (rowDebug) rowDebug.filterReason = 'invalidListingDate';
     return null;
@@ -510,10 +543,12 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
   }
 
   if (moduleType === TABLE_TYPE.hearingPassed) {
+    const applicationDate = normalizeDateOrRaw(raw.offerEndDate);
     return {
       code,
       name,
-      listingDate,
+      listingDate: null,
+      offerEndDate: isNullLike(applicationDate) ? null : applicationDate,
       statusText: raw.statusText || parsedStatus || '通过聆讯',
     };
   }
@@ -540,7 +575,7 @@ function parseModuleTable(tableInfo, moduleType) {
 
   const rowsLogPrefix = getRowsLogPrefix(moduleType);
   const enableRowsLog = !!rowsLogPrefix;
-  const map = resolveColumnMap(tableInfo.headers);
+  const map = resolveColumnMap(tableInfo.headers, moduleType);
   const filterStats = {
     module: moduleType,
     totalRows: 0,
@@ -610,22 +645,22 @@ function parseModuleTable(tableInfo, moduleType) {
     }
 
     const raw = {
-      code: getCell(cells, map.code) || cells[0] || null,
-      name: getCell(cells, map.name) || cells[1] || null,
+      code: getCellByModule(cells, map.code, tableInfo.headers, moduleType) || cells[0] || null,
+      name: getCellByModule(cells, map.name, tableInfo.headers, moduleType) || cells[1] || null,
       rowText: cells.join(' | '),
-      listingDate: getCell(cells, map.listingDate),
-      offerEndDate: getCell(cells, map.offerEndDate),
-      currency: getCell(cells, map.currency),
-      offerPrice: getCell(cells, map.offerPrice),
-      lotSize: getCell(cells, map.lotSize),
-      entryFee: getCell(cells, map.entryFee),
-      subscriptionMultiple: getCell(cells, map.subscriptionMultiple),
-      allotmentRate: getCell(cells, map.allotmentRate),
-      firstDayOpen: getCell(cells, map.firstDayOpen),
-      firstDayClose: getCell(cells, map.firstDayClose),
-      firstDayChangePct: getCell(cells, map.firstDayChangePct),
-      lotProfit: getCell(cells, map.lotProfit),
-      statusText: getCell(cells, map.statusText),
+      listingDate: getCellByModule(cells, map.listingDate, tableInfo.headers, moduleType),
+      offerEndDate: getCellByModule(cells, map.offerEndDate, tableInfo.headers, moduleType),
+      currency: getCellByModule(cells, map.currency, tableInfo.headers, moduleType),
+      offerPrice: getCellByModule(cells, map.offerPrice, tableInfo.headers, moduleType),
+      lotSize: getCellByModule(cells, map.lotSize, tableInfo.headers, moduleType),
+      entryFee: getCellByModule(cells, map.entryFee, tableInfo.headers, moduleType),
+      subscriptionMultiple: getCellByModule(cells, map.subscriptionMultiple, tableInfo.headers, moduleType),
+      allotmentRate: getCellByModule(cells, map.allotmentRate, tableInfo.headers, moduleType),
+      firstDayOpen: getCellByModule(cells, map.firstDayOpen, tableInfo.headers, moduleType),
+      firstDayClose: getCellByModule(cells, map.firstDayClose, tableInfo.headers, moduleType),
+      firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
+      lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
+      statusText: getCellByModule(cells, map.statusText, tableInfo.headers, moduleType),
     };
 
     const rowDebug = { filterReason: null };
@@ -685,7 +720,10 @@ function parseModuleTable(tableInfo, moduleType) {
   }
 
   const emptyState = hasEmptyStateText && list.length === 0;
-  return { records: uniqByCode(list), filterStats, matched: true, emptyState };
+  const records = moduleType === TABLE_TYPE.hearingPassed
+    ? uniqByName(list)
+    : uniqByCode(list);
+  return { records, filterStats, matched: true, emptyState };
 }
 
 function parseTodayGreyMarketCard($) {
@@ -733,6 +771,16 @@ function uniqByCode(items = []) {
   return Array.from(map.values());
 }
 
+function uniqByName(items = []) {
+  const map = new Map();
+  for (const item of items) {
+    if (!item || !item.name) continue;
+    const key = `${item.name}|${item.statusText || ''}|${item.offerEndDate || ''}`;
+    if (!map.has(key)) map.set(key, item);
+  }
+  return Array.from(map.values());
+}
+
 async function fetchWithRetry(url, retries = cfg.maxRetries) {
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
@@ -770,6 +818,11 @@ async function crawlIPOListFromETNet() {
     moduleType: TABLE_TYPE.todayListed,
     exact: true,
   });
+  const todayGreyMarketFound = findModuleTableByTitle($, tableLookup, {
+    include: ['今日暗盘', '今日暗盤', '暗盘', '暗盤'],
+    exclude: ['今日上市', '新股信息', '新股資訊'],
+    moduleType: TABLE_TYPE.todayGreyMarket,
+  });
   const subscribingFound = findModuleTableByTitle($, tableLookup, {
     include: ['招股中'],
     moduleType: TABLE_TYPE.subscribing,
@@ -799,22 +852,27 @@ async function crawlIPOListFromETNet() {
     || (!recentNewStocksFound.meta.anchorFound
       ? tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']))
       : null);
+  const todayGreyMarketTable = todayGreyMarketFound.table;
 
   matched.todayListed = !!todayListedTable;
+  matched.todayGreyMarket = !!todayGreyMarketTable;
   matched.subscribing = !!subscribingTable;
   matched.listingSoon = !!listingSoonTable;
   matched.hearingPassed = !!hearingPassedTable;
   matched.recentNewStocks = !!recentNewStocksTable;
 
   const parsed = {
+    todayGreyMarket: parseModuleTable(todayGreyMarketTable, TABLE_TYPE.todayGreyMarket),
     todayListed: parseModuleTable(todayListedTable, TABLE_TYPE.todayListed),
     subscribing: parseModuleTable(subscribingTable, TABLE_TYPE.subscribing),
     listingSoon: parseModuleTable(listingSoonTable, TABLE_TYPE.listingSoon),
     hearingPassed: parseModuleTable(hearingPassedTable, TABLE_TYPE.hearingPassed),
     recentNewStocks: parseModuleTable(recentNewStocksTable, TABLE_TYPE.recentNewStocks),
   };
-  const todayGreyMarket = parseTodayGreyMarketCard($);
-  matched.todayGreyMarket = todayGreyMarket.length > 0;
+  const todayGreyMarket = parsed.todayGreyMarket.records.length > 0
+    ? parsed.todayGreyMarket.records
+    : parseTodayGreyMarketCard($);
+  matched.todayGreyMarket = matched.todayGreyMarket || todayGreyMarket.length > 0;
 
   const recentListed = [...parsed.recentNewStocks.records].slice(0, RECENT_LIST_LIMIT).map(item => ({
     ...item,
