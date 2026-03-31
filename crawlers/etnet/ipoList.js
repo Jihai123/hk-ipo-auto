@@ -236,25 +236,49 @@ function isLikelyDataTable(table = null) {
 function collectCandidateTablesFromAnchor($, $anchor, tableLookup, tableFilter = null, limit = 20) {
   const seen = new Set();
   const candidates = [];
-  let cursor = $anchor;
+  const meta = {
+    anchorFound: !!($anchor && $anchor.length),
+    anchorTag: $anchor?.[0]?.tagName || null,
+    containerFound: false,
+    containerType: null,
+    tablesFoundInContainer: 0,
+  };
+  if (!$anchor || !$anchor.length) return { candidates, meta };
 
-  for (let depth = 0; depth < 6; depth += 1) {
-    const nextTables = cursor.nextAll('table');
-    for (let i = 0; i < nextTables.length; i += 1) {
-      const node = nextTables[i];
-      if (seen.has(node)) continue;
+  const $container = $anchor.closest('.DivFigureBox');
+  if ($container.length) {
+    meta.containerFound = true;
+    meta.containerType = 'DivFigureBox';
+    const primaryTables = $container.find('.DivFigureContent table.figureTable');
+    meta.tablesFoundInContainer = primaryTables.length;
+
+    const acceptNode = (node) => {
+      if (!node || seen.has(node)) return;
       seen.add(node);
       const info = tableLookup.get(node);
-      if (!info || !isLikelyDataTable(info)) continue;
-      if (typeof tableFilter === 'function' && !tableFilter(info)) continue;
+      if (!info || !isLikelyDataTable(info)) return;
+      if (typeof tableFilter === 'function' && !tableFilter(info)) return;
       candidates.push(info);
-      if (candidates.length >= limit) return candidates;
+    };
+
+    primaryTables.each((_, node) => acceptNode(node));
+    if (candidates.length < limit) {
+      $container.find('table').each((_, node) => acceptNode(node));
     }
-    cursor = cursor.parent();
-    if (!cursor || !cursor.length) break;
+  } else {
+    const $fallbackRoot = $anchor.closest('.DivTemplateB,.shadow,.content,.container,section').first();
+    const $tables = $fallbackRoot.length ? $fallbackRoot.find('table') : $anchor.parent().find('table').slice(0, 6);
+    $tables.each((_, node) => {
+      if (seen.has(node)) return;
+      seen.add(node);
+      const info = tableLookup.get(node);
+      if (!info || !isLikelyDataTable(info)) return;
+      if (typeof tableFilter === 'function' && !tableFilter(info)) return;
+      candidates.push(info);
+    });
   }
 
-  return candidates;
+  return { candidates: candidates.slice(0, limit), meta };
 }
 
 function getTableCandidateFeatures(table = null) {
@@ -317,20 +341,38 @@ function findModuleTableByTitle($, tableLookup, options) {
     exclude = [],
     tableFilter = null,
     moduleType = '',
+    exact = false,
   } = options || {};
-  const candidates = $('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a');
+  const candidates = $('div.DivTemplateBHdr,h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a');
   let best = null;
   let bestScore = -1;
   const debugCandidates = [];
+  let selectedMeta = {
+    anchorFound: false,
+    anchorTag: null,
+    containerFound: false,
+    containerType: null,
+    tablesFoundInContainer: 0,
+  };
 
   for (let i = 0; i < candidates.length; i += 1) {
     const el = candidates[i];
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (!text || text.length > 50) continue;
-    if (!include.some(keyword => text.includes(keyword))) continue;
+    const hit = include.some((keyword) => (exact ? text === keyword : text.includes(keyword)));
+    if (!hit) continue;
     if (exclude.some(keyword => text.includes(keyword))) continue;
+    selectedMeta.anchorFound = true;
+    selectedMeta.anchorTag = el.tagName || null;
 
-    const foundTables = collectCandidateTablesFromAnchor($, $(el), tableLookup, tableFilter, moduleType === TABLE_TYPE.recentNewStocks ? 30 : 20);
+    const { candidates: foundTables, meta } = collectCandidateTablesFromAnchor(
+      $,
+      $(el),
+      tableLookup,
+      tableFilter,
+      moduleType === TABLE_TYPE.recentNewStocks ? 30 : 20,
+    );
+    selectedMeta = { ...selectedMeta, ...meta };
     foundTables.forEach((table) => {
       const features = getTableCandidateFeatures(table);
       const score = scoreCandidateTable(table, moduleType);
@@ -347,13 +389,18 @@ function findModuleTableByTitle($, tableLookup, options) {
   console.log('[IPO][parser][title-scan]', {
     module: moduleType || titleLabel,
     title: titleLabel,
+    anchorFound: selectedMeta.anchorFound,
+    anchorTag: selectedMeta.anchorTag,
+    containerFound: selectedMeta.containerFound,
+    containerType: selectedMeta.containerType,
+    tablesFoundInContainer: selectedMeta.tablesFoundInContainer,
     candidateCount: debugCandidates.length,
     candidates: debugCandidates.slice(0, 8),
     selectedTableIndex: best ? best.tableIndex : null,
     selectedScore: bestScore,
   });
 
-  return best;
+  return { table: best, meta: selectedMeta };
 }
 
 function isNoiseRow(cells = []) {
@@ -516,7 +563,11 @@ function parseModuleTable(tableInfo, moduleType) {
 }
 
 function parseTodayGreyMarketCard($) {
-  const blocks = $('table,div,tr,section').slice(0, 180);
+  const blocks = [];
+  $('body').children().slice(0, 30).each((_, node) => {
+    blocks.push(node);
+    $(node).find('table,div,section,tr').slice(0, 12).each((__, child) => blocks.push(child));
+  });
   for (let i = 0; i < blocks.length; i += 1) {
     const text = $(blocks[i]).text().replace(/\s+/g, ' ').trim();
     if (!text || text.length < 30 || text.length > 1600) continue;
@@ -588,28 +639,40 @@ async function crawlIPOListFromETNet() {
     recentNewStocks: false,
   };
 
-  const todayListedTable = findModuleTableByTitle($, tableLookup, {
+  const todayListedFound = findModuleTableByTitle($, tableLookup, {
     include: ['今日上市'],
     moduleType: TABLE_TYPE.todayListed,
+    exact: true,
   });
-  const subscribingTable = findModuleTableByTitle($, tableLookup, {
+  const subscribingFound = findModuleTableByTitle($, tableLookup, {
     include: ['招股中'],
     moduleType: TABLE_TYPE.subscribing,
+    exact: true,
   });
-  const listingSoonTable = findModuleTableByTitle($, tableLookup, {
+  const listingSoonFound = findModuleTableByTitle($, tableLookup, {
     include: ['即将上市', '即將上市'],
     exclude: ['即将上市新股', '即將上市新股', '上市时间表', '上市時間表'],
     tableFilter: (info) => !/上市时间表|上市時間表/.test(info.text),
     moduleType: TABLE_TYPE.listingSoon,
+    exact: true,
   });
-  const hearingPassedTable = findModuleTableByTitle($, tableLookup, {
+  const hearingPassedFound = findModuleTableByTitle($, tableLookup, {
     include: ['申请上市', '申請上市', '通过聆讯', '通過聆訊'],
     moduleType: TABLE_TYPE.hearingPassed,
   });
-  const recentNewStocksTable = findModuleTableByTitle($, tableLookup, {
+  const recentNewStocksFound = findModuleTableByTitle($, tableLookup, {
     include: ['新股信息', '新股資訊', '新股消息'],
     moduleType: TABLE_TYPE.recentNewStocks,
-  }) || tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']));
+  });
+
+  const todayListedTable = todayListedFound.table;
+  const subscribingTable = subscribingFound.table;
+  const listingSoonTable = listingSoonFound.table;
+  const hearingPassedTable = hearingPassedFound.table;
+  const recentNewStocksTable = recentNewStocksFound.table
+    || (!recentNewStocksFound.meta.anchorFound
+      ? tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']))
+      : null);
 
   matched.todayListed = !!todayListedTable;
   matched.subscribing = !!subscribingTable;
