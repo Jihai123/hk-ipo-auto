@@ -426,7 +426,18 @@ function getCell(cells, idx) {
   return cells[idx];
 }
 
-function normalizeByModule(moduleType, raw, filterStats) {
+function getRowsLogPrefix(moduleType) {
+  if (moduleType === TABLE_TYPE.todayListed) return '[IPO][parser][rows][todayListed]';
+  if (moduleType === TABLE_TYPE.hearingPassed) return '[IPO][parser][rows][hearingPassed]';
+  if (moduleType === TABLE_TYPE.recentNewStocks) return '[IPO][parser][rows][recentNewStocks]';
+  return null;
+}
+
+function logRowsDebug(prefix, payload) {
+  console.log(`${prefix} ${JSON.stringify(payload, null, 2)}`);
+}
+
+function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
   const code = normalizeCode(raw.code);
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
   const listingDate = normalizeDateOrRaw(raw.listingDate);
@@ -434,14 +445,17 @@ function normalizeByModule(moduleType, raw, filterStats) {
 
   if (!code) {
     filterStats.invalidCode += 1;
+    if (rowDebug) rowDebug.filterReason = 'invalidCode';
     return null;
   }
   if (!name) {
     filterStats.invalidName += 1;
+    if (rowDebug) rowDebug.filterReason = 'invalidName';
     return null;
   }
   if (REQUIRED_LISTING_DATE_MODULES.has(moduleType) && isNullLike(listingDate)) {
     filterStats.invalidListingDate += 1;
+    if (rowDebug) rowDebug.filterReason = 'invalidListingDate';
     return null;
   }
 
@@ -524,6 +538,8 @@ function parseModuleTable(tableInfo, moduleType) {
     return { records: [], filterStats: null, matched: false, emptyState: false };
   }
 
+  const rowsLogPrefix = getRowsLogPrefix(moduleType);
+  const enableRowsLog = !!rowsLogPrefix;
   const map = resolveColumnMap(tableInfo.headers);
   const filterStats = {
     module: moduleType,
@@ -534,20 +550,61 @@ function parseModuleTable(tableInfo, moduleType) {
     obviousNoiseRow: 0,
     emptyStateRows: 0,
   };
+  if (enableRowsLog) {
+    logRowsDebug(rowsLogPrefix, {
+      stage: 'tableSelected',
+      tableIndex: tableInfo.tableIndex ?? null,
+      rowsCount: Math.max((tableInfo.dataRows?.length || 0) - 1, 0),
+      headerRowRawText: (tableInfo.dataRows?.[0] || []).join(' | ') || null,
+      headerCells: tableInfo.dataRows?.[0] || [],
+      normalizedHeaders: tableInfo.headers || [],
+      columnMap: map,
+    });
+    if (moduleType === TABLE_TYPE.recentNewStocks) {
+      logRowsDebug(rowsLogPrefix, {
+        stage: 'headerAliasMapping',
+        mapping: {
+          每手股数: map.lotSize,
+          入场费: map.entryFee,
+          认购倍数: map.subscriptionMultiple,
+          一手中签率: map.allotmentRate,
+          按盘价: map.firstDayClose,
+          累积升跌: map.firstDayChangePct,
+        },
+      });
+    }
+  }
 
   const tableText = tableInfo.text || '';
   const hasEmptyStateText = /沒有相關資料|没有相关资料/.test(tableText);
   const list = [];
-  for (const cells of tableInfo.dataRows.slice(1)) {
+  for (const [rowIndex, cells] of tableInfo.dataRows.slice(1).entries()) {
     if (!cells.length) continue;
     filterStats.totalRows += 1;
+    const rowText = cells.join(' ');
+
+    if (enableRowsLog) {
+      logRowsDebug(rowsLogPrefix, {
+        stage: 'rowRaw',
+        rowIndex,
+        rawText: rowText || null,
+        cellTexts: cells,
+      });
+    }
 
     if (isNoiseRow(cells)) {
-      const rowText = cells.join(' ');
       if (/沒有相關資料|没有相关资料/.test(rowText)) {
         filterStats.emptyStateRows += 1;
       } else {
         filterStats.obviousNoiseRow += 1;
+      }
+      if (enableRowsLog) {
+        logRowsDebug(rowsLogPrefix, {
+          stage: 'rowFiltered',
+          rowIndex,
+          kept: false,
+          filterReason: 'obviousNoiseRow',
+        });
       }
       continue;
     }
@@ -571,7 +628,59 @@ function parseModuleTable(tableInfo, moduleType) {
       statusText: getCell(cells, map.statusText),
     };
 
-    const normalized = normalizeByModule(moduleType, raw, filterStats);
+    const rowDebug = { filterReason: null };
+    const normalized = normalizeByModule(moduleType, raw, filterStats, rowDebug);
+    if (enableRowsLog) {
+      const rowExtracted = {
+        code: normalized?.code ?? normalizeCode(raw.code),
+        name: normalized?.name ?? extractNameStatus(raw.name).name,
+        listingDate: normalized?.listingDate ?? normalizeDateOrRaw(raw.listingDate),
+        currency: normalized?.currency ?? (isNullLike(raw.currency) ? null : String(raw.currency).trim()),
+        offerPrice: normalized?.offerPrice ?? parseOfferPrice(raw.offerPrice).offerPrice ?? parseLabeledNumeric(raw.rowText, ['上市价', '上市價', '招股价', '招股價', '发售价', '發售價']),
+        boardLot: normalized?.boardLot ?? parseLotSize(raw.lotSize) ?? parseLabeledNumeric(raw.rowText, ['每手股数', '每手股數', '每手']),
+        entryFee: normalized?.entryFee ?? parseNumeric(raw.entryFee) ?? parseLabeledNumeric(raw.rowText, ['入场费', '入場費', '每手入场费', '每手入場費']),
+        subscriptionMultiple: normalized?.subscriptionMultiple ?? parseNumeric(raw.subscriptionMultiple),
+        allotmentRate: normalized?.allotmentRate ?? parsePercent(raw.allotmentRate),
+        firstDayOpen: normalized?.firstDayOpen ?? parseNumeric(raw.firstDayOpen),
+        firstDayClose: normalized?.firstDayClose ?? parseNumeric(raw.firstDayClose),
+        firstDayChangePct: normalized?.firstDayChangePct ?? parsePercent(raw.firstDayChangePct),
+        lotProfit: normalized?.lotProfit ?? parseNumeric(raw.lotProfit),
+        statusText: normalized?.statusText ?? raw.statusText ?? null,
+      };
+
+      let filterReason = rowDebug.filterReason || null;
+      if (!normalized && !filterReason) {
+        filterReason = map.code < 0 || map.name < 0 ? 'columnMismatch' : 'other';
+      }
+      if (normalized) filterReason = null;
+
+      const boardLotEntryFeeReason = moduleType === TABLE_TYPE.recentNewStocks ? {
+        boardLotReason: map.lotSize < 0
+          ? 'missingHeaderAlias'
+          : (map.lotSize >= cells.length
+              ? 'wrongColumnIndex'
+              : (isNullLike(raw.lotSize)
+                  ? 'emptyCell'
+                  : (parseLotSize(raw.lotSize) === null ? 'parseNumberFailed' : null))),
+        entryFeeReason: map.entryFee < 0
+          ? 'missingHeaderAlias'
+          : (map.entryFee >= cells.length
+              ? 'wrongColumnIndex'
+              : (isNullLike(raw.entryFee)
+                  ? 'emptyCell'
+                  : (parseNumeric(raw.entryFee) === null ? 'parseNumberFailed' : null))),
+      } : null;
+
+      logRowsDebug(rowsLogPrefix, {
+        stage: 'rowParsed',
+        rowIndex,
+        extracted: rowExtracted,
+        kept: !!normalized,
+        filterReason,
+        columnMap: enableRowsLog ? map : undefined,
+        boardLotEntryFeeReason,
+      });
+    }
     if (normalized) list.push(normalized);
   }
 
