@@ -308,9 +308,6 @@ function scoreCandidateTable(table = null, moduleType = '') {
     score += keyHits * 3;
     if (f.rowsCount <= 3 && keyHits <= 2) score -= 6;
   }
-  return null;
-}
-
   return score;
 }
 
