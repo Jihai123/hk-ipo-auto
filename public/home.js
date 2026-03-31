@@ -285,6 +285,9 @@
       }
 
       if (mode === 'todayListed') {
+        const todayListedSubText = ipo.listingDate
+          ? `今日上市 · 上市日 ${escapeHtml(listing)}`
+          : '今日上市';
         return `
           <div class="home-ipo-row home-result-row">
             <div class="home-result-main">
@@ -292,7 +295,7 @@
                 <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
                 <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
               </div>
-              <div class="home-row-sub">今日上市 · 上市日 ${escapeHtml(listing)}</div>
+              <div class="home-row-sub">${todayListedSubText}</div>
               <div class="home-recent-metrics">
                 <div class="home-recent-metric"><span>开盘价</span><strong class="home-num">${escapeHtml(String(firstDayOpen))}</strong></div>
                 <div class="home-recent-metric"><span>收盘价</span><strong class="home-num">${escapeHtml(String(firstDayClose))}</strong></div>
@@ -363,13 +366,16 @@
       }
 
       if (mode === 'hearingPassed') {
+        const hearingDateText = ipo.offerEndDate
+          ? `申请日期 ${escapeHtml(ipo.offerEndDate)}`
+          : (ipo.listingDate ? `最后更新 ${escapeHtml(ipo.listingDate)}` : '通过聆讯');
         return `
           <div class="home-ipo-row">
             <div class="home-stock-title">
               <span class="home-stock-name">${escapeHtml(ipo.name || fallback)}</span>
               <span class="home-stock-code">（${escapeHtml(ipo.code || fallback)}）</span>
             </div>
-            <div class="home-row-sub">申请上市（通过聆讯） · 上市日 ${escapeHtml(listing)}</div>
+            <div class="home-row-sub">申请上市（通过聆讯） · ${hearingDateText}</div>
           </div>
         `;
       }
