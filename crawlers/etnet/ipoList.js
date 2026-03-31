@@ -196,12 +196,13 @@ function resolveColumnMap(headers = [], moduleType = '') {
   if (moduleType === TABLE_TYPE.todayListed) {
     return {
       ...baseMap,
-      code: findHeaderIndex(headers, ['代号']),
-      name: findHeaderIndex(headers, ['名称']),
-      firstDayClose: findHeaderIndex(headers, ['按盘价', '按盤價']),
-      offerPrice: findHeaderIndex(headers, ['上市价', '上市價']),
-      firstDayOpen: findHeaderIndex(headers, ['开市价', '開市價']),
-      currency: findHeaderIndex(headers, ['货币', '貨幣']),
+      code: 0,
+      name: 1,
+      firstDayClose: 3,
+      offerPrice: 6,
+      firstDayOpen: 7,
+      currency: 11,
+      listingDate: -1,
     };
   }
 
@@ -210,6 +211,7 @@ function resolveColumnMap(headers = [], moduleType = '') {
       ...baseMap,
       name: findHeaderIndex(headers, ['名称', '名稱']),
       statusText: findHeaderIndex(headers, ['市场', '市場']),
+      offerEndDate: findHeaderIndex(headers, ['申请日期', '申請日期']),
       listingDate: -1,
       code: -1,
     };
@@ -457,6 +459,14 @@ function getCellByModule(cells, idx, headers, moduleType) {
   return getCell(cells, adjustedIdx);
 }
 
+function getTodayListedCell(cells, candidates = []) {
+  for (const idx of candidates) {
+    const cell = getCell(cells, idx);
+    if (cell !== null && cell !== undefined) return cell;
+  }
+  return null;
+}
+
 function getRowsLogPrefix(moduleType) {
   if (moduleType === TABLE_TYPE.todayListed) return '[IPO][parser][rows][todayListed]';
   if (moduleType === TABLE_TYPE.hearingPassed) return '[IPO][parser][rows][hearingPassed]';
@@ -644,24 +654,43 @@ function parseModuleTable(tableInfo, moduleType) {
       continue;
     }
 
-    const raw = {
-      code: getCellByModule(cells, map.code, tableInfo.headers, moduleType) || cells[0] || null,
-      name: getCellByModule(cells, map.name, tableInfo.headers, moduleType) || cells[1] || null,
-      rowText: cells.join(' | '),
-      listingDate: getCellByModule(cells, map.listingDate, tableInfo.headers, moduleType),
-      offerEndDate: getCellByModule(cells, map.offerEndDate, tableInfo.headers, moduleType),
-      currency: getCellByModule(cells, map.currency, tableInfo.headers, moduleType),
-      offerPrice: getCellByModule(cells, map.offerPrice, tableInfo.headers, moduleType),
-      lotSize: getCellByModule(cells, map.lotSize, tableInfo.headers, moduleType),
-      entryFee: getCellByModule(cells, map.entryFee, tableInfo.headers, moduleType),
-      subscriptionMultiple: getCellByModule(cells, map.subscriptionMultiple, tableInfo.headers, moduleType),
-      allotmentRate: getCellByModule(cells, map.allotmentRate, tableInfo.headers, moduleType),
-      firstDayOpen: getCellByModule(cells, map.firstDayOpen, tableInfo.headers, moduleType),
-      firstDayClose: getCellByModule(cells, map.firstDayClose, tableInfo.headers, moduleType),
-      firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
-      lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
-      statusText: getCellByModule(cells, map.statusText, tableInfo.headers, moduleType),
-    };
+    const raw = moduleType === TABLE_TYPE.todayListed
+      ? {
+        code: getTodayListedCell(cells, [0]) || null,
+        name: getTodayListedCell(cells, [1]) || null,
+        rowText: cells.join(' | '),
+        listingDate: null,
+        offerEndDate: null,
+        currency: getTodayListedCell(cells, [map.currency, 10, cells.length - 1]),
+        offerPrice: getTodayListedCell(cells, [map.offerPrice, 5]),
+        lotSize: null,
+        entryFee: null,
+        subscriptionMultiple: null,
+        allotmentRate: null,
+        firstDayOpen: getTodayListedCell(cells, [map.firstDayOpen, 6]),
+        firstDayClose: getTodayListedCell(cells, [map.firstDayClose, 2]),
+        firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
+        lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
+        statusText: null,
+      }
+      : {
+        code: getCellByModule(cells, map.code, tableInfo.headers, moduleType) || cells[0] || null,
+        name: getCellByModule(cells, map.name, tableInfo.headers, moduleType) || cells[1] || null,
+        rowText: cells.join(' | '),
+        listingDate: getCellByModule(cells, map.listingDate, tableInfo.headers, moduleType),
+        offerEndDate: getCellByModule(cells, map.offerEndDate, tableInfo.headers, moduleType),
+        currency: getCellByModule(cells, map.currency, tableInfo.headers, moduleType),
+        offerPrice: getCellByModule(cells, map.offerPrice, tableInfo.headers, moduleType),
+        lotSize: getCellByModule(cells, map.lotSize, tableInfo.headers, moduleType),
+        entryFee: getCellByModule(cells, map.entryFee, tableInfo.headers, moduleType),
+        subscriptionMultiple: getCellByModule(cells, map.subscriptionMultiple, tableInfo.headers, moduleType),
+        allotmentRate: getCellByModule(cells, map.allotmentRate, tableInfo.headers, moduleType),
+        firstDayOpen: getCellByModule(cells, map.firstDayOpen, tableInfo.headers, moduleType),
+        firstDayClose: getCellByModule(cells, map.firstDayClose, tableInfo.headers, moduleType),
+        firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
+        lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
+        statusText: getCellByModule(cells, map.statusText, tableInfo.headers, moduleType),
+      };
 
     const rowDebug = { filterReason: null };
     const normalized = normalizeByModule(moduleType, raw, filterStats, rowDebug);
