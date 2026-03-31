@@ -285,6 +285,8 @@
       }
 
       if (mode === 'todayListed') {
+        const hasFirstDayChange = Number.isFinite(Number.parseFloat(String(ipo.firstDayChangePct ?? '').replace('%', '')));
+        const hasLotProfit = ipo.lotProfit !== null && ipo.lotProfit !== undefined && String(ipo.lotProfit).trim() !== '' && String(ipo.lotProfit).trim() !== '--';
         const todayListedSubText = ipo.listingDate
           ? `今日上市 · 上市日 ${escapeHtml(listing)}`
           : '今日上市';
@@ -299,13 +301,16 @@
               <div class="home-recent-metrics">
                 <div class="home-recent-metric"><span>开盘价</span><strong class="home-num">${escapeHtml(String(firstDayOpen))}</strong></div>
                 <div class="home-recent-metric"><span>收盘价</span><strong class="home-num">${escapeHtml(String(firstDayClose))}</strong></div>
-                <div class="home-recent-metric"><span>一手收益</span><strong class="home-num">${escapeHtml(String(lotProfit))}</strong></div>
+                <div class="home-recent-metric"><span>上市价</span><strong class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</strong></div>
+                ${hasLotProfit ? `<div class="home-recent-metric"><span>一手收益</span><strong class="home-num">${escapeHtml(String(lotProfit))}</strong></div>` : ''}
               </div>
             </div>
-            <div class="home-result-change ${change.className}" style="color:${change.color};">
-              <div class="home-result-label">首日升跌</div>
-              <div class="home-result-value">${escapeHtml(change.arrow)} ${escapeHtml(change.text)}</div>
-            </div>
+            ${hasFirstDayChange ? `
+              <div class="home-result-change ${change.className}" style="color:${change.color};">
+                <div class="home-result-label">首日升跌</div>
+                <div class="home-result-value">${escapeHtml(change.arrow)} ${escapeHtml(change.text)}</div>
+              </div>
+            ` : ''}
           </div>
         `;
       }
@@ -366,9 +371,10 @@
       }
 
       if (mode === 'hearingPassed') {
-        const hearingDateText = ipo.offerEndDate
-          ? `申请日期 ${escapeHtml(ipo.offerEndDate)}`
-          : (ipo.listingDate ? `最后更新 ${escapeHtml(ipo.listingDate)}` : '通过聆讯');
+        const hearingTags = [];
+        if (ipo.offerEndDate) hearingTags.push(`申请日期 ${escapeHtml(ipo.offerEndDate)}`);
+        if (ipo.statusText) hearingTags.push(`市场 ${escapeHtml(ipo.statusText)}`);
+        const hearingDateText = hearingTags.length ? hearingTags.join(' · ') : '通过聆讯';
         return `
           <div class="home-ipo-row">
             <div class="home-stock-title">

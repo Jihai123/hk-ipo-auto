@@ -199,6 +199,7 @@ function resolveColumnMap(headers = [], moduleType = '') {
       code: 0,
       name: 1,
       firstDayClose: 3,
+      firstDayChangePct: 5,
       offerPrice: 6,
       firstDayOpen: 7,
       currency: 11,
