@@ -24,7 +24,6 @@ const REQUIRED_LISTING_DATE_MODULES = new Set([
   TABLE_TYPE.todayListed,
   TABLE_TYPE.subscribing,
   TABLE_TYPE.listingSoon,
-  TABLE_TYPE.hearingPassed,
   TABLE_TYPE.recentNewStocks,
 ]);
 
@@ -160,6 +159,16 @@ function extractNameStatus(raw = '') {
 
 function includesAny(text, keywords = []) {
   return keywords.some(k => text.includes(normalizeHeaderKey(k)));
+}
+
+function matchTitleText(text = '', include = [], exact = false) {
+  const normText = normalizeHeaderKey(text);
+  return include.some((keyword) => {
+    const normKeyword = normalizeHeaderKey(keyword);
+    if (!normKeyword) return false;
+    if (exact) return normText === normKeyword;
+    return normText.includes(normKeyword);
+  });
 }
 
 function findHeaderIndex(headers = [], aliases = []) {
@@ -343,7 +352,9 @@ function findModuleTableByTitle($, tableLookup, options) {
     moduleType = '',
     exact = false,
   } = options || {};
-  const candidates = $('div.DivTemplateBHdr,h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a');
+  const candidates = $(
+    '.DivFigureBox .DivTemplateBHdr,.DivFigureBox [class*="Hdr"],div.DivTemplateBHdr,h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a'
+  );
   let best = null;
   let bestScore = -1;
   const debugCandidates = [];
@@ -358,8 +369,9 @@ function findModuleTableByTitle($, tableLookup, options) {
   for (let i = 0; i < candidates.length; i += 1) {
     const el = candidates[i];
     const text = $(el).text().replace(/\s+/g, ' ').trim();
-    if (!text || text.length > 50) continue;
-    const hit = include.some((keyword) => (exact ? text === keyword : text.includes(keyword)));
+    if (!text) continue;
+    if (text.length > 120 && !$(el).is('.DivTemplateBHdr,[class*="Hdr"]')) continue;
+    const hit = matchTitleText(text, include, exact);
     if (!hit) continue;
     if (exclude.some(keyword => text.includes(keyword))) continue;
     selectedMeta.anchorFound = true;
@@ -418,6 +430,7 @@ function normalizeByModule(moduleType, raw, filterStats) {
   const code = normalizeCode(raw.code);
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
   const listingDate = normalizeDateOrRaw(raw.listingDate);
+  const rowText = String(raw.rowText || '').replace(/\s+/g, ' ');
 
   if (!code) {
     filterStats.invalidCode += 1;
@@ -433,14 +446,17 @@ function normalizeByModule(moduleType, raw, filterStats) {
   }
 
   const offer = parseOfferPrice(raw.offerPrice);
+  const fallbackOfferPrice = offer.offerPrice ?? parseLabeledNumeric(rowText, ['上市价', '上市價', '招股价', '招股價', '发售价', '發售價']);
+  const fallbackBoardLot = parseLotSize(raw.lotSize) ?? parseLabeledNumeric(rowText, ['每手股数', '每手股數', '每手']);
+  const fallbackEntryFee = parseNumeric(raw.entryFee) ?? parseLabeledNumeric(rowText, ['入场费', '入場費', '每手入场费', '每手入場費']);
   const common = {
     code,
     name,
     listingDate,
     currency: isNullLike(raw.currency) ? null : String(raw.currency).trim(),
-    offerPrice: offer.offerPrice,
-    boardLot: parseLotSize(raw.lotSize),
-    entryFee: parseNumeric(raw.entryFee),
+    offerPrice: fallbackOfferPrice,
+    boardLot: fallbackBoardLot,
+    entryFee: fallbackEntryFee,
   };
 
   if (moduleType === TABLE_TYPE.todayGreyMarket) {
@@ -539,6 +555,7 @@ function parseModuleTable(tableInfo, moduleType) {
     const raw = {
       code: getCell(cells, map.code) || cells[0] || null,
       name: getCell(cells, map.name) || cells[1] || null,
+      rowText: cells.join(' | '),
       listingDate: getCell(cells, map.listingDate),
       offerEndDate: getCell(cells, map.offerEndDate),
       currency: getCell(cells, map.currency),
