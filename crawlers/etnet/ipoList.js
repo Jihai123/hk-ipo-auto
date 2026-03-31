@@ -233,21 +233,85 @@ function isLikelyDataTable(table = null) {
   return table.headers.length >= 2 || table.dataRows.some(r => r.length >= 3);
 }
 
-function findNextDataTableFromAnchor($, $anchor, tableLookup, tableFilter = null) {
+function collectCandidateTablesFromAnchor($, $anchor, tableLookup, tableFilter = null, limit = 20) {
+  const seen = new Set();
+  const candidates = [];
   let cursor = $anchor;
+
   for (let depth = 0; depth < 6; depth += 1) {
     const nextTables = cursor.nextAll('table');
     for (let i = 0; i < nextTables.length; i += 1) {
       const node = nextTables[i];
+      if (seen.has(node)) continue;
+      seen.add(node);
       const info = tableLookup.get(node);
       if (!info || !isLikelyDataTable(info)) continue;
       if (typeof tableFilter === 'function' && !tableFilter(info)) continue;
-      return info;
+      candidates.push(info);
+      if (candidates.length >= limit) return candidates;
     }
     cursor = cursor.parent();
     if (!cursor || !cursor.length) break;
   }
+
+  return candidates;
+}
+
+function getTableCandidateFeatures(table = null) {
+  if (!table) return null;
+  const headersText = table.headers.join('|');
+  const rows = table.dataRows.slice(1);
+  const rowsCount = rows.length;
+  const hasHeaderRow = table.headers.length >= 2;
+  const hasNoDataText = /沒有相關資料|没有相关资料/.test(table.text || '');
+  const hasCodeLink = /(?:\/quote|\/stocks|\b\d{4,5}\b)/i.test(table.text || '');
+  const hasListingDateLike = includesAny(headersText, ['上市日期', '挂牌日期', '掛牌日期', '预期上市日期']);
+  const candidateDataRows = rows.filter(cells => {
+    if (!cells.length) return false;
+    if (isNoiseRow(cells)) return false;
+    const rowText = cells.join(' ');
+    return !!(normalizeCode(rowText) || normalizeDate(rowText) || rowText.length >= 8);
+  }).length;
+  return {
+    rowsCount,
+    hasHeaderRow,
+    hasNoDataText,
+    hasCodeLink,
+    hasListingDateLike,
+    candidateDataRows,
+  };
+}
+
+function scoreCandidateTable(table = null, moduleType = '') {
+  const f = getTableCandidateFeatures(table);
+  if (!f) return -1;
+  const headersText = table.headers.join('|');
+  const text = table.text || '';
+  let score = 0;
+  if (f.hasHeaderRow) score += 3;
+  if (f.hasListingDateLike) score += 2;
+  if (f.hasCodeLink) score += 2;
+  score += Math.min(f.candidateDataRows, 6);
+  if (f.hasNoDataText) score += 1;
+  if (/免責聲明|免责声明|資料來源|资料来源/.test(text)) score -= 5;
+  if (/上市时间表|上市時間表|即将上市新股|即將上市新股/.test(text)) score -= 4;
+
+  if (moduleType === TABLE_TYPE.recentNewStocks) {
+    const keyHits = [
+      '每手股数',
+      '入场费',
+      '认购倍数',
+      '一手中签率',
+      '按盘价',
+      '累积升跌',
+    ].reduce((acc, k) => acc + (includesAny(headersText, [k]) ? 1 : 0), 0);
+    score += keyHits * 3;
+    if (f.rowsCount <= 3 && keyHits <= 2) score -= 6;
+  }
   return null;
+}
+
+  return score;
 }
 
 function findModuleTableByTitle($, tableLookup, options) {
@@ -255,18 +319,44 @@ function findModuleTableByTitle($, tableLookup, options) {
     include = [],
     exclude = [],
     tableFilter = null,
+    moduleType = '',
   } = options || {};
   const candidates = $('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a');
+  let best = null;
+  let bestScore = -1;
+  const debugCandidates = [];
+
   for (let i = 0; i < candidates.length; i += 1) {
     const el = candidates[i];
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (!text || text.length > 50) continue;
     if (!include.some(keyword => text.includes(keyword))) continue;
     if (exclude.some(keyword => text.includes(keyword))) continue;
-    const found = findNextDataTableFromAnchor($, $(el), tableLookup, tableFilter);
-    if (found) return found;
+
+    const foundTables = collectCandidateTablesFromAnchor($, $(el), tableLookup, tableFilter, moduleType === TABLE_TYPE.recentNewStocks ? 30 : 20);
+    foundTables.forEach((table) => {
+      const features = getTableCandidateFeatures(table);
+      const score = scoreCandidateTable(table, moduleType);
+      debugCandidates.push({ tableIndex: table.tableIndex, ...features, score });
+      if (score > bestScore) {
+        bestScore = score;
+        best = table;
+      }
+    });
+    if (best && bestScore >= 8) break;
   }
-  return null;
+
+  const titleLabel = include.join('/');
+  console.log('[IPO][parser][title-scan]', {
+    module: moduleType || titleLabel,
+    title: titleLabel,
+    candidateCount: debugCandidates.length,
+    candidates: debugCandidates.slice(0, 8),
+    selectedTableIndex: best ? best.tableIndex : null,
+    selectedScore: bestScore,
+  });
+
+  return best;
 }
 
 function isNoiseRow(cells = []) {
@@ -503,20 +593,25 @@ async function crawlIPOListFromETNet() {
 
   const todayListedTable = findModuleTableByTitle($, tableLookup, {
     include: ['今日上市'],
+    moduleType: TABLE_TYPE.todayListed,
   });
   const subscribingTable = findModuleTableByTitle($, tableLookup, {
     include: ['招股中'],
+    moduleType: TABLE_TYPE.subscribing,
   });
   const listingSoonTable = findModuleTableByTitle($, tableLookup, {
     include: ['即将上市', '即將上市'],
     exclude: ['即将上市新股', '即將上市新股', '上市时间表', '上市時間表'],
     tableFilter: (info) => !/上市时间表|上市時間表/.test(info.text),
+    moduleType: TABLE_TYPE.listingSoon,
   });
   const hearingPassedTable = findModuleTableByTitle($, tableLookup, {
     include: ['申请上市', '申請上市', '通过聆讯', '通過聆訊'],
+    moduleType: TABLE_TYPE.hearingPassed,
   });
   const recentNewStocksTable = findModuleTableByTitle($, tableLookup, {
     include: ['新股信息', '新股資訊', '新股消息'],
+    moduleType: TABLE_TYPE.recentNewStocks,
   }) || tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']));
 
   matched.todayListed = !!todayListedTable;
