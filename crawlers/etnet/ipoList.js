@@ -35,13 +35,13 @@ const HEADER_ALIASES = {
   offerEndDate: ['截止日期', '截止认购日', '截止認購日', '招股截止', '认购截止', '認購截止'],
   currency: ['货币', '貨幣', '币别', '幣別'],
   offerPrice: ['上市价', '上市價', '招股价', '招股價', '发售价', '發售價', '定价', '定價'],
-  lotSize: ['每手股数', '每手', '每手股數', 'lotsize', 'lotsize'],
+  lotSize: ['每手股数', '每手', '每手股數', 'lotsize'],
   entryFee: ['入场费', '入場費', '每手入场费', '每手入場費', 'lotamount', '每手金额'],
   subscriptionMultiple: ['认购倍数', '認購倍數', '超额认购', '超額認購'],
   allotmentRate: ['一手中签率', '一手中籤率', '中签率', '中籤率', '分配比率'],
   firstDayOpen: ['首日开市价', '首日開市價', '开市价', '開市價', '开盘价', '開盤價'],
   firstDayClose: ['按盘价', '按盤價', '收盘价', '收盤價', '现价', '現價'],
-  firstDayChangePct: ['首日升跌', '累积升跌', '累計升跌', '首日表现', '首日表現'],
+  firstDayChangePct: ['首日升跌', '累积升跌', '累計升跌', '首日表现', '首日表現', '累计升跌'],
   lotProfit: ['一手收益', '每手收益', '每手赚蚀', '每手賺蝕', '每手盈利'],
   statusText: ['状态', '狀態', '备注', '備註'],
 };
@@ -100,6 +100,17 @@ function parseNumeric(raw = '') {
   if (!m) return null;
   const v = parseFloat(m[1]);
   return Number.isFinite(v) ? v : null;
+}
+
+function parseLabeledNumeric(raw = '', labels = []) {
+  const text = String(raw || '').replace(/\s+/g, ' ');
+  for (const label of labels) {
+    const m = text.match(new RegExp(`${label}\\s*[:：]?\\s*([+-]?[\\d,]+(?:\\.\\d+)?)`));
+    if (m) {
+      return parseNumeric(m[1]);
+    }
+  }
+  return null;
 }
 
 function parsePercent(raw = '') {
@@ -186,6 +197,7 @@ function getNearbyTitleText($, $table) {
 }
 
 function collectTables($) {
+  const tableLookup = new Map();
   const tables = [];
   $('table').each((idx, node) => {
     const $table = $(node);
@@ -197,45 +209,152 @@ function collectTables($) {
 
     const dataRows = rows.map(r => $(r).find('td').map((__, td) => $(td).text().replace(/\s+/g, ' ').trim()).get());
     const title = getNearbyTitleText($, $table);
-    tables.push({ tableIndex: idx, tableNode: $table, headers, title, dataRows });
+    const tableInfo = {
+      tableIndex: idx,
+      tableNode: $table,
+      rawNode: node,
+      headers,
+      title,
+      dataRows,
+      text: $table.text().replace(/\s+/g, ' ').trim(),
+    };
+    tables.push(tableInfo);
+    tableLookup.set(node, tableInfo);
   });
-  return tables;
+  return { tables, tableLookup };
 }
 
-function matchTableType(table) {
+function isLikelyDataTable(table = null) {
+  if (!table) return false;
+  const text = table.text || '';
+  if (!text) return false;
+  if (/沒有相關資料|没有相关资料/.test(text)) return true;
+  if (/免責聲明|免责声明|資料來源|资料来源/.test(text)) return false;
+  return table.headers.length >= 2 || table.dataRows.some(r => r.length >= 3);
+}
+
+function collectCandidateTablesFromAnchor($, $anchor, tableLookup, tableFilter = null, limit = 20) {
+  const seen = new Set();
+  const candidates = [];
+  let cursor = $anchor;
+
+  for (let depth = 0; depth < 6; depth += 1) {
+    const nextTables = cursor.nextAll('table');
+    for (let i = 0; i < nextTables.length; i += 1) {
+      const node = nextTables[i];
+      if (seen.has(node)) continue;
+      seen.add(node);
+      const info = tableLookup.get(node);
+      if (!info || !isLikelyDataTable(info)) continue;
+      if (typeof tableFilter === 'function' && !tableFilter(info)) continue;
+      candidates.push(info);
+      if (candidates.length >= limit) return candidates;
+    }
+    cursor = cursor.parent();
+    if (!cursor || !cursor.length) break;
+  }
+
+  return candidates;
+}
+
+function getTableCandidateFeatures(table = null) {
+  if (!table) return null;
   const headersText = table.headers.join('|');
-  const contextText = `${table.title}|${headersText}`;
+  const rows = table.dataRows.slice(1);
+  const rowsCount = rows.length;
+  const hasHeaderRow = table.headers.length >= 2;
+  const hasNoDataText = /沒有相關資料|没有相关资料/.test(table.text || '');
+  const hasCodeLink = /(?:\/quote|\/stocks|\b\d{4,5}\b)/i.test(table.text || '');
+  const hasListingDateLike = includesAny(headersText, ['上市日期', '挂牌日期', '掛牌日期', '预期上市日期']);
+  const candidateDataRows = rows.filter(cells => {
+    if (!cells.length) return false;
+    if (isNoiseRow(cells)) return false;
+    const rowText = cells.join(' ');
+    return !!(normalizeCode(rowText) || normalizeDate(rowText) || rowText.length >= 8);
+  }).length;
+  return {
+    rowsCount,
+    hasHeaderRow,
+    hasNoDataText,
+    hasCodeLink,
+    hasListingDateLike,
+    candidateDataRows,
+  };
+}
 
-  if (includesAny(contextText, ['通过聆讯', '申請上市', '申请上市', '聆讯'])) {
-    return TABLE_TYPE.hearingPassed;
+function scoreCandidateTable(table = null, moduleType = '') {
+  const f = getTableCandidateFeatures(table);
+  if (!f) return -1;
+  const headersText = table.headers.join('|');
+  const text = table.text || '';
+  let score = 0;
+  if (f.hasHeaderRow) score += 3;
+  if (f.hasListingDateLike) score += 2;
+  if (f.hasCodeLink) score += 2;
+  score += Math.min(f.candidateDataRows, 6);
+  if (f.hasNoDataText) score += 1;
+  if (/免責聲明|免责声明|資料來源|资料来源/.test(text)) score -= 5;
+  if (/上市时间表|上市時間表|即将上市新股|即將上市新股/.test(text)) score -= 4;
+
+  if (moduleType === TABLE_TYPE.recentNewStocks) {
+    const keyHits = [
+      '每手股数',
+      '入场费',
+      '认购倍数',
+      '一手中签率',
+      '按盘价',
+      '累积升跌',
+    ].reduce((acc, k) => acc + (includesAny(headersText, [k]) ? 1 : 0), 0);
+    score += keyHits * 3;
+    if (f.rowsCount <= 3 && keyHits <= 2) score -= 6;
   }
 
-  if (includesAny(contextText, ['今日暗盘', '今日暗盤', '暗盘'])
-    && (includesAny(headersText, ['入场费', '每手']) || includesAny(headersText, ['上市价', '招股价']))) {
-    return TABLE_TYPE.todayGreyMarket;
+  return score;
+}
+
+function findModuleTableByTitle($, tableLookup, options) {
+  const {
+    include = [],
+    exclude = [],
+    tableFilter = null,
+    moduleType = '',
+  } = options || {};
+  const candidates = $('h1,h2,h3,h4,h5,strong,b,div,span,p,td,th,a');
+  let best = null;
+  let bestScore = -1;
+  const debugCandidates = [];
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const el = candidates[i];
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 50) continue;
+    if (!include.some(keyword => text.includes(keyword))) continue;
+    if (exclude.some(keyword => text.includes(keyword))) continue;
+
+    const foundTables = collectCandidateTablesFromAnchor($, $(el), tableLookup, tableFilter, moduleType === TABLE_TYPE.recentNewStocks ? 30 : 20);
+    foundTables.forEach((table) => {
+      const features = getTableCandidateFeatures(table);
+      const score = scoreCandidateTable(table, moduleType);
+      debugCandidates.push({ tableIndex: table.tableIndex, ...features, score });
+      if (score > bestScore) {
+        bestScore = score;
+        best = table;
+      }
+    });
+    if (best && bestScore >= 8) break;
   }
 
-  if (includesAny(contextText, ['今日上市'])
-    && (includesAny(headersText, ['首日', '开市价', '按盘价', '累积升跌']) || includesAny(headersText, ['上市日期']))) {
-    return TABLE_TYPE.todayListed;
-  }
+  const titleLabel = include.join('/');
+  console.log('[IPO][parser][title-scan]', {
+    module: moduleType || titleLabel,
+    title: titleLabel,
+    candidateCount: debugCandidates.length,
+    candidates: debugCandidates.slice(0, 8),
+    selectedTableIndex: best ? best.tableIndex : null,
+    selectedScore: bestScore,
+  });
 
-  if (includesAny(contextText, ['招股中', '认购中', '認購中'])
-    || (includesAny(headersText, ['截止认购', '招股截止']) && includesAny(headersText, ['上市日期']))) {
-    return TABLE_TYPE.subscribing;
-  }
-
-  if (includesAny(contextText, ['即将上市', '即將上市'])
-    || (includesAny(headersText, ['上市日期']) && includesAny(headersText, ['每手', '上市价']) && !includesAny(headersText, ['累积升跌', '首日']))) {
-    return TABLE_TYPE.listingSoon;
-  }
-
-  if (includesAny(contextText, ['新股信息', '新股資訊', '新股消息'])
-    || (includesAny(headersText, ['首日开市价', '按盘价', '累积升跌']) && includesAny(headersText, ['上市日期']))) {
-    return TABLE_TYPE.recentNewStocks;
-  }
-
-  return null;
+  return best;
 }
 
 function isNoiseRow(cells = []) {
@@ -310,7 +429,7 @@ function normalizeByModule(moduleType, raw, filterStats) {
   if (moduleType === TABLE_TYPE.listingSoon) {
     return {
       ...common,
-      offerEndDate: normalizeDateOrRaw(raw.offerEndDate),
+      offerEndDate: isNullLike(raw.offerEndDate) ? null : normalizeDateOrRaw(raw.offerEndDate),
     };
   }
 
@@ -339,7 +458,9 @@ function normalizeByModule(moduleType, raw, filterStats) {
 }
 
 function parseModuleTable(tableInfo, moduleType) {
-  if (!tableInfo || !tableInfo.dataRows?.length) return { records: [], filterStats: null };
+  if (!tableInfo || !tableInfo.dataRows?.length) {
+    return { records: [], filterStats: null, matched: false, emptyState: false };
+  }
 
   const map = resolveColumnMap(tableInfo.headers);
   const filterStats = {
@@ -349,15 +470,23 @@ function parseModuleTable(tableInfo, moduleType) {
     invalidName: 0,
     invalidListingDate: 0,
     obviousNoiseRow: 0,
+    emptyStateRows: 0,
   };
 
+  const tableText = tableInfo.text || '';
+  const hasEmptyStateText = /沒有相關資料|没有相关资料/.test(tableText);
   const list = [];
   for (const cells of tableInfo.dataRows.slice(1)) {
     if (!cells.length) continue;
     filterStats.totalRows += 1;
 
     if (isNoiseRow(cells)) {
-      filterStats.obviousNoiseRow += 1;
+      const rowText = cells.join(' ');
+      if (/沒有相關資料|没有相关资料/.test(rowText)) {
+        filterStats.emptyStateRows += 1;
+      } else {
+        filterStats.obviousNoiseRow += 1;
+      }
       continue;
     }
 
@@ -383,7 +512,40 @@ function parseModuleTable(tableInfo, moduleType) {
     if (normalized) list.push(normalized);
   }
 
-  return { records: uniqByCode(list), filterStats };
+  const emptyState = hasEmptyStateText && list.length === 0;
+  return { records: uniqByCode(list), filterStats, matched: true, emptyState };
+}
+
+function parseTodayGreyMarketCard($) {
+  const blocks = $('table,div,tr,section').slice(0, 180);
+  for (let i = 0; i < blocks.length; i += 1) {
+    const text = $(blocks[i]).text().replace(/\s+/g, ' ').trim();
+    if (!text || text.length < 30 || text.length > 1600) continue;
+    if (!/(\d{4,5})/.test(text)) continue;
+    if (!/按盘价|按盤價|累积升跌|累計升跌|暗盘|暗盤|明天上市|明日上市|待上市/.test(text)) continue;
+    if (/招股中|即将上市新股|上市时间表|新股信息|申请上市/.test(text)) continue;
+
+    const code = normalizeCode(text);
+    const dateTextMatch = text.match(/(\d{4}[\/.\-年]\d{1,2}[\/.\-月]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/);
+    const listingDate = normalizeDateOrRaw(dateTextMatch ? dateTextMatch[1] : null);
+    if (!code || isNullLike(listingDate)) continue;
+
+    const anchorText = $(blocks[i]).find('a').first().text().replace(/\s+/g, ' ').trim();
+    const { name } = extractNameStatus(anchorText || text);
+    if (isNullLike(name)) continue;
+
+    return [{
+      code,
+      name,
+      listingDate,
+      currency: /usd/i.test(text) ? 'USD' : 'HKD',
+      offerPrice: parseLabeledNumeric(text, ['上市价', '上市價', '招股价', '招股價', '发售价', '發售價']),
+      boardLot: parseLabeledNumeric(text, ['每手股数', '每手股數', '每手']),
+      entryFee: parseLabeledNumeric(text, ['入场费', '入場費', '每手入场费', '每手入場費']),
+      statusText: /明天上市|明日上市/.test(text) ? '明天上市' : '暗盘/待上市',
+    }];
+  }
+  return [];
 }
 
 function uniqByCode(items = []) {
@@ -416,31 +578,55 @@ async function crawlIPOListFromETNet() {
   if (!html) throw new Error(`抓取失败，未拿到页面HTML: ${url}`);
 
   const $ = cheerio.load(html);
-  const tables = collectTables($);
+  const { tables, tableLookup } = collectTables($);
 
   const matched = {
-    todayGreyMarket: null,
-    todayListed: null,
-    subscribing: null,
-    listingSoon: null,
-    hearingPassed: null,
-    recentNewStocks: null,
+    todayGreyMarket: false,
+    todayListed: false,
+    subscribing: false,
+    listingSoon: false,
+    hearingPassed: false,
+    recentNewStocks: false,
   };
 
-  for (const table of tables) {
-    const type = matchTableType(table);
-    if (!type) continue;
-    if (!matched[type]) matched[type] = table;
-  }
+  const todayListedTable = findModuleTableByTitle($, tableLookup, {
+    include: ['今日上市'],
+    moduleType: TABLE_TYPE.todayListed,
+  });
+  const subscribingTable = findModuleTableByTitle($, tableLookup, {
+    include: ['招股中'],
+    moduleType: TABLE_TYPE.subscribing,
+  });
+  const listingSoonTable = findModuleTableByTitle($, tableLookup, {
+    include: ['即将上市', '即將上市'],
+    exclude: ['即将上市新股', '即將上市新股', '上市时间表', '上市時間表'],
+    tableFilter: (info) => !/上市时间表|上市時間表/.test(info.text),
+    moduleType: TABLE_TYPE.listingSoon,
+  });
+  const hearingPassedTable = findModuleTableByTitle($, tableLookup, {
+    include: ['申请上市', '申請上市', '通过聆讯', '通過聆訊'],
+    moduleType: TABLE_TYPE.hearingPassed,
+  });
+  const recentNewStocksTable = findModuleTableByTitle($, tableLookup, {
+    include: ['新股信息', '新股資訊', '新股消息'],
+    moduleType: TABLE_TYPE.recentNewStocks,
+  }) || tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']));
+
+  matched.todayListed = !!todayListedTable;
+  matched.subscribing = !!subscribingTable;
+  matched.listingSoon = !!listingSoonTable;
+  matched.hearingPassed = !!hearingPassedTable;
+  matched.recentNewStocks = !!recentNewStocksTable;
 
   const parsed = {
-    todayGreyMarket: parseModuleTable(matched.todayGreyMarket, TABLE_TYPE.todayGreyMarket),
-    todayListed: parseModuleTable(matched.todayListed, TABLE_TYPE.todayListed),
-    subscribing: parseModuleTable(matched.subscribing, TABLE_TYPE.subscribing),
-    listingSoon: parseModuleTable(matched.listingSoon, TABLE_TYPE.listingSoon),
-    hearingPassed: parseModuleTable(matched.hearingPassed, TABLE_TYPE.hearingPassed),
-    recentNewStocks: parseModuleTable(matched.recentNewStocks, TABLE_TYPE.recentNewStocks),
+    todayListed: parseModuleTable(todayListedTable, TABLE_TYPE.todayListed),
+    subscribing: parseModuleTable(subscribingTable, TABLE_TYPE.subscribing),
+    listingSoon: parseModuleTable(listingSoonTable, TABLE_TYPE.listingSoon),
+    hearingPassed: parseModuleTable(hearingPassedTable, TABLE_TYPE.hearingPassed),
+    recentNewStocks: parseModuleTable(recentNewStocksTable, TABLE_TYPE.recentNewStocks),
   };
+  const todayGreyMarket = parseTodayGreyMarketCard($);
+  matched.todayGreyMarket = todayGreyMarket.length > 0;
 
   const recentListed = [...parsed.recentNewStocks.records].slice(0, RECENT_LIST_LIMIT).map(item => ({
     ...item,
@@ -453,7 +639,7 @@ async function crawlIPOListFromETNet() {
     subscribing: parsed.subscribing.records,
     listingSoon: parsed.listingSoon.records,
     recentListed,
-    todayGreyMarket: parsed.todayGreyMarket.records,
+    todayGreyMarket,
     todayListed: parsed.todayListed.records,
     hearingPassed: parsed.hearingPassed.records,
     recentNewStocks: parsed.recentNewStocks.records,
@@ -463,15 +649,19 @@ async function crawlIPOListFromETNet() {
 
   const matchedTables = Object.keys(matched).filter(k => matched[k]);
   const filterStats = Object.values(parsed).map(x => x.filterStats).filter(Boolean);
+  const boardLotMapped = result.recentNewStocks.filter(x => x.boardLot !== null && x.boardLot !== undefined).length;
+  const entryFeeMapped = result.recentNewStocks.filter(x => x.entryFee !== null && x.entryFee !== undefined).length;
 
   console.log('[IPO][parser]', {
     matchedTables,
-    todayGreyMarketCount: result.todayGreyMarket.length,
-    todayListedCount: result.todayListed.length,
-    subscribingCount: result.subscribing.length,
-    listingSoonCount: result.listingSoon.length,
-    hearingPassedCount: result.hearingPassed.length,
-    recentNewStocksCount: result.recentNewStocks.length,
+    modules: {
+      todayGreyMarket: { matched: matched.todayGreyMarket, emptyState: false, count: result.todayGreyMarket.length },
+      todayListed: { matched: parsed.todayListed.matched, emptyState: parsed.todayListed.emptyState, count: result.todayListed.length },
+      subscribing: { matched: parsed.subscribing.matched, emptyState: parsed.subscribing.emptyState, count: result.subscribing.length },
+      listingSoon: { matched: parsed.listingSoon.matched, emptyState: parsed.listingSoon.emptyState, count: result.listingSoon.length },
+      hearingPassed: { matched: parsed.hearingPassed.matched, emptyState: parsed.hearingPassed.emptyState, count: result.hearingPassed.length },
+      recentNewStocks: { matched: parsed.recentNewStocks.matched, emptyState: parsed.recentNewStocks.emptyState, count: result.recentNewStocks.length },
+    },
     sample: {
       todayGreyMarket: result.todayGreyMarket[0] || null,
       todayListed: result.todayListed[0] || null,
@@ -481,6 +671,7 @@ async function crawlIPOListFromETNet() {
       recentNewStocks: result.recentNewStocks[0] || null,
     },
     filtered: filterStats,
+    recentNewStocksMapped: { boardLotMapped, entryFeeMapped },
   });
 
   if (IPO_DEBUG_CODES) {
