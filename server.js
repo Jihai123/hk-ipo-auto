@@ -4234,6 +4234,8 @@ function pickIpoSample(item) {
     lotAmount: item.lotAmount ?? null,
     allotmentRate: item.allotmentRate ?? null,
     firstDayChangePct: item.firstDayChangePct ?? null,
+    cumulativeReturn: item.cumulativeReturn ?? null,
+    guaranteedHands: item.guaranteedHands ?? null,
   };
 }
 
@@ -4308,6 +4310,7 @@ function normalizeCurrentIpoData(raw) {
     subscriptionMultiple: item.subscriptionMultiple || null,
     allotmentRate: item.allotmentRate || null,
     firstDayChangePct: item.firstDayChangePct || null,
+    cumulativeReturn: item.cumulativeReturn || null,
     firstDayOpen: item.firstDayOpen || null,
     firstDayClose: item.firstDayClose || null,
     lotProfit: item.lotProfit || null,
@@ -4329,6 +4332,8 @@ function normalizeCurrentIpoData(raw) {
     subscriptionMultiple: item.subscriptionMultiple ?? null,
     allotmentRate: item.allotmentRate ?? null,
     firstDayChangePct: item.firstDayChangePct ?? null,
+    cumulativeReturn: item.cumulativeReturn ?? null,
+    guaranteedHands: item.guaranteedHands ?? null,
   }));
 
   const derivedTodayListed = normalizedRecentListed
@@ -4387,10 +4392,11 @@ function normalizeCurrentIpoData(raw) {
       firstDayOpen: item.firstDayOpen ?? null,
       firstDayClose: item.firstDayClose ?? null,
       firstDayChangePct: item.firstDayChangePct ?? null,
+      cumulativeReturn: item.cumulativeReturn ?? null,
       lotProfit: item.lotProfit ?? null,
     })),
     hearingPassed: hearingPassed.map(item => ({
-      code: item.code || '',
+      code: item.code || (item.name && String(item.name).match(/(\d{4,5})/)?.[1] || ''),
       name: item.name || '',
       statusText: item.statusText || '',
       listingDate: item.listingDate || null,
@@ -4408,6 +4414,8 @@ function normalizeCurrentIpoData(raw) {
       firstDayOpen: item.firstDayOpen ?? null,
       firstDayClose: item.firstDayClose ?? null,
       firstDayChangePct: item.firstDayChangePct ?? null,
+      cumulativeReturn: item.cumulativeReturn ?? null,
+      guaranteedHands: item.guaranteedHands ?? null,
       lotProfit: item.lotProfit ?? null,
     })),
   };

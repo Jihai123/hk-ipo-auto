@@ -261,10 +261,12 @@
       const subscriptionMultiple = ipo.subscriptionMultiple ?? fallback;
       const allotmentRate = ipo.allotmentRate ?? fallback;
       const change = getChangeDisplay(ipo.firstDayChangePct);
+      const cumulativeChange = getChangeDisplay(ipo.cumulativeReturn ?? ipo.firstDayChangePct);
       const firstDayOpen = ipo.firstDayOpen ?? fallback;
       const firstDayClose = ipo.firstDayClose ?? fallback;
       const lotProfit = ipo.lotProfit ?? fallback;
       const boardLot = ipo.boardLot ?? ipo.lotSize ?? fallback;
+      const guaranteedHands = ipo.guaranteedHands ?? fallback;
       const entryFee = ipo.entryFee ?? ipo.lotAmount ?? fallback;
       const currency = ipo.currency ?? fallback;
       const statusText = ipo.statusText || getStatusLabel(ipo.status, mode);
@@ -396,11 +398,14 @@
               </div>
               <div class="home-row-sub">近期新股信息 · 上市日 ${escapeHtml(listing)}</div>
               <div class="home-listing-price">货币 <span class="home-num">${escapeHtml(String(currency))}</span> · 上市价 <span class="home-num">${escapeHtml(String(ipo.offerPrice ?? fallback))}</span></div>
-              <div class="home-row-metric">每手 <span class="home-num">${escapeHtml(String(boardLot))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(entryFee))}</span></div>
+              <div class="home-row-metric">每手股数 <span class="home-num">${escapeHtml(String(boardLot))}</span> · 入场费 <span class="home-emphasis home-num">${escapeHtml(String(entryFee))}</span></div>
               <div class="home-recent-metrics">
                 <div class="home-recent-metric"><span>认购倍数</span><strong class="home-num">${escapeHtml(String(subscriptionMultiple))}</strong></div>
                 <div class="home-recent-metric"><span>一手中签率</span><strong class="home-num">${escapeHtml(String(allotmentRate))}${allotmentRate === fallback ? '' : '%'}</strong></div>
-                <div class="home-recent-metric"><span>首日表现</span><strong class="home-num">${escapeHtml(change.text)}</strong></div>
+                <div class="home-recent-metric"><span>稳中一手</span><strong class="home-num">${escapeHtml(String(guaranteedHands))}${guaranteedHands === fallback ? '' : '手'}</strong></div>
+                <div class="home-recent-metric"><span>累计升跌</span><strong class="home-num">${escapeHtml(cumulativeChange.text)}</strong></div>
+                <div class="home-recent-metric"><span>开盘价</span><strong class="home-num">${escapeHtml(String(firstDayOpen))}</strong></div>
+                <div class="home-recent-metric"><span>收盘价</span><strong class="home-num">${escapeHtml(String(firstDayClose))}</strong></div>
               </div>
             </div>
           </div>
