@@ -39,8 +39,10 @@ const HEADER_ALIASES = {
   allotmentRate: ['一手中签率', '一手中籤率', '中签率', '中籤率', '分配比率'],
   firstDayOpen: ['首日开市价', '首日開市價', '开市价', '開市價', '开盘价', '開盤價'],
   firstDayClose: ['按盘价', '按盤價', '收盘价', '收盤價', '现价', '現價'],
-  firstDayChangePct: ['首日升跌', '累积升跌', '累計升跌', '首日表现', '首日表現', '累计升跌'],
+  firstDayChangePct: ['首日升跌', '首日表现', '首日表現'],
+  cumulativeReturn: ['累积升跌', '累計升跌', '累计升跌', '累积表现', '累積表現', '累计表现'],
   lotProfit: ['一手收益', '每手收益', '每手赚蚀', '每手賺蝕', '每手盈利'],
+  guaranteedHands: ['稳中一手', '穩中一手'],
   statusText: ['状态', '狀態', '备注', '備註'],
 };
 
@@ -189,7 +191,9 @@ function resolveColumnMap(headers = [], moduleType = '') {
     firstDayOpen: findHeaderIndex(headers, HEADER_ALIASES.firstDayOpen),
     firstDayClose: findHeaderIndex(headers, HEADER_ALIASES.firstDayClose),
     firstDayChangePct: findHeaderIndex(headers, HEADER_ALIASES.firstDayChangePct),
+    cumulativeReturn: findHeaderIndex(headers, HEADER_ALIASES.cumulativeReturn),
     lotProfit: findHeaderIndex(headers, HEADER_ALIASES.lotProfit),
+    guaranteedHands: findHeaderIndex(headers, HEADER_ALIASES.guaranteedHands),
     statusText: findHeaderIndex(headers, HEADER_ALIASES.statusText),
   };
 
@@ -480,7 +484,8 @@ function logRowsDebug(prefix, payload) {
 }
 
 function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
-  const code = normalizeCode(raw.code);
+  const code = normalizeCode(raw.code)
+    || (moduleType === TABLE_TYPE.hearingPassed ? normalizeCode(raw.name) || normalizeCode(raw.rowText) : null);
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
   const listingDate = normalizeDateOrRaw(raw.listingDate);
   const rowText = String(raw.rowText || '').replace(/\s+/g, ' ');
@@ -529,8 +534,8 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
       ...common,
       subscriptionMultiple: parseNumeric(raw.subscriptionMultiple),
       allotmentRate: parsePercent(raw.allotmentRate),
-      firstDayOpen: parseNumeric(raw.firstDayOpen),
-      firstDayClose: parseNumeric(raw.firstDayClose),
+      firstDayOpen: parseNumeric(raw.firstDayOpen) ?? parseLabeledNumeric(rowText, ['开盘价', '開盤價', '开市价', '開市價']),
+      firstDayClose: parseNumeric(raw.firstDayClose) ?? parseLabeledNumeric(rowText, ['收盘价', '收盤價', '按盘价', '按盤價', '现价', '現價']),
       firstDayChangePct: parsePercent(raw.firstDayChangePct),
       lotProfit: parseNumeric(raw.lotProfit),
     };
@@ -569,9 +574,11 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
       ...common,
       subscriptionMultiple: parseNumeric(raw.subscriptionMultiple),
       allotmentRate: parsePercent(raw.allotmentRate),
-      firstDayOpen: parseNumeric(raw.firstDayOpen),
-      firstDayClose: parseNumeric(raw.firstDayClose),
+      guaranteedHands: parseNumeric(raw.guaranteedHands),
+      firstDayOpen: parseNumeric(raw.firstDayOpen) ?? parseLabeledNumeric(rowText, ['开盘价', '開盤價', '开市价', '開市價']),
+      firstDayClose: parseNumeric(raw.firstDayClose) ?? parseLabeledNumeric(rowText, ['收盘价', '收盤價', '按盘价', '按盤價', '现价', '現價']),
       firstDayChangePct: parsePercent(raw.firstDayChangePct),
+      cumulativeReturn: parsePercent(raw.cumulativeReturn),
       lotProfit: parseNumeric(raw.lotProfit),
     };
   }
@@ -672,6 +679,8 @@ function parseModuleTable(tableInfo, moduleType) {
         firstDayClose: getTodayListedCell(cells, [map.firstDayClose, 2]),
         firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
         lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
+        cumulativeReturn: null,
+        guaranteedHands: null,
         statusText: null,
       }
       : {
@@ -689,7 +698,9 @@ function parseModuleTable(tableInfo, moduleType) {
         firstDayOpen: getCellByModule(cells, map.firstDayOpen, tableInfo.headers, moduleType),
         firstDayClose: getCellByModule(cells, map.firstDayClose, tableInfo.headers, moduleType),
         firstDayChangePct: getCellByModule(cells, map.firstDayChangePct, tableInfo.headers, moduleType),
+        cumulativeReturn: getCellByModule(cells, map.cumulativeReturn, tableInfo.headers, moduleType),
         lotProfit: getCellByModule(cells, map.lotProfit, tableInfo.headers, moduleType),
+        guaranteedHands: getCellByModule(cells, map.guaranteedHands, tableInfo.headers, moduleType),
         statusText: getCellByModule(cells, map.statusText, tableInfo.headers, moduleType),
       };
 

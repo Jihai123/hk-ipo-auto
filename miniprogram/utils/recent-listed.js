@@ -40,10 +40,10 @@ function isAlreadyListed(item = {}) {
 }
 
 function pickMainPerformance(item = {}) {
-  const firstDay = toNumber(item.firstDayChangePct);
   const cumulative = toNumber(item.cumulativeReturn);
-  if (Number.isFinite(firstDay)) return firstDay;
+  const firstDay = toNumber(item.firstDayChangePct);
   if (Number.isFinite(cumulative)) return cumulative;
+  if (Number.isFinite(firstDay)) return firstDay;
   return null;
 }
 
@@ -85,7 +85,7 @@ function isRecentListedPerformance(item = {}) {
 function normalizeRecentListedPerformance(item = {}) {
   const firstDay = toNumber(item.firstDayChangePct);
   const cumulative = toNumber(item.cumulativeReturn);
-  const perf = Number.isFinite(firstDay) ? firstDay : cumulative;
+  const perf = Number.isFinite(cumulative) ? cumulative : firstDay;
   const isUp = Number.isFinite(perf) && perf > 0;
   const isDown = Number.isFinite(perf) && perf < 0;
 
@@ -101,7 +101,7 @@ function normalizeRecentListedPerformance(item = {}) {
     metrics: [
       { label: '上市价', value: toText(item.offerPrice, '') },
       { label: '累积回报', value: Number.isFinite(cumulative) ? `${cumulative > 0 ? '+' : ''}${cumulative.toFixed(2)}%` : '' },
-      { label: '首日表现', value: Number.isFinite(firstDay) ? `${firstDay > 0 ? '+' : ''}${firstDay.toFixed(2)}%` : '' },
+      { label: '首日升跌', value: Number.isFinite(firstDay) ? `${firstDay > 0 ? '+' : ''}${firstDay.toFixed(2)}%` : '' },
       { label: '认购倍数', value: toText(item.subscriptionMultiple, '') },
       { label: '一手中签率', value: formatPercent(item.allotmentRate, 2) },
     ].filter((m) => m.value),
