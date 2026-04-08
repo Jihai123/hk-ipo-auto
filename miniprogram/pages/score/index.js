@@ -159,6 +159,9 @@ function buildDimensionRows(key, rawEvidence = {}, fallbackEvidence = {}) {
   }
 
   if (key === 'industry') {
+    if (rawEvidence.companyIndustry) {
+      rows.push({ label: '公司所属行业', value: toText(rawEvidence.companyIndustry, '未提供') });
+    }
     if (rawEvidence.matchedKeyword || fallbackEvidence.keywordText) {
       rows.push({ label: '匹配关键词', value: toText(rawEvidence.matchedKeyword || fallbackEvidence.keywordText, '未提供') });
     }
@@ -211,6 +214,8 @@ function normalizeDimension(item = {}, idx = 0) {
 
 function buildMarketInfo(display = {}) {
   const candidates = [
+    { key: 'industry', label: '所属行业', value: display.industry },
+    { key: 'hasGreenShoe', label: '绿鞋机制', value: display.hasGreenShoe === undefined ? null : (display.hasGreenShoe ? '有' : '无') },
     { key: 'offerPrice', label: '上市价', value: display.offerPrice },
     { key: 'cumulativeReturn', label: '累积回报', value: display.cumulativeReturn },
     { key: 'firstDayChangePct', label: '首日表现', value: display.firstDayChangePct },

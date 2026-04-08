@@ -2469,6 +2469,13 @@
       const hkexSearchUrl = `https://www.hkexnews.hk/listedco/listconews/advancedsearch/search_active_main_c.aspx`;
       let linksHtml = '';
 
+      const display = data.display || {};
+      const displayMeta = [];
+      if (display.industry) displayMeta.push(`所属行业: ${display.industry}`);
+      if (display.hasGreenShoe !== undefined && display.hasGreenShoe !== null) {
+        displayMeta.push(`绿鞋机制: ${display.hasGreenShoe ? '有' : '无'}`);
+      }
+
       if (data.prospectus?.link) {
         const pdfLink = data.prospectus.link;
         linksHtml = `
@@ -2488,6 +2495,7 @@
             下载招股书PDF
           </a>
           <span class="elapsed">分析耗时: ${data.elapsed || '-'}</span>
+          ${displayMeta.length ? `<span class="elapsed">${displayMeta.join(' ｜ ')}</span>` : ''}
         `;
       }
       document.getElementById('prospectusLinks').innerHTML = linksHtml;
