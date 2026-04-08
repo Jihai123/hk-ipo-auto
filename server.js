@@ -656,6 +656,13 @@ const STAR_CORNERSTONE_MAP = {
   '橡树资本 Oaktree': ['Oaktree', 'Oaktree Capital', 'Oaktree Capital Management'] // ✅ 新增
 };
 
+const CORNERSTONE_SUBSIDIARY_MARKERS = [
+  '附屬公司', '附属公司', '子公司',
+  '最終母公司', '最终母公司',
+  '間接全資附屬公司', '间接全资附属公司',
+  '全資附屬公司', '全资附属公司',
+];
+
 
 // ==================== 工具函数 ====================
 
@@ -3119,6 +3126,11 @@ async function scoreProspectus(rawText, stockCode) {
       if (/^[A-Z0-9\-]{2,}$/.test(w)) upperCount++;
     }
     if (words.length > 5 && upperCount / words.length > 0.6) return false;
+
+    // 过滤子公司/附属公司引用（例如 HillhouseGroup 的附属实体，不应计为高瓴主品牌）
+    if (CORNERSTONE_SUBSIDIARY_MARKERS.some(marker => context.includes(marker))) {
+      return false;
+    }
     return true;
   };
 
@@ -3408,7 +3420,23 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let lockupScoreRule = '';
   const decisionPath = [];
 
-  const historySection = extractSection(
+  // 优先目录定位，避免误命中正文里的“发展历程”而提早截断到错误章节
+  const historySectionByTOC = extractSectionByTOC(
+    textNoSpaceForLockup,
+    [
+      /歷史、發展及公司架構[.\s·…]*(\d{2,4})/i,
+      /历史、发展及公司架构[.\s·…]*(\d{2,4})/i,
+      /歷史與發展[.\s·…]*(\d{2,4})/i,
+      /历史与发展[.\s·…]*(\d{2,4})/i,
+      /歷史及發展[.\s·…]*(\d{2,4})/i,
+      /历史及发展[.\s·…]*(\d{2,4})/i,
+    ],
+    HISTORY_SECTION_START_PATTERNS,
+    HISTORY_SECTION_END_PATTERNS,
+    260000
+  );
+
+  const historySection = historySectionByTOC || extractSection(
     textNoSpaceForLockup,
     HISTORY_SECTION_START_PATTERNS,
     HISTORY_SECTION_END_PATTERNS,
@@ -3741,6 +3769,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   const industryEvidence = {
     section: industrySection ? '行業概覽/業務章节' : '招股书前250000字',
     sectionLength: industrySearchText.length,
+    companyIndustry: etnetData?.industry || null,
     // v3新增字段
     industryCategory,           // 归一化后的标准行业名称
     matchedKeywords,            // 贡献得分的关键词列表（格式："词(次数)"）
@@ -3899,33 +3928,39 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     scores.ipoSize = { score: 0, reason: '募资规模：计算异常', details: e.message, evidence: {} };
   }
 
-  // ========== 计算总分（V5）==========
-  // 总分范围: [-12, +10]
-  // oldShares[-2,0] + sponsor[-2,+2] + cornerstone[0,+2] + lockup[-2,0] +
-  // industry[-2,+2] + pe[-3,+3] + ipoSize[-1,+1]
-  const totalScore = Object.values(scores).reduce((sum, item) => sum + item.score, 0);
+  // ========== 计算总分（当前对外版本仅5维参与）==========
+  // 保留 pe / ipoSize 计算逻辑供后续启用，但当前版本不参与总分、也不对外展示
+  const ACTIVE_SCORE_KEYS = ['oldShares', 'sponsor', 'cornerstone', 'lockup', 'industry'];
+  const totalScore = ACTIVE_SCORE_KEYS.reduce((sum, key) => sum + (scores[key]?.score || 0), 0);
 
-  // V5 评级阈值（上调，因新增PE维度最高可+3）
+  // 对外评分阈值（5维口径）
   let rating;
-  if      (totalScore >= 7)  rating = '强烈推荐';
-  else if (totalScore >= 4)  rating = '建议申购';
-  else if (totalScore >= 2)  rating = '可以考虑';
+  if      (totalScore >= 4)  rating = '强烈推荐';
+  else if (totalScore >= 2)  rating = '建议申购';
+  else if (totalScore >= 1)  rating = '可以考虑';
   else if (totalScore >= 0)  rating = '谨慎申购';
   else                       rating = '不建议';
 
+  const publicScores = ACTIVE_SCORE_KEYS.reduce((acc, key) => {
+    acc[key] = scores[key];
+    return acc;
+  }, {});
+
   console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
-  console.log(`[评分] 各维度: 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score} PE${scores.pe.score} 募资${scores.ipoSize.score}`);
+  console.log(`[评分] 各维度(对外5维): 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score}`);
+  console.log(`[评分] 扩展维度(暂不对外): PE${scores.pe.score} 募资${scores.ipoSize.score}`);
 
   return {
     stockCode:   formatStockCode(stockCode),
     totalScore,
     rating,
-    scores,
+    scores: publicScores,
     // 展示项（不计入总分）
     display: {
       hasGreenShoe,
       subscriptionMultiple: etnetData?.subscriptionMultiple || null,
       listingDate:          etnetData?.listingDate || null,
+      industry:             etnetData?.industry || null,
     },
     _version: 'v5',
   };
@@ -4912,8 +4947,6 @@ function buildMiniProgramDimensions(scores = {}) {
     { key: 'cornerstone', label: '基石投资者' },
     { key: 'lockup', label: 'Pre-IPO禁售' },
     { key: 'industry', label: '行业赛道' },
-    { key: 'pe', label: 'PE估值' },
-    { key: 'ipoSize', label: '募资规模' },
   ];
 
   return defs
@@ -4926,6 +4959,7 @@ function buildMiniProgramDimensions(scores = {}) {
         score: item.score,
         summary: item.reason || '',
         detail: item.details || '',
+        evidence: item.evidence || {},
         // 兼容旧字段（Phase 1 首页/后续页面可能已依赖）
         reason: item.reason || '',
         details: item.details || '',
