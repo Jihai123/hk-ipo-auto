@@ -3335,94 +3335,15 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     /基石投資者/i, /基石投资者/i, /CORNERSTONEINVESTORS?/i,
     /全球發售的架構/i, /全球发售的架构/i, /STRUCTUREOFTHEGLOBALOFFERING/i,
     /股份發售的架構/i, /股份发售的架构/i,
-  ];
-
-  // Step 1：Pre-IPO识别关键词
-  const PREIPO_PATTERNS = [
-    /首次公開發售前投資者/i,
-    /首次公開發售前投資/i,
-    /首次公開發售前增資/i,
-    /A1輪首次公開發售前投資/i,
-    /A2輪首次公開發售前投資/i,
-    /A3輪首次公開發售前投資/i,
-    /B輪首次公開發售前投資/i,
-    /首次公开发售前投资者/i,
-    /首次公开发售前投资/i,
-    /上市前投資者/i,
-    /上市前投資/i,
-    /上市前投资者/i,
-    /上市前投资/i,
-    /Pre-IPO\s*Investment/i,
-    /Pre-IPO\s*Investors?/i,
-    /上市前引入投資者/i,
-    /上市前引入投资者/i,
-    /上市前融資/i,
-    /上市前融资/i,
-    /投資者於上市前入股/i,
-    /投资者于上市前入股/i,
-  ];
-
-  const STRATEGIC_PREIPO_RE = /引入戰略投資者|引入战略投资者/i;
-
-  // Step 2：禁售关键词（强信号）
-  const LOCKUP_POSITIVE_PATTERNS = [
-    /禁售期/i,
-    /鎖定期/i,
-    /锁定期/i,
-    /禁售安排/i,
-    /lock-up/i,
-    /lockup/i,
-    /不得出售/i,
-    /不得轉讓/i,
-    /不得转让/i,
-    /出售限制/i,
-    /受禁售限制/i,
-    /受若干禁售承諾所規限/i,
-    /受若干禁售承诺所规限/i,
-    /六個月|6個月|六个月|6个月|180天/i,
-    /十二個月|12個月|十二个月|12个月/i,
-    /二十四個月|24個月|二十四个月|24个月/i,
-    /三十六個月|36個月|三十六个月|36个月/i,
-    /一年/i,
-    /自上市日期起.{0,30}不得出售/i,
-    /上市後.{0,30}不得出售/i,
-    /上市后.{0,30}不得出售/i,
-    /上市日期後12個月內/i,
-    /上市後12個月內/i,
-    /上市后12个月内/i,
-  ];
-
-  // 明确无禁售（强负面）
-  const LOCKUP_NEGATIVE_PATTERNS = [
-    /並無任何禁售安排/i,
-    /并无任何禁售安排/i,
-    /未設禁售期/i,
-    /未设禁售期/i,
-    /不受任何出售限制/i,
-    /並不受任何出售限制/i,
-    /不受任何轉讓限制/i,
-    /不受任何转让限制/i,
-  ];
-
-  // 强制防误判：非Pre-IPO主体
-  const EXCLUDE_SUBJECT_MARKERS = [
-    '控股股東', '控股股东',
-    '基石投資者', '基石投资者',
-    '承銷協議', '承销协议',
-    '綠鞋', '绿鞋', '借股',
-  ];
-  const PREIPO_SUBJECT_MARKERS = [
-    '首次公開發售前投資者', '首次公開發售前投資',
-    '首次公开发售前投资者', '首次公开发售前投资',
-    '上市前投資者', '上市前投資', '上市前投资者', '上市前投资',
-    'Pre-IPO',
+    /董事、監事及高級管理層/i, /董事、监事及高级管理层/i,
+    /董事及高級管理層/i, /董事及高级管理层/i,
+    /董事會/i, /董事会/i, /DIRECTORS?/i,
   ];
 
   let hasPreIPOInvestment = false;
   let hasLockup = false;
   let preIPOContext = '';
   let lockupContext = '';
-  let lockupNegativeContext = '';
   let preIPOSectionTitle = '';
   let lockupConfidence = 'medium';
   let lockupScore = 0;
@@ -3458,13 +3379,18 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   );
 
   const PREIPO_KEYWORDS = [
-    '首次公開發售前投資者', '首次公開發售前投資', '首次公開發售前增資',
-    'A1輪首次公開發售前投資', 'A2輪首次公開發售前投資', 'A3輪首次公開發售前投資', 'B輪首次公開發售前投資',
-    'Pre-IPO', '上市前投資',
+    '首次公開發售前投資者',
+    '首次公開發售前投資',
+    '首次公開發售前增資',
+    'Pre-IPO',
   ];
   const LOCKUP_KEYWORDS = [
-    '禁售期', '鎖定期', 'lock-up', '不得出售', '不得轉讓', '出售限制',
-    '上市日期後12個月內', '上市後12個月內',
+    '禁售期',
+    '鎖定期',
+    '不得轉讓',
+    '不得出售',
+    '上市日期後',
+    '上市後',
   ];
 
   const findAllKeywordHits = (srcText, keywords) => {
@@ -3517,87 +3443,95 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   };
 
   const historyStart = findHistoryStartIndex();
-  const rawHistoryWindow = historyStart >= 0
-    ? textNoSpaceForLockup.slice(historyStart, Math.min(textNoSpaceForLockup.length, historyStart + 260000))
-    : '';
+  const historyEnd = (historyStart >= 0 && historySection)
+    ? (historyStart + historySection.length - 1)
+    : -1;
 
-  console.log(`[禁售期] historyStart=${historyStart}, rawHistoryWindowLen=${rawHistoryWindow.length}`);
+  console.log(`[禁售期] historyStart=${historyStart}`);
+  console.log(`[禁售期] historyEnd=${historyEnd}`);
   console.log(`[禁售期] historySectionLen=${historySection?.length || 0}`);
 
-  const preIpoHitsInRaw = rawHistoryWindow ? findAllKeywordHits(rawHistoryWindow, PREIPO_KEYWORDS) : [];
-  const preIpoHitsInSection = historySection ? findAllKeywordHits(historySection, PREIPO_KEYWORDS) : [];
-  console.log(`[禁售期] preIpoHitsInRaw=${JSON.stringify(preIpoHitsInRaw.slice(0, 12))}`);
-  console.log(`[禁售期] preIpoHitsInSection=${JSON.stringify(preIpoHitsInSection.slice(0, 12))}`);
+  const preIpoHitsInHistory = historySection ? findAllKeywordHits(historySection, PREIPO_KEYWORDS) : [];
+  const lockupHitsInHistory = historySection ? findAllKeywordHits(historySection, LOCKUP_KEYWORDS) : [];
+  console.log(`[禁售期] preIpoHitsInHistory=${JSON.stringify(preIpoHitsInHistory.slice(0, 30))}`);
+  console.log(`[禁售期] lockupHitsInHistory=${JSON.stringify(lockupHitsInHistory.slice(0, 30))}`);
 
-  const selectedPreIpoHit = preIpoHitsInRaw[0] || preIpoHitsInSection[0] || null;
-  console.log(`[禁售期] selectedPreIpoHit=${JSON.stringify(selectedPreIpoHit)}`);
-
-  if (selectedPreIpoHit) {
-    hasPreIPOInvestment = true;
-    preIPOSectionTitle = '歷史/發展相关章节';
-    const useRawWindow = !!preIpoHitsInRaw[0];
-    sourceWindowType = useRawWindow ? 'rawHistoryWindow' : 'historySection';
-    const sourceWindow = useRawWindow ? rawHistoryWindow : (historySection || '');
-    const center = selectedPreIpoHit.index;
-    const blockStart = Math.max(0, center - 4000);
-    const blockEnd = Math.min(sourceWindow.length, center + 4000);
-    const preIpoBlock = sourceWindow.slice(blockStart, blockEnd);
-    console.log(`[禁售期] preIpoBlockRange=${blockStart}-${blockEnd}`);
-
-    preIPOContext = pickEvidenceSentence(sourceWindow, center);
-
-    const lockupHitsInBlock = findAllKeywordHits(preIpoBlock, LOCKUP_KEYWORDS);
-    console.log(`[禁售期] lockupHitsInBlock=${JSON.stringify(lockupHitsInBlock.slice(0, 20))}`);
-
-    const negativeMatch = preIpoBlock.match(/並無任何禁售安排|并无任何禁售安排|未設禁售期|未设禁售期|不受任何出售限制|並不受任何出售限制|不受任何轉讓限制|不受任何转让限制/i);
-    if (negativeMatch) {
-      lockupNegativeContext = pickEvidenceSentence(preIpoBlock, negativeMatch.index || 0);
+  const MAX_NEARBY_WINDOW = 2500;
+  const matchedPairs = [];
+  const pushPair = (aHit, bHit, direction) => {
+    const distance = Math.abs(aHit.index - bHit.index);
+    if (distance <= MAX_NEARBY_WINDOW) {
+      matchedPairs.push({
+        direction,
+        aKeyword: aHit.keyword,
+        aIndex: aHit.index,
+        bKeyword: bHit.keyword,
+        bIndex: bHit.index,
+        distance,
+      });
     }
+  };
 
-    if (!lockupNegativeContext && lockupHitsInBlock.length > 0) {
-      hasLockup = true;
-      lockupContext = pickEvidenceSentence(preIpoBlock, lockupHitsInBlock[0].index);
-    }
-
-    const parsedMonths = parseLockupMonths(preIpoBlock);
-    if (parsedMonths.length > 0) lockupMonths = parsedMonths[0].month;
-    console.log(`[禁售期] parsedLockupMonths=${JSON.stringify(parsedMonths)}`);
-    console.log(`[禁售期] evidencePreIpo=${preIPOContext}`);
-    console.log(`[禁售期] evidenceLockup=${lockupNegativeContext || lockupContext || ''}`);
-    decisionPath.push(`优先窗口=${sourceWindowType}`);
-    decisionPath.push(`selectedPreIpoHit=${selectedPreIpoHit.keyword}@${selectedPreIpoHit.index}`);
-  } else if (!historySection) {
-    decisionPath.push('未找到限定历史发展章节 -> 不做跨章节识别');
-  } else {
-    // 旧逻辑fallback（保留）
-    preIPOSectionTitle = '歷史/發展相关章节';
-    decisionPath.push('回退到historySection旧逻辑');
-    let preIPOMatch = null;
-    for (const re of PREIPO_PATTERNS) {
-      const m = historySection.match(re);
-      if (m) { preIPOMatch = m; break; }
-    }
-    if (!preIPOMatch) {
-      const strategicMatch = historySection.match(STRATEGIC_PREIPO_RE);
-      if (strategicMatch) {
-        const idx = strategicMatch.index || 0;
-        const nearby = historySection.slice(Math.max(0, idx - 50), Math.min(historySection.length, idx + 80));
-        if (/上市前/.test(nearby)) preIPOMatch = strategicMatch;
-      }
-    }
-    if (preIPOMatch) {
-      hasPreIPOInvestment = true;
-      const idx = preIPOMatch.index || 0;
-      preIPOContext = historySection.slice(Math.max(0, idx - 60), Math.min(historySection.length, idx + 160));
-      const posHit = historySection.match(/禁售期|鎖定期|lock-up|不得出售|不得轉讓|出售限制|上市日期後12個月內|上市後12個月內/i);
-      if (posHit) {
-        hasLockup = true;
-        lockupContext = historySection.slice(Math.max(0, (posHit.index || 0) - 90), Math.min(historySection.length, (posHit.index || 0) + 180));
-      }
-      const parsedMonths = parseLockupMonths(historySection);
-      if (parsedMonths.length > 0) lockupMonths = parsedMonths[0].month;
+  // A -> B
+  for (const aHit of preIpoHitsInHistory) {
+    for (const bHit of lockupHitsInHistory) {
+      pushPair(aHit, bHit, 'A->B');
     }
   }
+  // B -> A（日志上保留双向匹配）
+  for (const bHit of lockupHitsInHistory) {
+    for (const aHit of preIpoHitsInHistory) {
+      pushPair(aHit, bHit, 'B->A');
+    }
+  }
+
+  console.log(`[禁售期] matchedPairs=${JSON.stringify(matchedPairs.slice(0, 30))}`);
+
+  hasPreIPOInvestment = preIpoHitsInHistory.length > 0;
+  hasLockup = matchedPairs.length > 0;
+  preIPOSectionTitle = historySection ? '歷史、發展及公司架構' : '';
+  sourceWindowType = 'historySectionOnly';
+
+  if (preIpoHitsInHistory.length > 0) {
+    preIPOContext = pickEvidenceSentence(historySection, preIpoHitsInHistory[0].index);
+  }
+  if (matchedPairs.length > 0) {
+    lockupContext = pickEvidenceSentence(historySection, matchedPairs[0].bIndex);
+  }
+
+  let parsedMonths = [];
+  if (matchedPairs.length > 0) {
+    for (const pair of matchedPairs) {
+      const bIdx = pair.bIndex;
+      const start = Math.max(0, bIdx - MAX_NEARBY_WINDOW);
+      const end = Math.min(historySection.length, bIdx + MAX_NEARBY_WINDOW);
+      const nearby = historySection.slice(start, end);
+      const nearbyMonths = parseLockupMonths(nearby);
+      if (nearbyMonths.length > 0) {
+        parsedMonths = nearbyMonths;
+        break;
+      }
+    }
+  }
+  if (parsedMonths.length === 0 && lockupHitsInHistory.length > 0) {
+    // 兜底：仍优先从B类命中附近解析
+    for (const bHit of lockupHitsInHistory) {
+      const start = Math.max(0, bHit.index - MAX_NEARBY_WINDOW);
+      const end = Math.min(historySection.length, bHit.index + MAX_NEARBY_WINDOW);
+      const nearby = historySection.slice(start, end);
+      const nearbyMonths = parseLockupMonths(nearby);
+      if (nearbyMonths.length > 0) {
+        parsedMonths = nearbyMonths;
+        break;
+      }
+    }
+  }
+  if (parsedMonths.length > 0) lockupMonths = parsedMonths[0].month;
+  console.log(`[禁售期] parsedLockupMonths=${JSON.stringify(parsedMonths)}`);
+  console.log(`[禁售期] selectedEvidence=${JSON.stringify({
+    preIPOContext,
+    lockupContext,
+  })}`);
 
   // Step 3：风控优先评分
   if (!hasPreIPOInvestment) {
@@ -3607,31 +3541,22 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     lockupReason = '无Pre-IPO';
     lockupDetails = '限定历史发展章节内未识别到Pre-IPO投资者';
     lockupScoreRule = '无Pre-IPO投资者，0分';
-  } else if (lockupNegativeContext) {
-    hasLockup = false;
-    lockupScore = -2;
-    lockupConfidence = 'high';
-    lockupReason = 'Pre-IPO明确无禁售';
-    lockupDetails = '检测到“并无任何禁售安排/未设禁售期/不受出售限制”等明确负面表达';
-    lockupScoreRule = '明确无禁售，-2分（高风险）';
   } else if (hasLockup) {
     lockupScore = 0;
     lockupConfidence = 'high';
     lockupReason = 'Pre-IPO有禁售安排';
-    lockupDetails = `检测到禁售强信号（禁售期/锁定期/不得出售/时间型约束）${lockupMonths ? `，锁定期约${lockupMonths}个月` : ''}`;
-    lockupScoreRule = '明确有禁售，0分（安全）';
+    lockupDetails = `歷史章節內檢測到Pre-IPO與禁售雙錨點近鄰共現${lockupMonths ? `，鎖定期約${lockupMonths}個月` : ''}`;
+    lockupScoreRule = '有Pre-IPO且有禁售，0分';
   } else {
-    // CASE 3：风控优先 - 未明确披露禁售即视为无禁售
     hasLockup = false;
     lockupScore = -2;
     lockupConfidence = 'medium';
     lockupReason = 'Pre-IPO未披露禁售';
-    lockupDetails = '存在Pre-IPO投资者，但未检测到明确禁售安排（按风控规则视为无禁售）';
-    lockupScoreRule = '存在Pre-IPO但未披露禁售，-2分（风控）';
-    decisionPath.push('Pre-IPO存在但未命中禁售强信号 -> 风控判定为无禁售');
+    lockupDetails = '歷史章節內識別到Pre-IPO，但未識別到禁售雙錨點近鄰共現';
+    lockupScoreRule = '有Pre-IPO但没有禁售，-2分';
   }
 
-  console.log(`[禁售期] final: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, score=${lockupScore}, confidence=${lockupConfidence}`);
+  console.log(`[禁售期] final result: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, score=${lockupScore}, confidence=${lockupConfidence}`);
 
   const lockupEvidence = {
     hasPreIPO: hasPreIPOInvestment,
@@ -3641,13 +3566,13 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     sourceWindowType,
     score: lockupScore,
     confidence: lockupConfidence,
-    evidence: lockupNegativeContext || lockupContext || preIPOContext || '',
+    evidence: lockupContext || preIPOContext || '',
     reason: lockupScoreRule,
     decisionPath,
     section: preIPOSectionTitle || '未找到限定章节',
     preIPOContext,
     lockupContext,
-    negativeLockupContext: lockupNegativeContext,
+    matchedPairs: matchedPairs.slice(0, 50),
   };
 
   scores.lockup = {
