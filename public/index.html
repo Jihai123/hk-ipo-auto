@@ -2666,7 +2666,9 @@
       }
 
       if (key === 'lockup') {
-        if (ev.preIPOFound) {
+        const hasPreIPO = (typeof ev.preIPOFound === 'boolean') ? ev.preIPOFound : !!ev.hasPreIPO;
+        const hasLockup = (typeof ev.lockupFound === 'boolean') ? ev.lockupFound : !!ev.hasLockup;
+        if (hasPreIPO) {
           html += `<div><span class="label">Pre-IPO:</span> <span class="highlight">发现 Pre-IPO投资者</span></div>`;
           if (ev.preIPOContext) {
             html += `<div class="context">"...${ev.preIPOContext.substring(0, 120)}..."</div>`;
@@ -2675,13 +2677,13 @@
           html += `<div><span class="label">Pre-IPO:</span> <span class="value">未发现</span></div>`;
         }
 
-        if (ev.lockupFound) {
+        if (hasLockup) {
           const period = ev.lockupPeriod ? `（${ev.lockupPeriod}）` : '';
           html += `<div><span class="label">禁售期:</span> <span class="highlight">发现禁售安排${period}</span></div>`;
           if (ev.lockupContext) {
             html += `<div class="context">"...${ev.lockupContext.substring(0, 120)}..."</div>`;
           }
-        } else if (ev.preIPOFound) {
+        } else if (hasPreIPO) {
           html += `<div><span class="label">禁售期:</span> <span class="value" style="color: #ef4444;">未发现禁售期安排</span></div>`;
         }
       }

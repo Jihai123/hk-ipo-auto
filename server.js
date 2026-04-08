@@ -3622,6 +3622,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[禁售期] lockupHitsInHistory=${JSON.stringify(lockupHitsInHistory.slice(0, 30))}`);
 
   const MAX_NEARBY_WINDOW = 2500;
+  const PAIR_BLOCK_LEFT = 1500;
+  const PAIR_BLOCK_RIGHT = 1500;
   const matchedPairs = [];
   const pushPair = (aHit, bHit, direction) => {
     const distance = Math.abs(aHit.index - bHit.index);
@@ -3652,6 +3654,65 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   console.log(`[禁售期] matchedPairs=${JSON.stringify(matchedPairs.slice(0, 30))}`);
 
+  const scorePairBlock = (blockText) => {
+    let score = 0;
+    const signals = [];
+    const addSignal = (matched, label, delta) => {
+      if (!matched) return;
+      score += delta;
+      signals.push(`${label}${delta > 0 ? `+${delta}` : `${delta}`}`);
+    };
+
+    addSignal(blockText.includes('禁售期'), '禁售期', 10);
+    addSignal(blockText.includes('不得轉讓'), '不得轉讓', 10);
+    addSignal(blockText.includes('上市日期後'), '上市日期後', 8);
+    addSignal(blockText.includes('12個月'), '12個月', 8);
+    addSignal(/Pre-?IPO/i.test(blockText) && /lock-?up/i.test(blockText), 'PreIPO+Lockup', 15);
+
+    addSignal(blockText.includes('僱員激勵計劃'), '僱員激勵計劃', -8);
+    addSignal(blockText.includes('高級管理層'), '高級管理層', -8);
+    addSignal(blockText.includes('董事'), '董事', -5);
+    addSignal(blockText.includes('獨立性'), '獨立性', -6);
+    addSignal(blockText.includes('詳情請參閱'), '詳情請參閱', -4);
+    addSignal(blockText.includes('附錄'), '附錄', -4);
+
+    return { score, signals };
+  };
+
+  const candidatePairScores = matchedPairs.map((pair) => {
+    const blockStart = Math.max(0, Math.min(pair.aIndex, pair.bIndex) - PAIR_BLOCK_LEFT);
+    const blockEnd = Math.min(historySection.length, Math.max(pair.aIndex, pair.bIndex) + PAIR_BLOCK_RIGHT);
+    const blockText = historySection.slice(blockStart, blockEnd);
+    const scored = scorePairBlock(blockText);
+    return {
+      ...pair,
+      blockStart,
+      blockEnd,
+      blockText,
+      score: scored.score,
+      signals: scored.signals,
+    };
+  });
+  const selectedPair = candidatePairScores.reduce((best, cur) => {
+    if (!best) return cur;
+    if (cur.score > best.score) return cur;
+    if (cur.score === best.score && cur.distance < best.distance) return cur;
+    return best;
+  }, null);
+  const selectedPairScore = selectedPair ? selectedPair.score : null;
+  console.log(`[禁售期] candidatePairScores=${JSON.stringify(candidatePairScores.slice(0, 30).map((p) => ({
+    aIndex: p.aIndex,
+    bIndex: p.bIndex,
+    score: p.score,
+    signals: p.signals,
+  })))}`);
+  console.log(`[禁售期] selectedPair=${JSON.stringify(selectedPair ? {
+    aIndex: selectedPair.aIndex,
+    bIndex: selectedPair.bIndex,
+    distance: selectedPair.distance,
+  } : null)}`);
+  console.log(`[禁售期] selectedPairScore=${selectedPairScore}`);
+
   hasPreIPOInvestment = preIpoHitsInHistory.length > 0;
   hasLockup = matchedPairs.length > 0;
   preIPOSectionTitle = historySection ? '歷史、發展及公司架構' : '';
@@ -3660,22 +3721,18 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   if (preIpoHitsInHistory.length > 0) {
     preIPOContext = pickEvidenceSentence(historySection, preIpoHitsInHistory[0].index);
   }
-  if (matchedPairs.length > 0) {
-    lockupContext = pickEvidenceSentence(historySection, matchedPairs[0].bIndex);
+  if (selectedPair) {
+    const blockText = selectedPair.blockText || '';
+    const lockupStrongMatch = blockText.match(/禁售期[\s\S]{0,120}(?:12個月|十二個月)[\s\S]{0,120}不得轉讓|禁售期[\s\S]{0,120}不得轉讓[\s\S]{0,120}(?:12個月|十二個月)/);
+    preIPOContext = pickEvidenceSentence(historySection, selectedPair.aIndex);
+    lockupContext = lockupStrongMatch ? lockupStrongMatch[0] : pickEvidenceSentence(historySection, selectedPair.bIndex);
   }
 
   let parsedMonths = [];
-  if (matchedPairs.length > 0) {
-    for (const pair of matchedPairs) {
-      const bIdx = pair.bIndex;
-      const start = Math.max(0, bIdx - MAX_NEARBY_WINDOW);
-      const end = Math.min(historySection.length, bIdx + MAX_NEARBY_WINDOW);
-      const nearby = historySection.slice(start, end);
-      const nearbyMonths = parseLockupMonths(nearby);
-      if (nearbyMonths.length > 0) {
-        parsedMonths = nearbyMonths;
-        break;
-      }
+  if (selectedPair) {
+    const nearbyMonths = parseLockupMonths(selectedPair.blockText || '');
+    if (nearbyMonths.length > 0) {
+      parsedMonths = nearbyMonths;
     }
   }
   if (parsedMonths.length === 0 && lockupHitsInHistory.length > 0) {
@@ -3741,6 +3798,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     reason: lockupScoreRule,
     decisionPath,
     section: preIPOSectionTitle || '未找到限定章节',
+    evidencePreIpo: preIPOContext || '',
+    evidenceLockup: lockupContext || '',
     preIPOContext,
     lockupContext,
     matchedPairs: matchedPairs.slice(0, 50),
