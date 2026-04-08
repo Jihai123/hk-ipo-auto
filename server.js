@@ -3354,29 +3354,186 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let sourceWindowType = 'none';
   const decisionPath = [];
 
-  // 优先目录定位，避免误命中正文里的“发展历程”而提早截断到错误章节
-  const historySectionByTOC = extractSectionByTOC(
-    textNoSpaceForLockup,
-    [
-      /歷史、發展及公司架構[.\s·…]*(\d{2,4})/i,
-      /历史、发展及公司架构[.\s·…]*(\d{2,4})/i,
-      /歷史與發展[.\s·…]*(\d{2,4})/i,
-      /历史与发展[.\s·…]*(\d{2,4})/i,
-      /歷史及發展[.\s·…]*(\d{2,4})/i,
-      /历史及发展[.\s·…]*(\d{2,4})/i,
-    ],
-    HISTORY_SECTION_START_PATTERNS,
-    HISTORY_SECTION_END_PATTERNS,
-    260000
-  );
+  const LOCKUP_INTERNAL_SUBSECTION_TITLES = [
+    '首次公開發售前投資的主要條款',
+    '有關首次公開發售前投資者的資料',
+    '本公司成立及早期股權變動',
+    '概覽',
+    '估值及對價的釐定依據',
+    '禁售期',
+    '首次公開發售前投資所得款項用途',
+  ];
+  const PRIMARY_CHAPTER_TOC_PATTERNS = [
+    /董事、監事及高級管理層[.\s·…]*(\d{2,4})/i,
+    /董事、监事及高级管理层[.\s·…]*(\d{2,4})/i,
+    /董事及高級管理層[.\s·…]*(\d{2,4})/i,
+    /董事及高级管理层[.\s·…]*(\d{2,4})/i,
+    /與控股股東的關係[.\s·…]*(\d{2,4})/i,
+    /与控股股东的关系[.\s·…]*(\d{2,4})/i,
+    /基石投資者[.\s·…]*(\d{2,4})/i,
+    /基石投资者[.\s·…]*(\d{2,4})/i,
+    /全球發售[.\s·…]*(\d{2,4})/i,
+    /全球发售[.\s·…]*(\d{2,4})/i,
+    /行業概覽[.\s·…]*(\d{2,4})/i,
+    /行业概览[.\s·…]*(\d{2,4})/i,
+  ];
+  const HISTORY_TOC_PATTERNS = [
+    /歷史、發展及公司架構[.\s·…]*(\d{2,4})/i,
+    /历史、发展及公司架构[.\s·…]*(\d{2,4})/i,
+    /歷史與發展[.\s·…]*(\d{2,4})/i,
+    /历史与发展[.\s·…]*(\d{2,4})/i,
+    /歷史及發展[.\s·…]*(\d{2,4})/i,
+    /历史及发展[.\s·…]*(\d{2,4})/i,
+  ];
 
-  const historySection = historySectionByTOC || extractSection(
-    textNoSpaceForLockup,
-    HISTORY_SECTION_START_PATTERNS,
-    HISTORY_SECTION_END_PATTERNS,
-    260000,
-    true
-  );
+  const normalizeChapterTitle = (raw) => (raw || '')
+    .replace(/[·•….\-–—,:：;；，、\s]/g, '')
+    .trim();
+
+  const getPageMarkers = (srcText) => {
+    const markers = [];
+    const re = /[–—-](\d{1,4})[–—-]/g;
+    let m;
+    while ((m = re.exec(srcText)) !== null) {
+      markers.push({ page: parseInt(m[1], 10), index: m.index });
+    }
+    return markers;
+  };
+  const findPageByIndex = (markers, index) => {
+    if (index < 0 || markers.length === 0) return null;
+    let current = null;
+    for (const mk of markers) {
+      if (mk.index <= index) current = mk;
+      else break;
+    }
+    return current ? current.page : null;
+  };
+  const findIndexByPage = (markers, page) => {
+    if (!page || markers.length === 0) return -1;
+    const hit = markers.find((mk) => mk.page === page);
+    return hit ? hit.index : -1;
+  };
+  const findTOCPage = (srcText, patterns) => {
+    for (const pattern of patterns) {
+      const match = srcText.match(pattern);
+      if (match && match[1]) {
+        return {
+          page: parseInt(match[1], 10),
+          titleRaw: match[0].replace(/\d{2,4}\s*$/, ''),
+        };
+      }
+    }
+    return null;
+  };
+  const findNextChapterByTOC = (srcText, historyStartPage) => {
+    if (!historyStartPage) return null;
+    let best = null;
+    for (const pattern of PRIMARY_CHAPTER_TOC_PATTERNS) {
+      const re = new RegExp(pattern.source, 'gi');
+      let m;
+      while ((m = re.exec(srcText)) !== null) {
+        const page = parseInt(m[1], 10);
+        if (!Number.isFinite(page) || page <= historyStartPage) continue;
+        const titleRaw = (m[0] || '').replace(/\d{2,4}\s*$/, '');
+        const titleNormalized = normalizeChapterTitle(titleRaw);
+        if (!titleNormalized) continue;
+        if (LOCKUP_INTERNAL_SUBSECTION_TITLES.some((t) => normalizeChapterTitle(t) === titleNormalized)) continue;
+        if (!best || page < best.page) {
+          best = {
+            titleRaw,
+            titleNormalized,
+            page,
+            tocIndex: m.index,
+          };
+        }
+      }
+    }
+    return best;
+  };
+
+  const buildHistorySectionForLockup = () => {
+    const textForScan = textNoSpaceForLockup;
+    const pageMarkers = getPageMarkers(textForScan);
+    const fallbackByPattern = extractSection(
+      textForScan,
+      HISTORY_SECTION_START_PATTERNS,
+      HISTORY_SECTION_END_PATTERNS,
+      260000,
+      true
+    );
+
+    const historyTOC = findTOCPage(textForScan, HISTORY_TOC_PATTERNS);
+    const historyStartPage = historyTOC?.page || null;
+    const historyStartByPage = findIndexByPage(pageMarkers, historyStartPage);
+    const historyStartByPattern = findHistoryStartIndex();
+    const historyStartIndex = historyStartByPage >= 0 ? historyStartByPage : historyStartByPattern;
+
+    if (historyStartIndex < 0) {
+      return {
+        section: fallbackByPattern || '',
+        historyStartIndex: -1,
+        historyEndIndex: -1,
+        historyStartPage: null,
+        historyEndPage: null,
+        historyEndReason: fallbackByPattern ? 'fallback_extractSection' : 'not_found',
+        nextChapterTitleRaw: '',
+        nextChapterTitleNormalized: '',
+        nextChapterIndex: -1,
+        nextChapterPage: null,
+      };
+    }
+
+    const resolvedStartPage = historyStartPage || findPageByIndex(pageMarkers, historyStartIndex);
+    const nextChapter = findNextChapterByTOC(textForScan, resolvedStartPage);
+    const minCoveragePages = 12;
+    let historyEndReason = 'nextChapterByTOC';
+    let historyEndIndex = textForScan.length - 1;
+
+    if (nextChapter?.page) {
+      const nextChapterIndex = findIndexByPage(pageMarkers, nextChapter.page);
+      if (nextChapterIndex > historyStartIndex) {
+        historyEndIndex = nextChapterIndex - 1;
+      } else {
+        historyEndReason = 'fallback_nextChapterIndexNotFound';
+      }
+    } else {
+      historyEndReason = 'fallback_noReliableNextChapter';
+    }
+
+    // 页范围兜底：避免 historySection 过短，宁可稍宽不可过早截断
+    if (resolvedStartPage) {
+      const minEndPage = resolvedStartPage + minCoveragePages;
+      const minEndIndex = findIndexByPage(pageMarkers, minEndPage);
+      if (minEndIndex > historyStartIndex && historyEndIndex < minEndIndex) {
+        historyEndIndex = minEndIndex - 1;
+        historyEndReason = `${historyEndReason}+minPageRange(${minCoveragePages})`;
+      }
+    }
+
+    // 硬兜底：若仍异常，使用旧逻辑提取
+    if (historyEndIndex <= historyStartIndex + 1000 && fallbackByPattern?.length > 1000) {
+      historyEndIndex = historyStartIndex + fallbackByPattern.length - 1;
+      historyEndReason = `${historyEndReason}+fallback_extractSection`;
+    }
+
+    historyEndIndex = Math.min(historyEndIndex, textForScan.length - 1);
+    const section = textForScan.slice(historyStartIndex, historyEndIndex + 1);
+    return {
+      section,
+      historyStartIndex,
+      historyEndIndex,
+      historyStartPage: findPageByIndex(pageMarkers, historyStartIndex),
+      historyEndPage: findPageByIndex(pageMarkers, historyEndIndex),
+      historyEndReason,
+      nextChapterTitleRaw: nextChapter?.titleRaw || '',
+      nextChapterTitleNormalized: nextChapter?.titleNormalized || '',
+      nextChapterIndex: nextChapter?.tocIndex ?? -1,
+      nextChapterPage: nextChapter?.page ?? null,
+    };
+  };
+
+  const historySectionMeta = buildHistorySectionForLockup();
+  const historySection = historySectionMeta.section;
 
   const PREIPO_KEYWORDS = [
     '首次公開發售前投資者',
@@ -3428,7 +3585,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return srcText.slice(start, end);
   };
 
-  const findHistoryStartIndex = () => {
+  function findHistoryStartIndex() {
     for (const sp of HISTORY_SECTION_START_PATTERNS) {
       const regex = new RegExp(sp.source, 'gi');
       let m;
@@ -3440,16 +3597,24 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       }
     }
     return -1;
-  };
+  }
 
-  const historyStart = findHistoryStartIndex();
-  const historyEnd = (historyStart >= 0 && historySection)
-    ? (historyStart + historySection.length - 1)
-    : -1;
+  const historyStart = historySectionMeta.historyStartIndex;
+  const historyEnd = historySectionMeta.historyEndIndex;
 
   console.log(`[禁售期] historyStart=${historyStart}`);
   console.log(`[禁售期] historyEnd=${historyEnd}`);
   console.log(`[禁售期] historySectionLen=${historySection?.length || 0}`);
+  console.log(`[禁售期] historyEndReason=${historySectionMeta.historyEndReason}`);
+  console.log(`[禁售期] nextChapterTitleRaw=${historySectionMeta.nextChapterTitleRaw || ''}`);
+  console.log(`[禁售期] nextChapterTitleNormalized=${historySectionMeta.nextChapterTitleNormalized || ''}`);
+  console.log(`[禁售期] nextChapterTitle=${historySectionMeta.nextChapterTitleRaw || historySectionMeta.nextChapterTitleNormalized || ''}`);
+  console.log(`[禁售期] nextChapterIndex=${historySectionMeta.nextChapterIndex}`);
+  console.log(`[禁售期] nextChapterPage=${historySectionMeta.nextChapterPage ?? ''}`);
+  console.log(`[禁售期] historyStartPage=${historySectionMeta.historyStartPage ?? ''}`);
+  console.log(`[禁售期] historyEndPage=${historySectionMeta.historyEndPage ?? ''}`);
+  console.log(`[禁售期] historySectionPreviewHead=${(historySection || '').slice(0, 160)}`);
+  console.log(`[禁售期] historySectionPreviewTail=${(historySection || '').slice(-160)}`);
 
   const preIpoHitsInHistory = historySection ? findAllKeywordHits(historySection, PREIPO_KEYWORDS) : [];
   const lockupHitsInHistory = historySection ? findAllKeywordHits(historySection, LOCKUP_KEYWORDS) : [];
@@ -3557,6 +3722,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   }
 
   console.log(`[禁售期] final result: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, score=${lockupScore}, confidence=${lockupConfidence}`);
+  console.log(`[禁售期] final result=${JSON.stringify({
+    hasPreIPO: hasPreIPOInvestment,
+    hasLockup,
+    lockupMonths,
+    score: lockupScore,
+  })}`);
 
   const lockupEvidence = {
     hasPreIPO: hasPreIPOInvestment,
