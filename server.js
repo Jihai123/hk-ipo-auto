@@ -1132,6 +1132,11 @@ async function searchProspectus(stockCode) {
   let method1Count = 0;
   let method2Count = 0;
   const reasonSummary = [];
+  let titlesearchRawLinkCount = 0;
+  let titlesearchCandidateBeforeFilterCount = 0;
+  let titlesearchAddedCount = 0;
+  let probeLinkCount = 0;
+  let probeFilteredCount = 0;
 
   try {
     // 方法1: 先搜索主板新上市列表
@@ -1381,29 +1386,78 @@ async function searchProspectus(stockCode) {
             titleSearchRows++;
             const cells = $(row).find('td');
             if (cells.length >= 4) {
+              const publishDate = $(cells[0]).text().trim();
               const codeCell = $(cells[1]).text().trim();
               const nameCell = $(cells[2]).text().trim();
               const docCell = $(cells[3]);
+              const rowTitle = docCell.find('a').first().text().trim();
+
+              const rawLinks = [];
+              $(row).find('a').each((_, a) => {
+                const href = $(a).attr('href');
+                if (href) rawLinks.push(href.trim());
+              });
+              const limitedRawLinks = rawLinks.slice(0, 20);
+              titlesearchRawLinkCount += rawLinks.length;
+
+              const normalizedLinks = [...new Set(
+                rawLinks.map((href) => href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`)
+              )];
+              const limitedNormalizedLinks = normalizedLinks.slice(0, 20);
+
+              const candidateLinksBeforeFilter = normalizedLinks.filter((u) => {
+                const lower = (u || '').toLowerCase();
+                return lower.includes('.pdf') || lower.includes('/pdf');
+              });
+              const limitedCandidateLinks = candidateLinksBeforeFilter.slice(0, 20);
+              titlesearchCandidateBeforeFilterCount += candidateLinksBeforeFilter.length;
+
+              console.log(`[搜索][method2][titlesearch][row] idx=${i} date=${publishDate} title="${rowTitle}"`);
+              console.log(`[搜索][method2][titlesearch][row][rawLinks] idx=${i} links=${JSON.stringify(limitedRawLinks)}`);
+              console.log(`[搜索][method2][titlesearch][row][normalizedLinks] idx=${i} links=${JSON.stringify(limitedNormalizedLinks)}`);
+              console.log(`[搜索][method2][titlesearch][row][candidateBeforeFilter] idx=${i} links=${JSON.stringify(limitedCandidateLinks)}`);
 
               // 检查是否匹配股票代码
-              if (codeCell.includes(codeNum) || codeCell.includes(formattedCode)) {
-                const titleLink = docCell.find('a').first();
-                const title = titleLink.text().trim();
-                const href = titleLink.attr('href');
+              const codeMatched = codeCell.includes(codeNum) || codeCell.includes(formattedCode);
+              const titleLink = docCell.find('a').first();
+              const title = titleLink.text().trim();
+              const href = titleLink.attr('href');
+              const selectedPdfUrl = href ? (href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`) : '';
+              const titleMatched = title.includes('招股章程') || title.includes('招股書') || title.includes('Prospectus');
+              const titleExcluded = title.includes('申請版本') || title.includes('PHIP') || title.includes('補充');
 
+              for (const candidateUrl of limitedCandidateLinks) {
+                let added = false;
+                let rejectReason = '';
+                if (!codeMatched) {
+                  rejectReason = 'codeFilterMiss';
+                } else if (!titleMatched || titleExcluded) {
+                  rejectReason = 'titleFilterMiss';
+                } else if (candidateUrl !== selectedPdfUrl) {
+                  rejectReason = 'parseLinkFailed';
+                } else if (results.find(r => r.link === candidateUrl)) {
+                  rejectReason = 'duplicate';
+                } else {
+                  added = true;
+                }
+                console.log(`[搜索][method2][titlesearch][row][decision] idx=${i} url="${candidateUrl}" added=${added} rejectReason=${rejectReason}`);
+              }
+
+              if (codeCell.includes(codeNum) || codeCell.includes(formattedCode)) {
                 if (href && (
                   title.includes('招股章程') ||
                   title.includes('招股書') ||
                   title.includes('Prospectus')
                 )) {
                   if (!title.includes('申請版本') && !title.includes('PHIP') && !title.includes('補充')) {
-                    const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                    const pdfUrl = selectedPdfUrl;
                     results.push({
                       title: title || `${stockName} 招股章程`,
                       link: pdfUrl,
                       code: formattedCode,
                       name: nameCell || stockName,
                     });
+                    titlesearchAddedCount++;
                   }
                 }
               }
@@ -1429,6 +1483,7 @@ async function searchProspectus(stockCode) {
                     code: formattedCode,
                     name: stockName,
                   });
+                  titlesearchAddedCount++;
                 }
               }
             }
@@ -1506,6 +1561,8 @@ async function searchProspectus(stockCode) {
 
             // 合并AP URLs和listconews URLs（AP优先）
             const allProbeUrls = [...apUrls, ...probeUrls];
+            probeLinkCount = allProbeUrls.length;
+            console.log(`[搜索][method2][probe][candidateLinks] count=${allProbeUrls.length} links=${JSON.stringify(allProbeUrls.slice(0, 50))}`);
 
             // 使用curl探测文件大小（降低超时加速探测）
             const checkUrl = (url) => {
@@ -1514,17 +1571,50 @@ async function searchProspectus(stockCode) {
                   `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 3 --max-time 5`,
                   { encoding: 'utf8', timeout: 8000 }
                 );
+                const statusLine = (result.split('\n').find(line => line.startsWith('HTTP/')) || '').trim();
+                const statusMatch = statusLine.match(/\s(\d{3})\s/);
+                const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
                 const rangeMatch = result.match(/content-range:\s*bytes\s*\d+-\d+\/(\d+)/i);
+                const contentTypeMatch = result.match(/content-type:\s*([^\n\r]+)/i);
+                const contentLengthMatch = result.match(/content-length:\s*(\d+)/i);
+                const locationMatch = result.match(/location:\s*([^\n\r]+)/i);
+                const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : '';
+                const contentLength = contentLengthMatch ? parseInt(contentLengthMatch[1], 10) : 0;
+                const finalUrl = locationMatch ? locationMatch[1].trim() : url;
                 if (rangeMatch) {
-                  return parseInt(rangeMatch[1]);
+                  return {
+                    size: parseInt(rangeMatch[1], 10),
+                    status,
+                    finalUrl,
+                    contentType,
+                    contentLength,
+                  };
                 }
                 const lengthMatch = result.match(/content-length:\s*(\d+)/i);
                 if (lengthMatch && result.toLowerCase().includes('200')) {
-                  return parseInt(lengthMatch[1]);
+                  return {
+                    size: parseInt(lengthMatch[1], 10),
+                    status,
+                    finalUrl,
+                    contentType,
+                    contentLength,
+                  };
                 }
-                return 0;
+                return {
+                  size: 0,
+                  status,
+                  finalUrl,
+                  contentType,
+                  contentLength,
+                };
               } catch (e) {
-                return 0;
+                return {
+                  size: 0,
+                  status: 0,
+                  finalUrl: url,
+                  contentType: '',
+                  contentLength: 0,
+                };
               }
             };
 
@@ -1587,6 +1677,9 @@ async function searchProspectus(stockCode) {
             const PROBE_TIMEOUT_MS = 30000; // 探测阶段最多30秒（优化）
             let probeAttempted = 0;
             let sizeTooSmall = 0;
+            let invalidStatus = 0;
+            let htmlInsteadOfPdf = 0;
+            const probeSamples = [];
             for (let i = 0; i < allProbeUrls.length && candidateUrls.length < 5; i += batchSize) {
               // 超时保护：如果探测超过60秒则中断
               if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
@@ -1597,12 +1690,40 @@ async function searchProspectus(stockCode) {
 
               for (const url of batch) {
                 probeAttempted++;
-                const fileSize = checkUrl(url);
+                const info = checkUrl(url);
+                const fileSize = info.size || 0;
+                let rejectReason = '';
+                if (info.status && info.status !== 200 && info.status !== 206) {
+                  invalidStatus++;
+                  rejectReason = 'invalidStatus';
+                } else if (info.contentType && info.contentType.toLowerCase().includes('text/html')) {
+                  htmlInsteadOfPdf++;
+                  rejectReason = 'htmlInsteadOfPdf';
+                } else if (fileSize <= 3000000) {
+                  rejectReason = 'sizeTooSmall';
+                }
+
                 // 招股书通常较大（至少3MB）
                 if (fileSize > 3000000) {
                   candidateUrls.push({ url, fileSize });
                 } else {
                   sizeTooSmall++;
+                }
+                return false;
+              }
+            };
+
+                if (probeSamples.length < 20) {
+                  probeSamples.push({
+                    idx: probeSamples.length,
+                    url,
+                    status: info.status,
+                    finalUrl: info.finalUrl,
+                    contentType: info.contentType,
+                    contentLength: info.contentLength,
+                    effectiveSize: fileSize,
+                    rejectReason,
+                  });
                 }
               }
             }
@@ -1639,7 +1760,12 @@ async function searchProspectus(stockCode) {
             }
 
             const filtered = sizeTooSmall + fingerprintMiss;
+            probeFilteredCount = filtered;
+            probeSamples.forEach((s) => {
+              console.log(`[搜索][method2][probe][sample] idx=${s.idx} url="${s.url}" status=${s.status} finalUrl="${s.finalUrl}" contentType="${s.contentType}" contentLength=${s.contentLength} effectiveSize=${s.effectiveSize} rejectReason=${s.rejectReason}`);
+            });
             console.log(`[搜索][method2][probe] attempted=${probeAttempted} success=${probeSuccess} filtered=${filtered} filterReasons=sizeTooSmall:${sizeTooSmall},fingerprintMiss:${fingerprintMiss}`);
+            console.log(`[搜索][method2][probe] rejectStats invalidStatus=${invalidStatus} htmlInsteadOfPdf=${htmlInsteadOfPdf}`);
 
             if (results.length === 0) {
               reasonSummary.push('probeMiss');
@@ -1665,6 +1791,7 @@ async function searchProspectus(stockCode) {
   } else {
     console.log(`[搜索][final] method1Count=${method1Count} method2Count=${method2Count} totalCount=${results.length}`);
   }
+  console.log(`[搜索][summary] titlesearchRawLinkCount=${titlesearchRawLinkCount} titlesearchCandidateBeforeFilterCount=${titlesearchCandidateBeforeFilterCount} titlesearchAddedCount=${titlesearchAddedCount} probeLinkCount=${probeLinkCount} probeFilteredCount=${probeFilteredCount} finalCandidateCount=${results.length}`);
   return results;
 }
 
