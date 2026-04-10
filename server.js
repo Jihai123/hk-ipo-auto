@@ -1659,7 +1659,7 @@ async function searchProspectus(stockCode) {
             };
 
             // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
-            const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0) => {
+            const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0, debugDetail = false) => {
               try {
                 const resp = await axios.get(url, {
                   responseType: 'arraybuffer',
@@ -1669,24 +1669,52 @@ async function searchProspectus(stockCode) {
                     'Range': 'bytes=0-102400', // 只下载前100KB
                   },
                 });
+                const responseBytes = resp?.data?.byteLength || 0;
+                const rangeHeader = (resp?.headers?.['content-range'] || resp?.headers?.['Content-Range'] || '').toString();
+                const rangeHit = resp?.status === 206 || rangeHeader.length > 0;
+                if (debugDetail) {
+                  console.log(`[fingerprintDebug][input] url="${url}" stockCode=${stockCode} stockName="${stockName}" bytes=${responseBytes} rangeHit=${rangeHit}`);
+                }
 
                 // 将buffer转为字符串进行搜索（PDF中的文本通常是明文存储）
                 const content = resp.data.toString('utf8', 0, resp.data.byteLength);
                 const contentLatin = resp.data.toString('latin1', 0, resp.data.byteLength);
+                const previewOneLine = (text) => text.slice(0, 300).replace(/\s+/g, ' ').trim();
+
+                if (debugDetail) {
+                  console.log(`[fingerprintDebug][text] utf8Len=${content.length} latin1Len=${contentLatin.length}`);
+                  console.log(`[fingerprintDebug][utf8Preview] "${previewOneLine(content)}"`);
+                  console.log(`[fingerprintDebug][latin1Preview] "${previewOneLine(contentLatin)}"`);
+                }
 
                 const mergedContent = `${content}\n${contentLatin}`;
                 const matchedTerms = findMatchedTerms(mergedContent, PROSPECTUS_TERM_DICT.fingerprint);
                 const hasFingerprint = matchedTerms.length > 0;
+                if (debugDetail) {
+                  PROSPECTUS_TERM_DICT.fingerprint.slice(0, 20).forEach((term) => {
+                    const hitInUtf8 = content.includes(term);
+                    const hitInLatin1 = contentLatin.includes(term);
+                    console.log(`[fingerprintDebug][term] term="${term}" hitInUtf8=${hitInUtf8} hitInLatin1=${hitInLatin1}`);
+                  });
+                }
 
                 // 检查股票代码
                 const codeNum = stockCode.replace(/^0+/, '');
                 const hasCode = mergedContent.includes(codeNum);
+                if (debugDetail) {
+                  console.log(`[fingerprintDebug][code] pattern="${stockCode}|${codeNum}" hit=${hasCode}`);
+                }
 
                 // 检查公司名称
                 const nameParts = stockName.split(/[-－\s]/);
                 const hasName = nameParts.some(part =>
                   part.length >= 2 && mergedContent.includes(part)
                 );
+                if (debugDetail) {
+                  const effectiveNameParts = nameParts.filter(part => part.length >= 2);
+                  const matchedNameParts = effectiveNameParts.filter(part => mergedContent.includes(part));
+                  console.log(`[fingerprintDebug][name] nameParts=${JSON.stringify(effectiveNameParts)} matchedNameParts=${JSON.stringify(matchedNameParts)}`);
+                }
 
                 // 检查英文名（如xiaomi）
                 const contentLower = contentLatin.toLowerCase();
@@ -1695,6 +1723,19 @@ async function searchProspectus(stockCode) {
                 const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && (hasCode || hasName) && matchedTerms.length >= 1;
 
                 const pass = (hasFingerprint && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
+                if (debugDetail) {
+                  let failReason = 'none';
+                  if (!pass) {
+                    if (!hasFingerprint) {
+                      failReason = 'noFingerprintTermsMatched';
+                    } else if (!(hasCode || hasName || hasXiaomi)) {
+                      failReason = 'missingCodeAndNameAndXiaomi';
+                    } else {
+                      failReason = 'unknown';
+                    }
+                  }
+                  console.log(`[fingerprintDebug][decision] hasFingerprint=${hasFingerprint} hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} finalPass=${pass} failReason=${failReason}`);
+                }
                 console.log(`[fingerprint] url="${url}" matchedTerms=[${matchedTerms.join(', ')}] hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} pass=${pass}`);
                 return pass;
               } catch (e) {
@@ -1768,8 +1809,9 @@ async function searchProspectus(stockCode) {
             const topCandidates = candidateUrls.slice(0, 15);
             console.log(`[搜索][method2][probe][topCandidates] count=${topCandidates.length} links=${JSON.stringify(topCandidates.map(item => item.url))}`);
             const validationResults = await Promise.all(
-              topCandidates.map(async (candidate) => {
-                const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n, candidate.fileSize);
+              topCandidates.map(async (candidate, index) => {
+                const debugDetail = index < 3 || candidate.url.includes('2026040900025.pdf');
+                const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n, candidate.fileSize, debugDetail);
                 return { candidate, result };
               })
             );
