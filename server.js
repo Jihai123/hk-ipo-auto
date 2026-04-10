@@ -4456,21 +4456,22 @@ app.get('/api/score/:code', async (req, res) => {
         120000,
         '搜索招股书超时，该股票可能暂无招股书或港交所响应缓慢，请稍后重试'
       );
+      const candidateCount = Array.isArray(searchResults) ? searchResults.length : 0;
 
-      if (searchResults.length === 0) {
+      if (candidateCount === 0) {
         return res.json({
           success: false,
           error: '未找到招股书，请确认股票代码正确且已上市',
         });
       }
 
-      console.log(`[API] 找到 ${searchResults.length} 个候选PDF，逐个尝试验证...`);
+      console.log(`[API] 找到 ${candidateCount} 个候选PDF，逐个尝试验证...`);
 
       // 逐个尝试下载和验证PDF
       let lastError = null;
-      for (let i = 0; i < searchResults.length; i++) {
+      for (let i = 0; i < candidateCount; i++) {
         const candidate = searchResults[i];
-        console.log(`[API] 尝试第 ${i + 1}/${searchResults.length} 个: ${candidate.link.substring(0, 60)}...`);
+        console.log(`[API] 尝试第 ${i + 1}/${candidateCount} 个: ${candidate.link.substring(0, 60)}...`);
 
         try {
           pdfText = await downloadAndParsePDF(candidate.link, code, candidate.name || '');
@@ -4486,9 +4487,10 @@ app.get('/api/score/:code', async (req, res) => {
 
       // 所有PDF都验证失败
       if (!pdfText) {
+        const lastErrorMessage = lastError?.message || '没有可用候选PDF通过验证';
         return res.json({
           success: false,
-          error: `尝试了 ${searchResults.length} 个PDF都验证失败，最后一个错误: ${lastError?.message || '未知错误'}`,
+          error: `尝试了 ${candidateCount} 个PDF都验证失败，最后一个错误: ${lastErrorMessage}`,
         });
       }
     }
