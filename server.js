@@ -1709,6 +1709,9 @@ async function searchProspectus(stockCode) {
                 } else {
                   sizeTooSmall++;
                 }
+                return false;
+              }
+            };
 
                 if (probeSamples.length < 20) {
                   probeSamples.push({
