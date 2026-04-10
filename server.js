@@ -1543,7 +1543,7 @@ async function searchProspectus(stockCode) {
             // 方法3B: 探测listconews路径（常规上市公告）
             const probeUrls = [];
             const probeStartTime = Date.now();
-            for (let d = 5; d <= 14; d++) {
+            for (let d = 1; d <= 21; d++) {
               const probeDate = new Date(probeBaseDate);
               probeDate.setDate(probeDate.getDate() - d);
               const year = probeDate.getFullYear();
