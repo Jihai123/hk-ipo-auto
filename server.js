@@ -43,6 +43,46 @@ const app = express();
 const PORT = process.env.PORT || 3010;
 const IPO_DEBUG = process.env.IPO_DEBUG === '1';
 
+// ==================== 中英双语关键词词典（最小升级） ====================
+const PROSPECTUS_TERM_DICT = {
+  fingerprint: [
+    '本招股章程', '招股章程', '招股書', '全球發售', '全球发售', '香港公開發售', '香港公开发售', '國際發售', '国际发售',
+    'Prospectus', 'GLOBAL OFFERING', 'Global Offering', 'Hong Kong Offer Shares', 'International Offer Shares',
+    'How to Apply for Hong Kong Offer Shares', 'Expected Timetable', 'Risk Factors'
+  ],
+  sectionMarkers: [
+    '全球發售', '全球发售', 'GLOBAL OFFERING',
+    '風險因素', '风险因素', 'RISK FACTORS',
+    '行業概覽', '行业概览', 'INDUSTRY OVERVIEW',
+    '董事', 'DIRECTORS',
+    '財務資料', '财务资料', 'FINANCIAL INFORMATION',
+    '預期時間表', '预期时间表', 'EXPECTED TIMETABLE',
+  ],
+  stockCodeTerms: ['股份代號', '股票代號', '股份代碼', 'Stock Code', 'Stock code'],
+  offerPriceTerms: ['發售價', '发售价', '招股價', '招股价', 'Offer Price', 'Maximum Offer Price'],
+  oldShareTerms: ['銷售股份', '销售股份', 'Sale Shares', 'Selling Shares', 'Selling Shareholders'],
+};
+
+function normalizeNoSpaceLower(input = '') {
+  return String(input).replace(/\s+/g, '').toLowerCase();
+}
+
+function findMatchedTerms(text, terms = []) {
+  const normalizedText = normalizeNoSpaceLower(text);
+  return terms.filter(term => normalizedText.includes(normalizeNoSpaceLower(term)));
+}
+
+function extractEvidenceSnippet(text, terms = [], radius = 80) {
+  if (!text) return '';
+  for (const term of terms) {
+    const idx = text.toLowerCase().indexOf(term.toLowerCase());
+    if (idx >= 0) {
+      return text.slice(Math.max(0, idx - radius), Math.min(text.length, idx + term.length + radius));
+    }
+  }
+  return '';
+}
+
 // 目录配置
 const CACHE_DIR = path.join(__dirname, 'cache');
 const DATA_DIR = path.join(__dirname, 'data');
@@ -979,17 +1019,16 @@ function validatePdfContent(text, stockCode, stockName = '') {
   // 检查股票代码是否出现在文本中
   // 招股书中通常会提到"股份代號 XXXX"或"Stock Code: XXXX"
   const codePatterns = [
-    new RegExp(`股份代號[：:]?\\s*${codeNum}`, 'i'),
-    new RegExp(`股票代號[：:]?\\s*${codeNum}`, 'i'),
-    new RegExp(`Stock\\s*Code[：:]?\\s*${codeNum}`, 'i'),
-    new RegExp(`股份代碼[：:]?\\s*${codeNum}`, 'i'),
+    ...PROSPECTUS_TERM_DICT.stockCodeTerms.map(term => new RegExp(`${term}\\s*[：:]?\\s*${codeNum}`, 'i')),
     new RegExp(`\\b${codeNum}\\b`), // 单独出现的代码数字
   ];
 
   let codeFound = false;
+  let stockCodeTermHit = null;
   for (const pattern of codePatterns) {
     if (pattern.test(text)) {
       codeFound = true;
+      stockCodeTermHit = pattern.source;
       console.log(`[验证] 找到股票代码匹配: ${pattern}`);
       break;
     }
@@ -1008,6 +1047,7 @@ function validatePdfContent(text, stockCode, stockName = '') {
       }
     }
   }
+  console.log(`[fieldExtract] stockCodeTermHit=${stockCodeTermHit || 'none'}, offerPriceTermHit=NA`);
 
   // 综合判断
   if (codeFound && nameFound) {
@@ -1018,8 +1058,8 @@ function validatePdfContent(text, stockCode, stockName = '') {
     return { valid: true, confidence: 'medium', reason: '公司名称匹配' };
   } else {
     // 对于旧股，代码可能未在正文中频繁出现，检查是否为招股书
-    const isProspectus = text.includes('招股章程') || text.includes('招股書') ||
-                         text.includes('Prospectus') || text.includes('全球發售');
+    const isProspectus = findMatchedTerms(text.slice(0, 50000), PROSPECTUS_TERM_DICT.fingerprint).length > 0;
+    console.log(`[fieldExtract] stockCodeTermHit=${stockCodeTermHit || 'none'}, offerPriceTermHit=NA`);
     if (isProspectus) {
       return { valid: false, confidence: 'low', reason: '是招股书但无法匹配到目标股票，可能是其他公司的招股书' };
     }
@@ -1618,15 +1658,8 @@ async function searchProspectus(stockCode) {
               }
             };
 
-            // 招股书首页必出现的指纹词
-            const PROSPECTUS_FINGERPRINTS = [
-              '本招股章程', '全球發售', '香港公開發售', '國際發售',
-              '聯席保薦人', '聯席全球協調人', '招股章程', 'Prospectus',
-              'Global Offering', 'Hong Kong Public Offering'
-            ];
-
             // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
-            const quickFingerprintCheck = async (url, stockCode, stockName) => {
+            const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0) => {
               try {
                 const resp = await axios.get(url, {
                   responseType: 'arraybuffer',
@@ -1641,27 +1674,29 @@ async function searchProspectus(stockCode) {
                 const content = resp.data.toString('utf8', 0, resp.data.byteLength);
                 const contentLatin = resp.data.toString('latin1', 0, resp.data.byteLength);
 
-                // 检查招股书指纹词
-                const hasFingerprint = PROSPECTUS_FINGERPRINTS.some(fp =>
-                  content.includes(fp) || contentLatin.includes(fp)
-                );
+                const mergedContent = `${content}\n${contentLatin}`;
+                const matchedTerms = findMatchedTerms(mergedContent, PROSPECTUS_TERM_DICT.fingerprint);
+                const hasFingerprint = matchedTerms.length > 0;
 
                 // 检查股票代码
                 const codeNum = stockCode.replace(/^0+/, '');
-                const hasCode = content.includes(codeNum) || contentLatin.includes(codeNum);
+                const hasCode = mergedContent.includes(codeNum);
 
                 // 检查公司名称
                 const nameParts = stockName.split(/[-－\s]/);
                 const hasName = nameParts.some(part =>
-                  part.length >= 2 && (content.includes(part) || contentLatin.includes(part))
+                  part.length >= 2 && mergedContent.includes(part)
                 );
 
                 // 检查英文名（如xiaomi）
                 const contentLower = contentLatin.toLowerCase();
                 const hasXiaomi = contentLower.includes('xiaomi');
+                const isListcoNewsPdf = /listconews\/sehk\/\d{4}\/\d{4}\/\d+\.pdf/i.test(url);
+                const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && (hasCode || hasName) && matchedTerms.length >= 1;
 
-                // 必须是招股书 且 匹配目标股票
-                return hasFingerprint && (hasCode || hasName || hasXiaomi);
+                const pass = (hasFingerprint && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
+                console.log(`[fingerprint] url="${url}" matchedTerms=[${matchedTerms.join(', ')}] hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} pass=${pass}`);
+                return pass;
               } catch (e) {
                 // Range请求可能不被支持，返回null表示需要完整下载
                 if (e.response && e.response.status === 416) {
@@ -1734,7 +1769,7 @@ async function searchProspectus(stockCode) {
             console.log(`[搜索][method2][probe][topCandidates] count=${topCandidates.length} links=${JSON.stringify(topCandidates.map(item => item.url))}`);
             const validationResults = await Promise.all(
               topCandidates.map(async (candidate) => {
-                const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
+                const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n, candidate.fileSize);
                 return { candidate, result };
               })
             );
@@ -1892,14 +1927,14 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     const frontPagesNoSpace = frontPages.replace(/\s+/g, '').toLowerCase();
 
     // 1️⃣ 前几页必须含 Prospectus / 招股章程
-    const prospectusKeywords = ['prospectus', '招股章程', '招股書', '招股书'];
+    const prospectusKeywords = ['prospectus', '招股章程', '招股書', '招股书', 'global offering'];
     const hasProspectusKeyword = prospectusKeywords.some(k => frontPagesNoSpace.includes(k.toLowerCase()));
     console.log(`[PDF验证] 前几页含招股章程关键字: ${hasProspectusKeyword}`);
 
     // 2️⃣ 招股书应该包含特定章节
-    const prospectusMarkers = ['全球發售', '風險因素', '行業概覽', '董事', '財務資料'];
-    const markersFound = prospectusMarkers.filter(m => text.includes(m) || text.replace(/\s+/g, '').includes(m));
-    console.log(`[PDF验证] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/5 (${markersFound.join(', ')})`);
+    const markersFound = findMatchedTerms(text, PROSPECTUS_TERM_DICT.sectionMarkers);
+    console.log(`[pdfVerify] matchedSectionTerms=[${markersFound.join(', ')}]`);
+    console.log(`[PDF验证] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/${PROSPECTUS_TERM_DICT.sectionMarkers.length}`);
 
     // 验证失败条件
     if (!hasProspectusKeyword) {
@@ -2255,6 +2290,42 @@ function scorePE(offerPriceMid, totalShares, netProfitHKD, peerMedianPE) {
   return { score, reason, details, evidence };
 }
 
+function extractOfferPriceFromText(text) {
+  const compactText = text.replace(/\s+/g, '');
+  const offerPriceTermHit = PROSPECTUS_TERM_DICT.offerPriceTerms.find(term =>
+    compactText.toLowerCase().includes(term.replace(/\s+/g, '').toLowerCase())
+  ) || null;
+
+  const rangePatterns = [
+    /(?:發售價|发售价|招股價|招股价|OfferPrice|MaximumOfferPrice)[^\d]{0,20}(?:HK\$|\$)?([\d.]+)\s*(?:至|-|to)\s*(?:HK\$|\$)?([\d.]+)/i,
+  ];
+  const singlePatterns = [
+    /(?:發售價|发售价|招股價|招股价|OfferPrice|MaximumOfferPrice)[^\d]{0,20}(?:HK\$|\$)\s*([\d.]+)/i,
+  ];
+
+  for (const re of rangePatterns) {
+    const m = re.exec(compactText);
+    if (m) {
+      const low = Number(m[1]);
+      const high = Number(m[2]);
+      if (low > 0 && high > 0) {
+        return { offerPriceMid: (low + high) / 2, offerPriceTermHit, snippet: extractEvidenceSnippet(text, [m[0], ...(offerPriceTermHit ? [offerPriceTermHit] : [])], 90) };
+      }
+    }
+  }
+  for (const re of singlePatterns) {
+    const m = re.exec(compactText);
+    if (m) {
+      const price = Number(m[1]);
+      if (price > 0) {
+        return { offerPriceMid: price, offerPriceTermHit, snippet: extractEvidenceSnippet(text, [m[0], ...(offerPriceTermHit ? [offerPriceTermHit] : [])], 90) };
+      }
+    }
+  }
+
+  return { offerPriceMid: null, offerPriceTermHit, snippet: extractEvidenceSnippet(text, PROSPECTUS_TERM_DICT.offerPriceTerms, 90) };
+}
+
 // ==================== 评分引擎 ====================
 
 /**
@@ -2331,6 +2402,9 @@ async function scoreProspectus(rawText, stockCode) {
     /全球发售的发售股份数目[：:]/i,
     /發售股份數目[：:]/i,
     /发售股份数目[：:]/i,
+    /GlobalOffering[^\n]{0,80}OfferShares/i,
+    /HongKongOfferShares/i,
+    /InternationalOfferShares/i,
   ];
 
   for (const pattern of offeringStatementPatterns) {
@@ -2345,7 +2419,7 @@ async function scoreProspectus(rawText, stockCode) {
       console.log(`[旧股检测] 提取语句: ${globalOfferingStatement}`);
 
       // 检查是否包含"銷售股份"
-      if (/銷售股份|销售股份/.test(globalOfferingStatement)) {
+      if (/銷售股份|销售股份|SaleShares|SellingShares/i.test(globalOfferingStatement)) {
         hasOldShares = true;
         confidence = 'very_high';
         console.log(`[旧股检测] ✓ 发现銷售股份 → 有旧股`);
@@ -2356,10 +2430,10 @@ async function scoreProspectus(rawText, stockCode) {
         });
 
         // 提取数量（去空格后的文本）
-        const saleMatch = globalOfferingStatement.match(/([\d,，]+)股銷售股份|([\d,，]+)股销售股份/);
+        const saleMatch = globalOfferingStatement.match(/([\d,，]+)股銷售股份|([\d,，]+)股销售股份|([\d,，]+)\s*SaleShares/i);
         const newMatch = globalOfferingStatement.match(/([\d,，]+)股新[^股]*股份|([\d,，]+)股新股/);
         if (saleMatch) {
-          saleSharesCount = (saleMatch[1] || saleMatch[2]).replace(/[,，]/g, '');
+          saleSharesCount = (saleMatch[1] || saleMatch[2] || saleMatch[3]).replace(/[,，]/g, '');
           console.log(`[旧股检测] 旧股数量: ${saleSharesCount}`);
         }
         if (newMatch) {
@@ -2402,7 +2476,7 @@ async function scoreProspectus(rawText, stockCode) {
     console.log(`[旧股检测] 全球發售章节长度: ${globalOfferingSection?.length || 0}`);
 
     const searchTextForOldShares = globalOfferingSection || textNoSpace.slice(0, 80000);
-    const oldSharesKeywords = ['銷售股份', '销售股份'];
+    const oldSharesKeywords = PROSPECTUS_TERM_DICT.oldShareTerms;
 
     for (const kw of oldSharesKeywords) {
       console.log(`[旧股检测] 搜索关键词: ${kw}`);
@@ -2410,10 +2484,7 @@ async function scoreProspectus(rawText, stockCode) {
         hasOldShares = true;
         confidence = 'high';
         const kwIndex = searchTextForOldShares.indexOf(kw);
-        const oldShareContext = searchTextForOldShares.slice(
-          Math.max(0, kwIndex - 50),
-          Math.min(searchTextForOldShares.length, kwIndex + 80)
-        );
+        const oldShareContext = extractEvidenceSnippet(searchTextForOldShares, [kw], 80);
         console.log(`[旧股检测] ✓ 发现${kw}: ${oldShareContext}`);
         evidenceList.push({
           source: '《全球發售的架構》章节',
@@ -4136,15 +4207,15 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   try {
     // 1. 发行价：优先 etnet，备选 PDF 提取
     let offerPriceMid = etnetData?.offerPriceMid || null;
+    let offerPriceTermHit = null;
+    let offerPriceSnippet = '';
     if (!offerPriceMid) {
-      // PDF 中搜索发行价
-      const priceMatch = /發售價[^\d]*\$([\d.]+)\s*至\s*\$([\d.]+)/.exec(text.replace(/\s+/g, ''))
-                      || /招股價[^\d]*\$([\d.]+)/.exec(text.replace(/\s+/g, ''));
-      if (priceMatch) {
-        const nums = priceMatch.slice(1).map(Number).filter(n => n > 0);
-        offerPriceMid = nums.length === 1 ? nums[0] : (nums[0] + nums[1]) / 2;
-      }
+      const extractedPrice = extractOfferPriceFromText(text);
+      offerPriceMid = extractedPrice.offerPriceMid;
+      offerPriceTermHit = extractedPrice.offerPriceTermHit;
+      offerPriceSnippet = extractedPrice.snippet;
     }
+    console.log(`[fieldExtract] stockCodeTermHit=${PROSPECTUS_TERM_DICT.stockCodeTerms.find(term => new RegExp(`${term}\\s*[：:]?\\s*\\d+`, 'i').test(text)) || 'none'}, offerPriceTermHit=${offerPriceTermHit || 'none'}`);
 
     // 2. 总股本：从 PDF 提取（关键：不能用 H 股市值）
     const sharesResult = extractTotalShares(text);
@@ -4184,6 +4255,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         sharesSource:  sharesResult.source,
         sharesConfidence: sharesResult.confidence,
         profitSource:  profitResult.source,
+        offerPriceTermHit,
+        offerPriceSnippet,
         industry,
         scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
       },
