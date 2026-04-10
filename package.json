@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "check": "node -c server.js",
     "crawl": "node scripts/crawl-sponsors.js",
     "add": "node scripts/manual-add-ipo.js",
     "score": "node scripts/auto-crawler.js --only-score",
