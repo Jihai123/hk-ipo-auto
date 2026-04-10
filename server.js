@@ -1124,20 +1124,33 @@ async function searchProspectus(stockCode) {
   // 使用已清理后的纯数字代码（formatStockCode已去除字母前缀如AI/GEM等）
   const codeNum = parseInt(formattedCode, 10).toString();
 
-  console.log(`[搜索] 股票代码: ${formattedCode}`);
+  console.log(`[搜索][start] rawCode=${stockCode} formattedCode=${formattedCode} codeNum=${codeNum}`);
 
   let results = [];
   let $ = null;
   let response = null;
+  let method1Count = 0;
+  let method2Count = 0;
+  const reasonSummary = [];
+  let titlesearchRawLinkCount = 0;
+  let titlesearchCandidateBeforeFilterCount = 0;
+  let titlesearchAddedCount = 0;
+  let probeLinkCount = 0;
+  let probeFilteredCount = 0;
 
   try {
     // 方法1: 先搜索主板新上市列表
-    console.log('[搜索] 方法1: 尝试主板新上市列表...');
+    console.log(`[搜索][method1][main] start code=${formattedCode}`);
+    let mainCandidateRows = 0;
+    let mainMatchedRows = 0;
+    let mainPdfCount = 0;
+    let mainPageLoaded = false;
     const mainBoardUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/Main-Board?sc_lang=zh-HK';
     response = await axios.get(mainBoardUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       timeout: 30000,
     });
+    mainPageLoaded = true;
 
     $ = cheerio.load(response.data);
 
@@ -1145,10 +1158,12 @@ async function searchProspectus(stockCode) {
     $('table tr').each((i, row) => {
       const cells = $(row).find('td');
       if (cells.length >= 2) {
+        mainCandidateRows++;
         const code = $(cells[0]).text().trim();
         const name = $(cells[1]).text().trim();
 
         if (code === codeNum || code === formattedCode) {
+          mainMatchedRows++;
           const priorityResults = []; // 语义匹配的高优先级
           const fallbackResults = []; // 其他PDF作为备选
 
@@ -1158,6 +1173,7 @@ async function searchProspectus(stockCode) {
             const linkText = $(link).text().trim();
 
             if (!href || !href.toLowerCase().includes('.pdf')) return;
+            mainPdfCount++;
 
             const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
             const item = {
@@ -1186,16 +1202,22 @@ async function searchProspectus(stockCode) {
         }
       }
     });
+    console.log(`[搜索][method1][main] pageLoaded=${mainPageLoaded} candidateRows=${mainCandidateRows} matchedRows=${mainMatchedRows} pdfCount=${mainPdfCount}`);
     
     // 如果主板没找到，搜索创业板
     if (results.length === 0) {
-      console.log('[搜索] 方法1: 主板未找到，尝试创业板...');
+      console.log(`[搜索][method1][gem] start code=${formattedCode}`);
+      let gemCandidateRows = 0;
+      let gemMatchedRows = 0;
+      let gemPdfCount = 0;
+      let gemPageLoaded = false;
 
       const gemUrl = 'https://www2.hkexnews.hk/New-Listings/New-Listing-Information/GEM?sc_lang=zh-HK';
       response = await axios.get(gemUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         timeout: 30000,
       });
+      gemPageLoaded = true;
 
       $ = cheerio.load(response.data);
 
@@ -1203,10 +1225,12 @@ async function searchProspectus(stockCode) {
       $('table tr').each((i, row) => {
         const cells = $(row).find('td');
         if (cells.length >= 2) {
+          gemCandidateRows++;
           const code = $(cells[0]).text().trim();
           const name = $(cells[1]).text().trim();
 
           if (code === codeNum || code === formattedCode) {
+            gemMatchedRows++;
             const priorityResults = []; // 语义匹配的高优先级
             const fallbackResults = []; // 其他PDF作为备选
 
@@ -1216,6 +1240,7 @@ async function searchProspectus(stockCode) {
               const linkText = $(link).text().trim();
 
               if (!href || !href.toLowerCase().includes('.pdf')) return;
+              gemPdfCount++;
 
               const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
               const item = {
@@ -1244,420 +1269,526 @@ async function searchProspectus(stockCode) {
           }
         }
       });
+
+      console.log(`[搜索][method1][gem] pageLoaded=${gemPageLoaded} candidateRows=${gemCandidateRows} matchedRows=${gemMatchedRows} pdfCount=${gemPdfCount}`);
     }
 
     if (results.length > 0) {
       console.log(`[搜索] 方法1成功: 找到 ${results.length} 个结果`);
+      method1Count = results.length;
+    } else {
+      reasonSummary.push('mainMiss', 'gemMiss');
     }
   } catch (method1Error) {
     console.log(`[搜索] 方法1失败: ${method1Error.message}，继续尝试其他方法...`);
+    reasonSummary.push('method1Error');
   }
 
   try {
     // 如果新上市列表都没找到，尝试获取股票上市日期并搜索历史招股书
     if (results.length === 0) {
-      console.log('[搜索] 方法2: 尝试获取上市日期并搜索历史招股书...');
+      console.log(`[搜索][method2] enter because method1Count=${method1Count}`);
+
+      let ipoDate = null;
+      let stockName = `股票${formattedCode}`;
+      let useYahooWindow = false;
+      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${codeNum}.HK?interval=1mo&range=max`;
 
       try {
-        // 从Yahoo Finance获取首个交易日期
-        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${codeNum}.HK?interval=1mo&range=max`;
+        console.log(`[搜索][method2][yahoo] start url=${yahooUrl}`);
         const yahooResponse = await axios.get(yahooUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
           timeout: 15000,
         });
 
         const chartData = yahooResponse.data?.chart?.result?.[0];
-        if (chartData?.timestamp?.length > 0) {
+        const tsCount = chartData?.timestamp?.length || 0;
+        if (tsCount > 0) {
           const firstTimestamp = chartData.timestamp[0];
-          const ipoDate = new Date(firstTimestamp * 1000);
-          const stockName = chartData.meta?.shortName || chartData.meta?.longName || `股票${formattedCode}`;
-
-          console.log(`[搜索] 上市日期: ${ipoDate.toISOString().slice(0, 10)}, 名称: ${stockName}`);
-
-          // 招股书通常在上市前1-3周发布，搜索上市月份及前一个月
-          const searchDates = [];
-          const ipoMonth = new Date(ipoDate);
-          ipoMonth.setDate(1);
-          searchDates.push(new Date(ipoMonth)); // 上市当月
-
-          const prevMonth = new Date(ipoMonth);
-          prevMonth.setMonth(prevMonth.getMonth() - 1);
-          searchDates.push(prevMonth); // 上市前一个月
-
-          // 使用HKEX日期索引搜索
-          for (const searchDate of searchDates) {
-            const year = searchDate.getFullYear();
-            const month = String(searchDate.getMonth() + 1).padStart(2, '0');
-
-            // 尝试使用披露易的日期搜索接口
-            const dateFrom = `${year}${month}01`;
-            const dateTo = `${year}${month}${new Date(year, searchDate.getMonth() + 1, 0).getDate()}`;
-
-            const searchUrl = 'https://www1.hkexnews.hk/search/titlesearch.xhtml';
-            const searchParams = new URLSearchParams({
-              lang: 'ZH',
-              category: '0',
-              market: 'SEHK',
-              searchType: '1',  // 按股票代码搜索
-              documentType: '-1',
-              t1code: '40000',  // 招股章程类别
-              t2Gcode: '-2',
-              t2code: '-2',
-              stockId: codeNum,
-              from: dateFrom,
-              to: dateTo,
-              sortDir: '0',
-              sortByRecordCountOrDate: '2',
-              rowRange: '100',
-              pageNo: '1',
-            });
-
-            try {
-              response = await axios.post(searchUrl, searchParams.toString(), {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                  'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                timeout: 30000,
-              });
-
-              $ = cheerio.load(response.data);
-
-              // 解析搜索结果表格
-              $('table tbody tr').each((i, row) => {
-                const cells = $(row).find('td');
-                if (cells.length >= 4) {
-                  const dateCell = $(cells[0]).text().trim();
-                  const codeCell = $(cells[1]).text().trim();
-                  const nameCell = $(cells[2]).text().trim();
-                  const docCell = $(cells[3]);
-
-                  // 检查是否匹配股票代码
-                  if (codeCell.includes(codeNum) || codeCell.includes(formattedCode)) {
-                    const titleLink = docCell.find('a').first();
-                    const title = titleLink.text().trim();
-                    const href = titleLink.attr('href');
-
-                    if (href && (
-                      title.includes('招股章程') ||
-                      title.includes('招股書') ||
-                      title.includes('Prospectus')
-                    )) {
-                      if (!title.includes('申請版本') && !title.includes('PHIP') && !title.includes('補充')) {
-                        const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-                        results.push({
-                          title: title || `${stockName} 招股章程`,
-                          link: pdfUrl,
-                          code: formattedCode,
-                          name: nameCell || stockName,
-                        });
-                      }
-                    }
-                  }
-                }
-              });
-
-              // 同时检查其他可能的选择器
-              $('.row, .result-row').each((i, row) => {
-                const titleEl = $(row).find('.news-title a, .headline a, a[href*=".pdf"]');
-                const title = titleEl.text().trim();
-                const href = titleEl.attr('href');
-
-                if (title && href && (
-                  title.includes('招股章程') ||
-                  title.includes('Prospectus')
-                )) {
-                  if (!title.includes('申請版本') && !title.includes('PHIP')) {
-                    const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
-                    if (!results.find(r => r.link === pdfUrl)) {
-                      results.push({
-                        title: title,
-                        link: pdfUrl,
-                        code: formattedCode,
-                        name: stockName,
-                      });
-                    }
-                  }
-                }
-              });
-
-              if (results.length > 0) break;
-            } catch (err) {
-              console.log(`[搜索] ${year}/${month} 搜索失败:`, err.message);
-            }
-          }
-
-          // 方法2: 如果仍未找到，尝试直接获取上市公司公告JSON列表
-          if (results.length === 0) {
-            console.log('[搜索] 尝试获取活跃股票列表...');
-            try {
-              const stockListUrl = 'https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json';
-              const stockListResp = await axios.get(stockListUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0' },
-                timeout: 30000,
-              });
-
-              const stockList = stockListResp.data;
-              const stockInfo = stockList.find(s => s.c === formattedCode || s.c === codeNum);
-
-              if (stockInfo) {
-                console.log(`[搜索] 找到股票信息: ${stockInfo.n} (${stockInfo.c})`);
-
-                // 方法3A: 先尝试Application Proof路径（适用于新上市/H股二次上市）
-                console.log('[搜索] 方法3A: 尝试Application Proof路径...');
-                const apUrls = [];
-
-                // Application Proof通常在上市前1-3周发布
-                for (let d = 7; d <= 21; d++) {
-                  const apDate = new Date(ipoDate);
-                  apDate.setDate(apDate.getDate() - d);
-                  const year = apDate.getFullYear();
-                  const month = String(apDate.getMonth() + 1).padStart(2, '0');
-                  const day = String(apDate.getDate()).padStart(2, '0');
-                  const mmdd = `${month}${day}`;
-
-                  // Application Proof格式: /app/sehk/YYYY/MMDD/STOCKCODE.pdf
-                  apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${formattedCode}.pdf`);
-                  apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${codeNum}.pdf`);
-                }
-
-                console.log(`[搜索] 生成 ${apUrls.length} 个AP探测URL`);
-
-                // 方法3B: 探测listconews路径（常规上市公告）
-                console.log('[搜索] 方法3B: 尝试直接探测招股书URL...');
-
-                // 生成上市前5-14天的日期列表（优化：减少探测范围）
-                const probeUrls = [];
-                const probeStartTime = Date.now();
-                for (let d = 5; d <= 14; d++) {
-                  const probeDate = new Date(ipoDate);
-                  probeDate.setDate(probeDate.getDate() - d);
-                  const year = probeDate.getFullYear();
-                  const month = String(probeDate.getMonth() + 1).padStart(2, '0');
-                  const day = String(probeDate.getDate()).padStart(2, '0');
-                  const mmdd = `${month}${day}`;
-
-                  // 每天尝试序号 00001-00050（使用正确的5位序号格式，不含ltn前缀和_c后缀）
-                  for (let seq = 1; seq <= 50; seq++) {
-                    const seqStr = String(seq).padStart(5, '0');
-                    // 使用www1域名，正确的招股书URL格式
-                    probeUrls.push(`https://www1.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/${year}${mmdd}${seqStr}.pdf`);
-                  }
-                }
-
-                // 合并AP URLs和listconews URLs（AP优先）
-                const allProbeUrls = [...apUrls, ...probeUrls];
-                console.log(`[搜索] 总共生成 ${allProbeUrls.length} 个探测URL (${apUrls.length} AP + ${allProbeUrls.length} listconews)`);
-
-                // 使用curl探测文件大小（降低超时加速探测）
-                const checkUrl = (url) => {
-                  try {
-                    const result = execSync(
-                      `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 3 --max-time 5`,
-                      { encoding: 'utf8', timeout: 8000 }
-                    );
-                    const rangeMatch = result.match(/content-range:\s*bytes\s*\d+-\d+\/(\d+)/i);
-                    if (rangeMatch) {
-                      return parseInt(rangeMatch[1]);
-                    }
-                    const lengthMatch = result.match(/content-length:\s*(\d+)/i);
-                    if (lengthMatch && result.toLowerCase().includes('200')) {
-                      return parseInt(lengthMatch[1]);
-                    }
-                    return 0;
-                  } catch (e) {
-                    return 0;
-                  }
-                };
-
-                // ========== 三层过滤策略 ==========
-                // 第1层：标题过滤（URL探测无标题，跳过）
-                // 第2层：PDF前500KB二进制文本指纹搜索（快速，不需要完整PDF结构）
-                // 第3层：完整下载解析验证（只对第2层命中者）
-
-                // 招股书首页必出现的指纹词
-                const PROSPECTUS_FINGERPRINTS = [
-                  '本招股章程', '全球發售', '香港公開發售', '國際發售',
-                  '聯席保薦人', '聯席全球協調人', '招股章程', 'Prospectus',
-                  'Global Offering', 'Hong Kong Public Offering'
-                ];
-
-                // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
-                const quickFingerprintCheck = async (url, stockCode, stockName) => {
-                  try {
-                    const resp = await axios.get(url, {
-                      responseType: 'arraybuffer',
-                      timeout: 15000, // 15秒超时
-                      headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Range': 'bytes=0-102400', // 只下载前100KB
-                      },
-                    });
-
-                    // 将buffer转为字符串进行搜索（PDF中的文本通常是明文存储）
-                    const content = resp.data.toString('utf8', 0, resp.data.byteLength);
-                    const contentLatin = resp.data.toString('latin1', 0, resp.data.byteLength);
-
-                    // 检查招股书指纹词
-                    const hasFingerprint = PROSPECTUS_FINGERPRINTS.some(fp =>
-                      content.includes(fp) || contentLatin.includes(fp)
-                    );
-
-                    // 检查股票代码
-                    const codeNum = stockCode.replace(/^0+/, '');
-                    const hasCode = content.includes(codeNum) || contentLatin.includes(codeNum);
-
-                    // 检查公司名称
-                    const nameParts = stockName.split(/[-－\s]/);
-                    const hasName = nameParts.some(part =>
-                      part.length >= 2 && (content.includes(part) || contentLatin.includes(part))
-                    );
-
-                    // 检查英文名（如xiaomi）
-                    const contentLower = contentLatin.toLowerCase();
-                    const hasXiaomi = contentLower.includes('xiaomi');
-
-                    console.log(`[指纹] ${url.slice(-35)}: 招股书=${hasFingerprint}, 代码=${hasCode}, 名称=${hasName}, xiaomi=${hasXiaomi}`);
-
-                    // 必须是招股书 且 匹配目标股票
-                    return hasFingerprint && (hasCode || hasName || hasXiaomi);
-                  } catch (e) {
-                    // Range请求可能不被支持，返回null表示需要完整下载
-                    if (e.response && e.response.status === 416) {
-                      console.log(`[指纹] Range不支持，需完整下载: ${url.slice(-35)}`);
-                      return null;
-                    }
-                    console.log(`[指纹] 失败: ${e.message}`);
-                    return false;
-                  }
-                };
-
-                // 第3层：完整验证（只对第2层命中者或Range不支持的情况）
-                const fullValidation = async (url, stockCode, stockName) => {
-                  const tempPath = path.join(CACHE_DIR, `validate_${Date.now()}.pdf`);
-                  try {
-                    console.log(`[完整验证] 下载: ${url.slice(-40)}`);
-                    const resp = await axios.get(url, {
-                      responseType: 'arraybuffer',
-                      timeout: 120000,
-                      headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                      },
-                    });
-
-                    fs.writeFileSync(tempPath, resp.data);
-                    console.log(`[完整验证] 下载完成: ${(resp.data.byteLength / 1024 / 1024).toFixed(1)}MB`);
-
-                    let text = null;
-
-                    // 尝试pdftotext
-                    text = parsePdfWithPdftotext(tempPath);
-
-                    // 回退到pdf-parse
-                    if (!text || text.length < 100) {
-                      try {
-                        const pdfData = await pdfParse(resp.data, { max: 10 });
-                        text = pdfData.text;
-                      } catch (parseErr) {
-                        // 解析失败，使用二进制文本搜索
-                        text = resp.data.toString('utf8', 0, Math.min(resp.data.byteLength, 1000000));
-                      }
-                    }
-
-                    if (text && text.length > 50) {
-                      const codeNum = stockCode.replace(/^0+/, '');
-                      const hasCode = text.includes(codeNum);
-                      const nameParts = stockName.split(/[-－\s]/);
-                      const hasName = nameParts.some(part => part.length >= 2 && text.includes(part));
-                      const hasXiaomi = text.toLowerCase().includes('xiaomi');
-
-                      console.log(`[完整验证] 结果: code=${hasCode}, name=${hasName}, xiaomi=${hasXiaomi}`);
-                      return hasCode || hasName || hasXiaomi;
-                    }
-                  } catch (e) {
-                    console.log(`[完整验证] 失败: ${e.message}`);
-                  } finally {
-                    if (fs.existsSync(tempPath)) {
-                      try { fs.unlinkSync(tempPath); } catch (e) {}
-                    }
-                  }
-                  return false;
-                };
-
-                // 收集候选PDF（大于3MB的）
-                const candidateUrls = [];
-                const batchSize = 20;
-                const PROBE_TIMEOUT_MS = 30000; // 探测阶段最多30秒（优化）
-                for (let i = 0; i < allProbeUrls.length && candidateUrls.length < 5; i += batchSize) {
-                  // 超时保护：如果探测超过60秒则中断
-                  if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
-                    console.log(`[搜索] URL探测超时(${PROBE_TIMEOUT_MS/1000}s)，已探测 ${i}/${allProbeUrls.length} 个URL，找到 ${candidateUrls.length} 个候选`);
-                    break;
-                  }
-
-                  const batch = allProbeUrls.slice(i, i + batchSize);
-
-                  for (const url of batch) {
-                    const fileSize = checkUrl(url);
-                    // 招股书通常较大（至少3MB）
-                    if (fileSize > 3000000) {
-                      candidateUrls.push({ url, fileSize });
-                    }
-                  }
-                }
-
-                // 按文件大小降序排序，但不完全依赖大小
-                // 招股书通常较大但不一定是最大的
-                candidateUrls.sort((a, b) => b.fileSize - a.fileSize);
-
-                console.log(`[搜索] 发现 ${candidateUrls.length} 个候选PDF`);
-
-                // ========== 快速指纹验证（并行验证前15个）==========
-                // 招股书不一定是最大的文件，需要验证更多候选
-                // 100KB×15=1.5MB并行下载，非常快
-                const topCandidates = candidateUrls.slice(0, 15);
-                console.log(`[搜索] 并行指纹验证前${topCandidates.length}个PDF...`);
-
-                // 并行验证所有候选
-                const validationResults = await Promise.all(
-                  topCandidates.map(async (candidate) => {
-                    const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
-                    return { candidate, result };
-                  })
-                );
-
-                // 找到第一个通过指纹验证的（按大小顺序）
-                for (const { candidate, result } of validationResults) {
-                  if (result === true) {
-                    console.log(`[搜索] ✓ 指纹验证通过: ${candidate.url}`);
-                    results.push({
-                      title: `${stockInfo.n} 招股章程`,
-                      link: candidate.url,
-                      code: formattedCode,
-                      name: stockInfo.n,
-                    });
-                    break;
-                  }
-                }
-
-                if (results.length === 0 && candidateUrls.length > 0) {
-                  console.log('[搜索] 所有候选指纹验证失败，可能需要手动查找');
-                }
-              }
-            } catch (listErr) {
-              console.log('[搜索] 获取股票列表失败:', listErr.message);
-            }
-          }
+          ipoDate = new Date(firstTimestamp * 1000);
+          stockName = chartData.meta?.shortName || chartData.meta?.longName || stockName;
+          useYahooWindow = true;
+          console.log(`[搜索][method2][yahoo] success timestampCount=${tsCount} inferredIpoDate=${ipoDate.toISOString().slice(0, 10)}`);
+        } else {
+          console.log('[搜索][method2][yahoo] success-but-empty timestampCount=0 willContinueFallback=true');
+          reasonSummary.push('yahooNoTimestamp');
         }
       } catch (yahooErr) {
-        console.log('[搜索] Yahoo Finance查询失败:', yahooErr.message);
+        const status = yahooErr?.response?.status || 'N/A';
+        console.log(`[搜索][method2][yahoo] failed status=${status} message=${yahooErr.message} willContinueFallback=true`);
+        reasonSummary.push('yahooFail');
+      }
+
+      // 招股书通常在上市前1-3周发布，搜索上市月份及前一个月
+      const searchDates = [];
+      if (useYahooWindow && ipoDate) {
+        const ipoMonth = new Date(ipoDate);
+        ipoMonth.setDate(1);
+        searchDates.push(new Date(ipoMonth)); // 上市当月
+
+        const prevMonth = new Date(ipoMonth);
+        prevMonth.setMonth(prevMonth.getMonth() - 1);
+        searchDates.push(prevMonth); // 上市前一个月
+      } else {
+        const nowMonth = new Date();
+        nowMonth.setDate(1);
+        searchDates.push(new Date(nowMonth)); // 当前月
+        const prevMonth = new Date(nowMonth);
+        prevMonth.setMonth(prevMonth.getMonth() - 1);
+        searchDates.push(prevMonth); // 上一个月
+      }
+
+      console.log(`[搜索][method2][titlesearch] start useYahooWindow=${useYahooWindow} strategy=${useYahooWindow ? 'yahooWindow' : 'fallbackRecent2Months'}`);
+
+      const beforeTitleSearch = results.length;
+      let titleSearchRows = 0;
+      for (const searchDate of searchDates) {
+        const year = searchDate.getFullYear();
+        const month = String(searchDate.getMonth() + 1).padStart(2, '0');
+
+        // 尝试使用披露易的日期搜索接口
+        const dateFrom = `${year}${month}01`;
+        const dateTo = `${year}${month}${new Date(year, searchDate.getMonth() + 1, 0).getDate()}`;
+
+        const searchUrl = 'https://www1.hkexnews.hk/search/titlesearch.xhtml';
+        const searchParams = new URLSearchParams({
+          lang: 'ZH',
+          category: '0',
+          market: 'SEHK',
+          searchType: '1',  // 按股票代码搜索
+          documentType: '-1',
+          t1code: '40000',  // 招股章程类别
+          t2Gcode: '-2',
+          t2code: '-2',
+          stockId: codeNum,
+          from: dateFrom,
+          to: dateTo,
+          sortDir: '0',
+          sortByRecordCountOrDate: '2',
+          rowRange: '100',
+          pageNo: '1',
+        });
+
+        try {
+          console.log(`[搜索][method2][titlesearch] query from=${dateFrom} to=${dateTo} stockId=${codeNum}`);
+          response = await axios.post(searchUrl, searchParams.toString(), {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            timeout: 30000,
+          });
+
+          $ = cheerio.load(response.data);
+
+          // 解析搜索结果表格
+          $('table tbody tr').each((i, row) => {
+            titleSearchRows++;
+            const cells = $(row).find('td');
+            if (cells.length >= 4) {
+              const publishDate = $(cells[0]).text().trim();
+              const codeCell = $(cells[1]).text().trim();
+              const nameCell = $(cells[2]).text().trim();
+              const docCell = $(cells[3]);
+              const rowTitle = docCell.find('a').first().text().trim();
+
+              const rawLinks = [];
+              $(row).find('a').each((_, a) => {
+                const href = $(a).attr('href');
+                if (href) rawLinks.push(href.trim());
+              });
+              const limitedRawLinks = rawLinks.slice(0, 20);
+              titlesearchRawLinkCount += rawLinks.length;
+
+              const normalizedLinks = [...new Set(
+                rawLinks.map((href) => href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`)
+              )];
+              const limitedNormalizedLinks = normalizedLinks.slice(0, 20);
+
+              const candidateLinksBeforeFilter = normalizedLinks.filter((u) => {
+                const lower = (u || '').toLowerCase();
+                return lower.includes('.pdf') || lower.includes('/pdf');
+              });
+              const limitedCandidateLinks = candidateLinksBeforeFilter.slice(0, 20);
+              titlesearchCandidateBeforeFilterCount += candidateLinksBeforeFilter.length;
+
+              console.log(`[搜索][method2][titlesearch][row] idx=${i} date=${publishDate} title="${rowTitle}"`);
+              console.log(`[搜索][method2][titlesearch][row][rawLinks] idx=${i} links=${JSON.stringify(limitedRawLinks)}`);
+              console.log(`[搜索][method2][titlesearch][row][normalizedLinks] idx=${i} links=${JSON.stringify(limitedNormalizedLinks)}`);
+              console.log(`[搜索][method2][titlesearch][row][candidateBeforeFilter] idx=${i} links=${JSON.stringify(limitedCandidateLinks)}`);
+
+              // 检查是否匹配股票代码
+              const codeMatched = codeCell.includes(codeNum) || codeCell.includes(formattedCode);
+              const titleLink = docCell.find('a').first();
+              const title = titleLink.text().trim();
+              const href = titleLink.attr('href');
+              const selectedPdfUrl = href ? (href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`) : '';
+              const titleMatched = title.includes('招股章程') || title.includes('招股書') || title.includes('Prospectus');
+              const titleExcluded = title.includes('申請版本') || title.includes('PHIP') || title.includes('補充');
+
+              for (const candidateUrl of limitedCandidateLinks) {
+                let added = false;
+                let rejectReason = '';
+                if (!codeMatched) {
+                  rejectReason = 'codeFilterMiss';
+                } else if (!titleMatched || titleExcluded) {
+                  rejectReason = 'titleFilterMiss';
+                } else if (candidateUrl !== selectedPdfUrl) {
+                  rejectReason = 'parseLinkFailed';
+                } else if (results.find(r => r.link === candidateUrl)) {
+                  rejectReason = 'duplicate';
+                } else {
+                  added = true;
+                }
+                console.log(`[搜索][method2][titlesearch][row][decision] idx=${i} url="${candidateUrl}" added=${added} rejectReason=${rejectReason}`);
+              }
+
+              if (codeCell.includes(codeNum) || codeCell.includes(formattedCode)) {
+                if (href && (
+                  title.includes('招股章程') ||
+                  title.includes('招股書') ||
+                  title.includes('Prospectus')
+                )) {
+                  if (!title.includes('申請版本') && !title.includes('PHIP') && !title.includes('補充')) {
+                    const pdfUrl = selectedPdfUrl;
+                    results.push({
+                      title: title || `${stockName} 招股章程`,
+                      link: pdfUrl,
+                      code: formattedCode,
+                      name: nameCell || stockName,
+                    });
+                    titlesearchAddedCount++;
+                  }
+                }
+              }
+            }
+          });
+
+          // 同时检查其他可能的选择器
+          $('.row, .result-row').each((i, row) => {
+            const titleEl = $(row).find('.news-title a, .headline a, a[href*=".pdf"]');
+            const title = titleEl.text().trim();
+            const href = titleEl.attr('href');
+
+            if (title && href && (
+              title.includes('招股章程') ||
+              title.includes('Prospectus')
+            )) {
+              if (!title.includes('申請版本') && !title.includes('PHIP')) {
+                const pdfUrl = href.startsWith('http') ? href : `https://www1.hkexnews.hk${href}`;
+                if (!results.find(r => r.link === pdfUrl)) {
+                  results.push({
+                    title: title,
+                    link: pdfUrl,
+                    code: formattedCode,
+                    name: stockName,
+                  });
+                  titlesearchAddedCount++;
+                }
+              }
+            }
+          });
+
+          const addedNow = results.length - beforeTitleSearch;
+          console.log(`[搜索][method2][titlesearch] success resultRows=${titleSearchRows} added=${addedNow}`);
+          if (results.length > beforeTitleSearch) break;
+        } catch (err) {
+          const status = err?.response?.status || 'N/A';
+          console.log(`[搜索][method2][titlesearch] failed from=${dateFrom} to=${dateTo} status=${status} message=${err.message}`);
+        }
+      }
+
+      if (results.length === beforeTitleSearch) {
+        reasonSummary.push('titlesearchMiss');
+      }
+
+      // 方法2: 如果仍未找到，尝试直接获取上市公司公告JSON列表
+      if (results.length === 0) {
+        const beforeActiveStock = results.length;
+        console.log('[搜索][method2][activestock] start');
+        try {
+          const stockListUrl = 'https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json';
+          const stockListResp = await axios.get(stockListUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 30000,
+          });
+
+          const stockList = stockListResp.data;
+          const stockInfo = stockList.find(s => s.c === formattedCode || s.c === codeNum);
+          console.log(`[搜索][method2][activestock] success foundName=${!!stockInfo} stockName=${stockInfo?.n || ''} added=${results.length - beforeActiveStock}`);
+
+          if (stockInfo) {
+            const probeBaseDate = ipoDate || new Date();
+            if (!ipoDate) {
+              console.log(`[搜索][method2][probe] using fallback baseDate=${probeBaseDate.toISOString().slice(0, 10)} (no yahoo ipoDate)`);
+            }
+
+            // 方法3A: 先尝试Application Proof路径（适用于新上市/H股二次上市）
+            const apUrls = [];
+
+            // Application Proof通常在上市前1-3周发布
+            for (let d = 7; d <= 21; d++) {
+              const apDate = new Date(probeBaseDate);
+              apDate.setDate(apDate.getDate() - d);
+              const year = apDate.getFullYear();
+              const month = String(apDate.getMonth() + 1).padStart(2, '0');
+              const day = String(apDate.getDate()).padStart(2, '0');
+              const mmdd = `${month}${day}`;
+
+              // Application Proof格式: /app/sehk/YYYY/MMDD/STOCKCODE.pdf
+              apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${formattedCode}.pdf`);
+              apUrls.push(`https://www1.hkexnews.hk/app/sehk/${year}/${mmdd}/${codeNum}.pdf`);
+            }
+
+            // 方法3B: 探测listconews路径（常规上市公告）
+            const probeUrls = [];
+            const probeStartTime = Date.now();
+            for (let d = 5; d <= 14; d++) {
+              const probeDate = new Date(probeBaseDate);
+              probeDate.setDate(probeDate.getDate() - d);
+              const year = probeDate.getFullYear();
+              const month = String(probeDate.getMonth() + 1).padStart(2, '0');
+              const day = String(probeDate.getDate()).padStart(2, '0');
+              const mmdd = `${month}${day}`;
+
+              // 每天尝试序号 00001-00050（使用正确的5位序号格式，不含ltn前缀和_c后缀）
+              for (let seq = 1; seq <= 50; seq++) {
+                const seqStr = String(seq).padStart(5, '0');
+                // 使用www1域名，正确的招股书URL格式
+                probeUrls.push(`https://www1.hkexnews.hk/listedco/listconews/sehk/${year}/${mmdd}/${year}${mmdd}${seqStr}.pdf`);
+              }
+            }
+
+            // 合并AP URLs和listconews URLs（AP优先）
+            const allProbeUrls = [...apUrls, ...probeUrls];
+            probeLinkCount = allProbeUrls.length;
+            console.log(`[搜索][method2][probe][candidateLinks] count=${allProbeUrls.length} links=${JSON.stringify(allProbeUrls.slice(0, 50))}`);
+
+            // 使用curl探测文件大小（降低超时加速探测）
+            const checkUrl = (url) => {
+              try {
+                const result = execSync(
+                  `curl -s -I -H 'Range: bytes=0-10' '${url}' -H 'User-Agent: Mozilla/5.0' --connect-timeout 3 --max-time 5`,
+                  { encoding: 'utf8', timeout: 8000 }
+                );
+                const statusLine = (result.split('\n').find(line => line.startsWith('HTTP/')) || '').trim();
+                const statusMatch = statusLine.match(/\s(\d{3})\s/);
+                const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+                const rangeMatch = result.match(/content-range:\s*bytes\s*\d+-\d+\/(\d+)/i);
+                const contentTypeMatch = result.match(/content-type:\s*([^\n\r]+)/i);
+                const contentLengthMatch = result.match(/content-length:\s*(\d+)/i);
+                const locationMatch = result.match(/location:\s*([^\n\r]+)/i);
+                const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : '';
+                const contentLength = contentLengthMatch ? parseInt(contentLengthMatch[1], 10) : 0;
+                const finalUrl = locationMatch ? locationMatch[1].trim() : url;
+                if (rangeMatch) {
+                  return {
+                    size: parseInt(rangeMatch[1], 10),
+                    status,
+                    finalUrl,
+                    contentType,
+                    contentLength,
+                  };
+                }
+                const lengthMatch = result.match(/content-length:\s*(\d+)/i);
+                if (lengthMatch && result.toLowerCase().includes('200')) {
+                  return {
+                    size: parseInt(lengthMatch[1], 10),
+                    status,
+                    finalUrl,
+                    contentType,
+                    contentLength,
+                  };
+                }
+                return {
+                  size: 0,
+                  status,
+                  finalUrl,
+                  contentType,
+                  contentLength,
+                };
+              } catch (e) {
+                return {
+                  size: 0,
+                  status: 0,
+                  finalUrl: url,
+                  contentType: '',
+                  contentLength: 0,
+                };
+              }
+            };
+
+            // 招股书首页必出现的指纹词
+            const PROSPECTUS_FINGERPRINTS = [
+              '本招股章程', '全球發售', '香港公開發售', '國際發售',
+              '聯席保薦人', '聯席全球協調人', '招股章程', 'Prospectus',
+              'Global Offering', 'Hong Kong Public Offering'
+            ];
+
+            // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
+            const quickFingerprintCheck = async (url, stockCode, stockName) => {
+              try {
+                const resp = await axios.get(url, {
+                  responseType: 'arraybuffer',
+                  timeout: 15000, // 15秒超时
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Range': 'bytes=0-102400', // 只下载前100KB
+                  },
+                });
+
+                // 将buffer转为字符串进行搜索（PDF中的文本通常是明文存储）
+                const content = resp.data.toString('utf8', 0, resp.data.byteLength);
+                const contentLatin = resp.data.toString('latin1', 0, resp.data.byteLength);
+
+                // 检查招股书指纹词
+                const hasFingerprint = PROSPECTUS_FINGERPRINTS.some(fp =>
+                  content.includes(fp) || contentLatin.includes(fp)
+                );
+
+                // 检查股票代码
+                const codeNum = stockCode.replace(/^0+/, '');
+                const hasCode = content.includes(codeNum) || contentLatin.includes(codeNum);
+
+                // 检查公司名称
+                const nameParts = stockName.split(/[-－\s]/);
+                const hasName = nameParts.some(part =>
+                  part.length >= 2 && (content.includes(part) || contentLatin.includes(part))
+                );
+
+                // 检查英文名（如xiaomi）
+                const contentLower = contentLatin.toLowerCase();
+                const hasXiaomi = contentLower.includes('xiaomi');
+
+                // 必须是招股书 且 匹配目标股票
+                return hasFingerprint && (hasCode || hasName || hasXiaomi);
+              } catch (e) {
+                // Range请求可能不被支持，返回null表示需要完整下载
+                if (e.response && e.response.status === 416) {
+                  return null;
+                }
+                return false;
+              }
+            };
+
+            // 收集候选PDF（大于3MB的）
+            const candidateUrls = [];
+            const batchSize = 20;
+            const PROBE_TIMEOUT_MS = 30000; // 探测阶段最多30秒（优化）
+            let probeAttempted = 0;
+            let sizeTooSmall = 0;
+            let invalidStatus = 0;
+            let htmlInsteadOfPdf = 0;
+            const probeSamples = [];
+            for (let i = 0; i < allProbeUrls.length && candidateUrls.length < 5; i += batchSize) {
+              // 超时保护：如果探测超过60秒则中断
+              if (Date.now() - probeStartTime > PROBE_TIMEOUT_MS) {
+                break;
+              }
+
+              const batch = allProbeUrls.slice(i, i + batchSize);
+
+              for (const url of batch) {
+                probeAttempted++;
+                const info = checkUrl(url);
+                const fileSize = info.size || 0;
+                let rejectReason = '';
+                if (info.status && info.status !== 200 && info.status !== 206) {
+                  invalidStatus++;
+                  rejectReason = 'invalidStatus';
+                } else if (info.contentType && info.contentType.toLowerCase().includes('text/html')) {
+                  htmlInsteadOfPdf++;
+                  rejectReason = 'htmlInsteadOfPdf';
+                } else if (fileSize <= 3000000) {
+                  rejectReason = 'sizeTooSmall';
+                }
+
+                // 招股书通常较大（至少3MB）
+                if (fileSize > 3000000) {
+                  candidateUrls.push({ url, fileSize });
+                } else {
+                  sizeTooSmall++;
+                }
+
+                if (probeSamples.length < 20) {
+                  probeSamples.push({
+                    idx: probeSamples.length,
+                    url,
+                    status: info.status,
+                    finalUrl: info.finalUrl,
+                    contentType: info.contentType,
+                    contentLength: info.contentLength,
+                    effectiveSize: fileSize,
+                    rejectReason,
+                  });
+                }
+              }
+            }
+
+            // 按文件大小降序排序，但不完全依赖大小
+            // 招股书通常较大但不一定是最大的
+            candidateUrls.sort((a, b) => b.fileSize - a.fileSize);
+
+            // ========== 快速指纹验证（并行验证前15个）==========
+            const topCandidates = candidateUrls.slice(0, 15);
+            const validationResults = await Promise.all(
+              topCandidates.map(async (candidate) => {
+                const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
+                return { candidate, result };
+              })
+            );
+
+            let fingerprintMiss = 0;
+            let probeSuccess = 0;
+            for (const { candidate, result } of validationResults) {
+              if (result === true) {
+                probeSuccess++;
+                results.push({
+                  title: `${stockInfo.n} 招股章程`,
+                  link: candidate.url,
+                  code: formattedCode,
+                  name: stockInfo.n,
+                });
+                break;
+              }
+              if (result === false || result === null) {
+                fingerprintMiss++;
+              }
+            }
+
+            const filtered = sizeTooSmall + fingerprintMiss;
+            probeFilteredCount = filtered;
+            probeSamples.forEach((s) => {
+              console.log(`[搜索][method2][probe][sample] idx=${s.idx} url="${s.url}" status=${s.status} finalUrl="${s.finalUrl}" contentType="${s.contentType}" contentLength=${s.contentLength} effectiveSize=${s.effectiveSize} rejectReason=${s.rejectReason}`);
+            });
+            console.log(`[搜索][method2][probe] attempted=${probeAttempted} success=${probeSuccess} filtered=${filtered} filterReasons=sizeTooSmall:${sizeTooSmall},fingerprintMiss:${fingerprintMiss}`);
+            console.log(`[搜索][method2][probe] rejectStats invalidStatus=${invalidStatus} htmlInsteadOfPdf=${htmlInsteadOfPdf}`);
+
+            if (results.length === 0) {
+              reasonSummary.push('probeMiss');
+            }
+          } else {
+            reasonSummary.push('activeStockMiss');
+          }
+        } catch (listErr) {
+          const status = listErr?.response?.status || 'N/A';
+          console.log(`[搜索][method2][activestock] failed status=${status} message=${listErr.message}`);
+          reasonSummary.push('activeStockError');
+        }
       }
     }
   } catch (method2Error) {
     console.log(`[搜索] 方法2失败: ${method2Error.message}`);
+    reasonSummary.push('method2Error');
   }
 
-  console.log(`[搜索] 最终找到 ${results.length} 个结果`);
+  method2Count = Math.max(0, results.length - method1Count);
+  if (results.length === 0) {
+    console.log(`[搜索][final] method1Count=${method1Count} method2Count=${method2Count} totalCount=${results.length} reasonSummary=${reasonSummary.join(',') || 'unknown'}`);
+  } else {
+    console.log(`[搜索][final] method1Count=${method1Count} method2Count=${method2Count} totalCount=${results.length}`);
+  }
+  console.log(`[搜索][summary] titlesearchRawLinkCount=${titlesearchRawLinkCount} titlesearchCandidateBeforeFilterCount=${titlesearchCandidateBeforeFilterCount} titlesearchAddedCount=${titlesearchAddedCount} probeLinkCount=${probeLinkCount} probeFilteredCount=${probeFilteredCount} finalCandidateCount=${results.length}`);
   return results;
 }
 
