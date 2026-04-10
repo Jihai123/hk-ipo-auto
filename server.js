@@ -1709,10 +1709,6 @@ async function searchProspectus(stockCode) {
                 } else {
                   sizeTooSmall++;
                 }
-                return false;
-              }
-            };
-
                 if (probeSamples.length < 20) {
                   probeSamples.push({
                     idx: probeSamples.length,
@@ -4456,7 +4452,7 @@ app.get('/api/score/:code', async (req, res) => {
         120000,
         '搜索招股书超时，该股票可能暂无招股书或港交所响应缓慢，请稍后重试'
       );
-      const candidateCount = Array.isArray(searchResults) ? searchResults.length : 0;
+      const candidateCount = searchResults.length;
 
       if (candidateCount === 0) {
         return res.json({
