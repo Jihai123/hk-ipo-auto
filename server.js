@@ -1705,6 +1705,7 @@ async function searchProspectus(stockCode) {
 
                 // 招股书通常较大（至少3MB）
                 if (fileSize > 3000000) {
+                  console.log(`[搜索][method2][probe][largeCandidate] url="${url}" fileSize=${fileSize}`);
                   candidateUrls.push({ url, fileSize });
                 } else {
                   sizeTooSmall++;
@@ -1730,6 +1731,7 @@ async function searchProspectus(stockCode) {
 
             // ========== 快速指纹验证（并行验证前15个）==========
             const topCandidates = candidateUrls.slice(0, 15);
+            console.log(`[搜索][method2][probe][topCandidates] count=${topCandidates.length} links=${JSON.stringify(topCandidates.map(item => item.url))}`);
             const validationResults = await Promise.all(
               topCandidates.map(async (candidate) => {
                 const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n);
@@ -1739,7 +1741,9 @@ async function searchProspectus(stockCode) {
 
             let fingerprintMiss = 0;
             let probeSuccess = 0;
+            const target0025 = validationResults.find(({ candidate }) => candidate.url.includes('2026040900025.pdf'));
             for (const { candidate, result } of validationResults) {
+              console.log(`[搜索][method2][probe][fingerprint] url="${candidate.url}" result=${result}`);
               if (result === true) {
                 probeSuccess++;
                 results.push({
@@ -1753,6 +1757,9 @@ async function searchProspectus(stockCode) {
               if (result === false || result === null) {
                 fingerprintMiss++;
               }
+            }
+            if (target0025) {
+              console.log(`[搜索][method2][probe][target0025] reached=true fileSize=${target0025.candidate.fileSize} fingerprintResult=${target0025.result}`);
             }
 
             const filtered = sizeTooSmall + fingerprintMiss;
