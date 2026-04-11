@@ -1030,6 +1030,8 @@ function clearCache(code) {
  */
 function parsePdfWithPdftotext(pdfPath) {
   try {
+    const peMode = /profitfortheyear|consolidatedstatementofprofitorloss|totalnumberofshares/i.test(text.replace(/\s+/g, '').slice(0, 300000)) ? 'english' : 'chinese';
+    console.log(`[pe][path] mode="${peMode}"`);
     // 使用pdftotext命令行工具，-layout保持布局，-enc UTF-8确保中文编码正确
     const result = execSync(`pdftotext -layout -enc UTF-8 "${pdfPath}" -`, {
       encoding: 'utf8',
@@ -2367,7 +2369,14 @@ function extractCornerstoneInvestorsFromSection(cornerstoneSection) {
   }
 
   // ===== 1️⃣ 定位表格区域 =====
-  const anchorMatch = cornerstoneSection.match(/下表載列基石配售的詳情[:：]?/);
+  const anchorPatterns = [
+    /下表載列基石配售的詳情[:：]?/,
+    /THEFOLLOWINGTABLESETSFORTH[\s\S]{0,40}CORNERSTONEPLACING/i,
+    /DETAILSOFTHECORNERSTONEPLACING/i,
+    /CORNERSTONEINVESTORS?/i,
+  ];
+  const anchorMatch = anchorPatterns.map((re) => cornerstoneSection.match(re)).find(Boolean);
+  console.log(`[cornerstone][tableAnchor] hits=${JSON.stringify(anchorPatterns.filter((re) => re.test(cornerstoneSection)).map((re) => re.toString()))}`);
   if (!anchorMatch) {
     console.log('[表格定位] ❌ 没找到表格锚点');
     return [];
@@ -2449,6 +2458,10 @@ function extractTotalShares(text) {
     /紧随全球发售(?:及资本化发行)?完成后/,
     /全球發售完成後/,
     /上市後已發行股份/,
+    /IMMEDIATELYFOLLOWINGTHEGLOBALOFFERING/i,
+    /TOTALNUMBEROFSHARES/i,
+    /SHARESINISSUE/i,
+    /NUMBEROFISSUEDSHARES/i,
   ];
   for (const anchor of anchorPatterns) {
     const m = anchor.exec(noSpace);
@@ -2461,6 +2474,9 @@ function extractTotalShares(text) {
       /合共\s*([\d,]+)\s*股/,
       /總數為\s*([\d,]+)\s*股/,
       /共([\d,]+)股/,
+      /totalnumberofshares[^\d]{0,40}([\d,]+)/i,
+      /sharesinissue[^\d]{0,40}([\d,]+)/i,
+      /numberofissuedshares[^\d]{0,40}([\d,]+)/i,
     ];
     for (const p of patterns) {
       const hit = p.exec(nearby);
@@ -2535,9 +2551,9 @@ function extractNetProfit(text) {
     if (isNaN(n) || n <= 0) return null;
 
     let multiplier = 1;
-    if (/千/.test(unit)) multiplier = 1e3;
-    else if (/百萬|百万/.test(unit)) multiplier = 1e6;
-    else if (/億|亿/.test(unit)) multiplier = 1e8;
+    if (/千|thousand|['’]000/i.test(unit)) multiplier = 1e3;
+    else if (/百萬|百万|million|inmillions/i.test(unit)) multiplier = 1e6;
+    else if (/億|亿|billion/i.test(unit)) multiplier = 1e9;
 
     const baseAmount = n * multiplier;
 
@@ -2548,7 +2564,7 @@ function extractNetProfit(text) {
   }
 
   // 识别财务报告单位（页面通常有 "（人民幣千元）" 这样的表头）
-  const unitHint = /（?(人民幣|港幣|港元|美元|RMB|HKD|USD)([千百萬億千万亿元]+)?）?/.exec(noSpace);
+  const unitHint = /（?(人民幣|港幣|港元|美元|RMB|HKD|USD|CNY)([千百萬億千万亿元]+|['’]000|inthousands|inmillions|million|billion)?）?/i.exec(noSpace);
   const defaultCurrency = unitHint ? unitHint[1] : '人民幣';
   const defaultUnit     = unitHint ? (unitHint[2] || '千元') : '千元';
 
@@ -2558,6 +2574,8 @@ function extractNetProfit(text) {
     /財務資料撮要/,
     /主要財務資料/,
     /财务资料概要/,
+    /FINANCIALSUMMARY/i,
+    /CONSOLIDATEDSTATEMENTOFPROFITORLOSS/i,
   ];
 
   const profitPatterns = [
@@ -2569,6 +2587,10 @@ function extractNetProfit(text) {
     { re: /期內溢利[^\d（(]*([\d,]+)/, label: '期內溢利', isLoss: false },
     { re: /純利[^\d（(]*([\d,]+)/, label: '純利', isLoss: false },
     { re: /年內虧損[^\d（(]*([\d,]+)/, label: '年內虧損', isLoss: true },
+    { re: /profitfortheyear[^\d(]{0,40}([\d,]+)/i, label: 'profit for the year', isLoss: false },
+    { re: /profitattributabletoequityshareholders[^\d(]{0,40}([\d,]+)/i, label: 'profit attributable to equity shareholders', isLoss: false },
+    { re: /netprofit[^\d(]{0,40}([\d,]+)/i, label: 'net profit', isLoss: false },
+    { re: /profitattributabletoowners[^\d(]{0,40}([\d,]+)/i, label: 'profit attributable to owners', isLoss: false },
   ];
 
   for (const anchor of summaryAnchors) {
@@ -2731,6 +2753,23 @@ async function scoreProspectus(rawText, stockCode) {
     pe:          { score: 0, reason: 'PE：待计算', details: '' },    // V5 新增
     ipoSize:     { score: 0, reason: '募资规模：待计算', details: '' }, // V5 新增
   };
+  const defaultRating = '谨慎申购';
+  const summarizeDimension = (value) => {
+    if (!value || typeof value !== 'object') return '';
+    return `${value.reason || ''}${value.details ? ` | ${String(value.details).slice(0, 80)}` : ''}`.slice(0, 140);
+  };
+  const logDimensionStart = (name) => {
+    console.log(`[dimension][start] stockCode=${formatStockCode(stockCode)} name="${name}"`);
+  };
+  const logDimensionSuccess = (name, payload) => {
+    console.log(`[dimension][success] stockCode=${formatStockCode(stockCode)} name="${name}" score=${payload?.score ?? 0} summary="${summarizeDimension(payload)}"`);
+  };
+  const logDimensionFallback = (name, reason) => {
+    console.log(`[dimension][fallback] stockCode=${formatStockCode(stockCode)} name="${name}" reason="${reason}"`);
+  };
+  const logDimensionError = (name, error) => {
+    console.error(`[dimension][error] stockCode=${formatStockCode(stockCode)} name="${name}" errorName="${error?.name || 'Error'}" message="${error?.message || ''}" stackTop="${(error?.stack || '').split('\n')[0] || ''}"`);
+  };
 
   // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
   let etnetData = null;
@@ -2752,6 +2791,8 @@ async function scoreProspectus(rawText, stockCode) {
   console.log(`[绿鞋] hasGreenShoe=${hasGreenShoe}`);
   
   // ========== 1. 旧股检测（优化版：基于PDF前几页的全球發售章节精准定位）==========
+  logDimensionStart('oldShares');
+  try {
   // 核心判断逻辑：
   // - 在PDF前几页（约前20000字符）的"全球發售"区域查找"全球發售的發售股份數目"
   // - 如果该句包含"銷售股份"则有旧股，否则无旧股
@@ -2954,7 +2995,16 @@ async function scoreProspectus(rawText, stockCode) {
     };
   }
   
+  logDimensionSuccess('oldShares', scores.oldShares);
+  } catch (error) {
+    logDimensionError('oldShares', error);
+    scores.oldShares = { score: 0, reason: '旧股维度降级', details: error.message, fallback: true };
+    logDimensionFallback('oldShares', 'exception');
+  }
+  
   // ========== 2. 保荐人评分（优化版：基于目录定位章节）==========
+  logDimensionStart('sponsor');
+  try {
   // 核心判断逻辑：
   // - 通过目录页码定位"董事及參與全球發售的各方"章节
   // - 查找"聯席保薦人"或"獨家保薦人"后面跟的公司名称
@@ -3020,6 +3070,9 @@ async function scoreProspectus(rawText, stockCode) {
   if (partiesSection && partiesSection.length > 200) {
     sponsorSection = partiesSection;
     sponsorSectionTitle = '參與全球發售的各方';
+    const sponsorMode = /PARTIESINVOLVEDINTHEGLOBALOFFERING|JOINTSPONSOR|SOLESPONSOR|SPONSOR/i.test(partiesSection) ? 'english' : 'chinese';
+    console.log(`[sponsor][path] stockCode=${formatStockCode(stockCode)} mode="${sponsorMode}"`);
+    console.log(`[sponsor][section] len=${partiesSection.length}`);
     console.log(`[保荐人] ✓ 找到章节，前300字: ${partiesSection.slice(0, 300)}`);
 
     // 从章节中提取保荐人名称
@@ -3042,6 +3095,9 @@ async function scoreProspectus(rawText, stockCode) {
         `|联\\s*席\\s*保\\s*荐\\s*人\\s*及\\s*保\\s*荐\\s*人\\s*兼\\s*整\\s*体\\s*协\\s*调\\s*人` +
         `|联\\s*席\\s*保\\s*荐\\s*人` +
         `|独\\s*家\\s*保\\s*荐\\s*人` +
+        `|J\\s*o\\s*i\\s*n\\s*t\\s*S\\s*p\\s*o\\s*n\\s*s\\s*o\\s*r\\s*s?` +
+        `|S\\s*o\\s*l\\s*e\\s*S\\s*p\\s*o\\s*n\\s*s\\s*o\\s*r` +
+        `|S\\s*p\\s*o\\s*n\\s*s\\s*o\\s*r` +
       `)`,
       'i'
     );
@@ -3050,11 +3106,13 @@ async function scoreProspectus(rawText, stockCode) {
 
     if (!titleMatch) {
       console.warn('[Sponsor] 未匹配到保荐人标题');
-      return [];
+      logDimensionFallback('sponsor', 'noSponsorTitleMatched');
+      throw new Error('noSponsorTitleMatched');
     }
 
     const titleStart = titleMatch.index;
     const titleEnd = titleMatch.index + titleMatch[0].length;
+    console.log(`[sponsor][labelHit] labels=["${titleMatch[0].trim()}"]`);
 
     console.log(`[保荐人] 标题: "${titleMatch[0].trim()}", 位置: ${titleStart}-${titleEnd}`);
 
@@ -3076,6 +3134,10 @@ async function scoreProspectus(rawText, stockCode) {
       `整\\s*体\\s*协\\s*调\\s*人`,
       `协\\s*调\\s*人`,
       `包\\s*销\\s*商`,
+      `O\\s*v\\s*e\\s*r\\s*a\\s*l\\s*l\\s*C\\s*o\\s*o\\s*r\\s*d\\s*i\\s*n\\s*a\\s*t\\s*o\\s*r\\s*s?`,
+      `J\\s*o\\s*i\\s*n\\s*t\\s*G\\s*l\\s*o\\s*b\\s*a\\s*l\\s*C\\s*o\\s*o\\s*r\\s*d\\s*i\\s*n\\s*a\\s*t\\s*o\\s*r\\s*s?`,
+      `J\\s*o\\s*i\\s*n\\s*t\\s*B\\s*o\\s*o\\s*k\\s*r\\s*u\\s*n\\s*n\\s*e\\s*r\\s*s?`,
+      `J\\s*o\\s*i\\s*n\\s*t\\s*L\\s*e\\s*a\\s*d\\s*M\\s*a\\s*n\\s*a\\s*g\\s*e\\s*r\\s*s?`,
     ];
 
     let endPos = -1;
@@ -3126,6 +3188,7 @@ async function scoreProspectus(rawText, stockCode) {
     console.log('✅ Sponsor区块匹配成功');
     console.log('[保荐人] 区块长度:', sponsorBlock.length);
     console.log('[保荐人] 前200字:', sponsorBlock.slice(0, 200));
+    console.log(`[sponsor][block] len=${sponsorBlock.length} preview="${sponsorBlock.slice(0, 160)}"`);
 
     // 后面所有 sponsorBlock 处理逻辑全部基于这个 sponsorBlock
 
@@ -3288,6 +3351,10 @@ async function scoreProspectus(rawText, stockCode) {
   }
 
   console.log(`[保荐人] 提取到的保荐人: ${extractedSponsors.length > 0 ? extractedSponsors.join(', ') : '无'}`);
+  console.log(`[sponsor][names] raw=${JSON.stringify(extractedSponsors.slice(0, 20))} normalized=${JSON.stringify(extractedSponsors.slice(0, 20).map(n => normalizeText(n)))}`);
+  if (extractedSponsors.length === 0) {
+    logDimensionFallback('sponsor', 'noEnglishSponsorBlockMatched');
+  }
 
   const searchTextForSponsor = sponsorSection || textNoSpaceForSponsor.slice(0, 120000);
   const foundSponsors = [];
@@ -3587,7 +3654,16 @@ async function scoreProspectus(rawText, stockCode) {
     console.log(`[保荐人] V5头部保荐人加分 → score=${scores.sponsor.score}`);
   }
 
+  logDimensionSuccess('sponsor', scores.sponsor);
+  } catch (error) {
+    logDimensionError('sponsor', error);
+    scores.sponsor = { score: 0, reason: '保荐人维度降级', details: error.message, sponsors: [], fallback: true };
+    logDimensionFallback('sponsor', 'exception');
+  }
+
   // ========== 3. 基石投资者（优化版：基于目录定位章节+表格解析）==========
+  logDimensionStart('cornerstone');
+  try {
   console.log(`\n[基石投资者] ========== 开始 ==========`);
 
   // 使用去空格版本搜索
@@ -3595,12 +3671,16 @@ async function scoreProspectus(rawText, stockCode) {
 
   // -------- 策略1: 通过目录定位基石投资者章节 --------
   console.log(`[基石投资者] 尝试目录定位...`);
+  const cornerstoneMode = /CORNERSTONE|INVESTOR|PLACING/i.test(textNoSpaceForCornerstone.slice(0, 300000)) ? 'english' : 'chinese';
+  console.log(`[cornerstone][path] mode="${cornerstoneMode}"`);
 
   // 目录中基石投资者的模式（包含页码）
   const cornerstone_tocPatterns = [
     /基石投資者\.{2,}\s*(\d+)/i,
     /基石投资者\.{2,}\s*(\d+)/i,
     /CORNERSTONEINVESTORS?\.{2,}\s*(\d+)/i,
+    /CORNERSTONEPLACING\.{2,}\s*(\d+)/i,
+    /DETAILSOFTHECORNERSTONEPLACING\.{2,}\s*(\d+)/i,
     /基石投資\.{2,}\s*(\d+)/i,
   ];
 
@@ -3609,6 +3689,8 @@ async function scoreProspectus(rawText, stockCode) {
     /基石投資者/i,
     /基石投资者/i,
     /CORNERSTONEINVESTORS?/i,
+    /CORNERSTONEPLACING/i,
+    /DETAILSOFTHECORNERSTONEPLACING/i,
   ];
 
   // 结束标记模式
@@ -3618,6 +3700,7 @@ async function scoreProspectus(rawText, stockCode) {
     /概要/i, /SUMMARY/i,
     /歷史、重組/i, /历史、重组/i,
     /業務/i, /业务/i,
+    /THEFOLLOWINGTABLESETSFORTH/i,
   ];
 
   // 优先使用目录定位
@@ -3642,6 +3725,7 @@ async function scoreProspectus(rawText, stockCode) {
   }
 
   console.log(`[基石投资者] 基石章节长度: ${cornerstoneSection?.length || 0}`);
+  console.log(`[cornerstone][section] len=${cornerstoneSection?.length || 0}`);
 
   // -------- 策略2: 从表格中提取投资者名称 --------
 
@@ -3651,6 +3735,7 @@ async function scoreProspectus(rawText, stockCode) {
  
 
     console.log(`[基石投资者] 表格/列表共提取 ${tableInvestors.length} 个投资者`);
+    console.log(`[cornerstone][investors] count=${tableInvestors.length}`);
     if (tableInvestors.length > 0) {
       console.log(`[基石投资者] 提取结果: ${tableInvestors.map(inv => inv.name).join(', ')}`);
     }
@@ -3893,10 +3978,21 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     };
   }
   
+  logDimensionSuccess('cornerstone', scores.cornerstone);
+  } catch (error) {
+    logDimensionError('cornerstone', error);
+    scores.cornerstone = { score: 0, reason: '基石维度降级', details: error.message, investors: [], fallback: true };
+    logDimensionFallback('cornerstone', 'exception');
+  }
+  
   // ========== 4. Pre-IPO禁售期（风控优先：仅限历史发展章节）==========
+  logDimensionStart('lockup');
+  try {
   console.log(`\n[禁售期] ========== 开始 ==========`);
 
   const textNoSpaceForLockup = text.replace(/\s+/g, '');
+  const lockupMode = /HISTORY|DEVELOPMENT|CORPORATESTRUCTURE|PRE-IPO|LOCK-UP/i.test(textNoSpaceForLockup.slice(0, 300000)) ? 'english' : 'chinese';
+  console.log(`[lockup][path] mode="${lockupMode}"`);
 
   // 只允许在指定章节识别（禁止跨章节）
   const HISTORY_SECTION_START_PATTERNS = [
@@ -3918,6 +4014,10 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     /公司历史及重组/i,
     /发展历程/i,
     /业务发展历史/i,
+    /HISTORY,?DEVELOPMENTANDCORPORATESTRUCTURE/i,
+    /HISTORYANDDEVELOPMENT/i,
+    /CORPORATEREORGANIZATION/i,
+    /HISTORYANDCORPORATESTRUCTURE/i,
   ];
   const HISTORY_SECTION_END_PATTERNS = [
     // 注意：不能使用 /業務|业务/ 这类短词，否则会在历史章节正文中误触发提前截断
@@ -4124,12 +4224,19 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   const historySectionMeta = buildHistorySectionForLockup();
   const historySection = historySectionMeta.section;
+  console.log(`[lockup][historySection] len=${historySection?.length || 0}`);
 
   const PREIPO_KEYWORDS = [
     '首次公開發售前投資者',
     '首次公開發售前投資',
     '首次公開發售前增資',
     'Pre-IPO',
+    'Pre-IPOInvestment',
+    'Pre-IPOInvestments',
+    'Pre-IPOInvestor',
+    'Pre-IPOInvestors',
+    'pre-IPOfinancing',
+    'pre-IPOsubscription',
   ];
   const LOCKUP_KEYWORDS = [
     '禁售期',
@@ -4138,6 +4245,13 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     '不得出售',
     '上市日期後',
     '上市後',
+    'lock-up',
+    'lockup',
+    'lockupperiod',
+    'subjecttolock-up',
+    'shallnottransfer',
+    'shallnotdisposeof',
+    'aftertheListingDate',
   ];
 
   const findAllKeywordHits = (srcText, keywords) => {
@@ -4161,6 +4275,10 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       { re: /(六個月|6個月|六个月|6个月)/i, value: 6 },
       { re: /(一年)/i, value: 12 },
       { re: /(180天)/i, value: 6 },
+      { re: /\b36\s*months?\b/i, value: 36 },
+      { re: /\b24\s*months?\b/i, value: 24 },
+      { re: /\b12\s*months?\b/i, value: 12 },
+      { re: /\b6\s*months?\b/i, value: 6 },
     ];
     const months = [];
     for (const p of monthPatterns) {
@@ -4208,6 +4326,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   const preIpoHitsInHistory = historySection ? findAllKeywordHits(historySection, PREIPO_KEYWORDS) : [];
   const lockupHitsInHistory = historySection ? findAllKeywordHits(historySection, LOCKUP_KEYWORDS) : [];
+  console.log(`[lockup][preIpoHits] ${JSON.stringify(preIpoHitsInHistory.slice(0, 20))}`);
+  console.log(`[lockup][lockupHits] ${JSON.stringify(lockupHitsInHistory.slice(0, 20))}`);
   console.log(`[禁售期] preIpoHitsInHistory=${JSON.stringify(preIpoHitsInHistory.slice(0, 30))}`);
   console.log(`[禁售期] lockupHitsInHistory=${JSON.stringify(lockupHitsInHistory.slice(0, 30))}`);
 
@@ -4301,6 +4421,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     bIndex: selectedPair.bIndex,
     distance: selectedPair.distance,
   } : null)}`);
+  console.log(`[lockup][selectedPair] ${JSON.stringify(selectedPair ? {
+    aIndex: selectedPair.aIndex,
+    bIndex: selectedPair.bIndex,
+    distance: selectedPair.distance,
+  } : null)}`);
   console.log(`[禁售期] selectedPairScore=${selectedPairScore}`);
 
   hasPreIPOInvestment = preIpoHitsInHistory.length > 0;
@@ -4353,6 +4478,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     lockupReason = '无Pre-IPO';
     lockupDetails = '限定历史发展章节内未识别到Pre-IPO投资者';
     lockupScoreRule = '无Pre-IPO投资者，0分';
+    logDimensionFallback('lockup', 'noPreIPO');
   } else if (hasLockup) {
     lockupScore = 0;
     lockupConfidence = 'high';
@@ -4366,6 +4492,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     lockupReason = 'Pre-IPO未披露禁售';
     lockupDetails = '歷史章節內識別到Pre-IPO，但未識別到禁售雙錨點近鄰共現';
     lockupScoreRule = '有Pre-IPO但没有禁售，-2分';
+    logDimensionFallback('lockup', 'preIPOWithoutLockup');
   }
 
   console.log(`[禁售期] final result: hasPreIPO=${hasPreIPOInvestment}, hasLockup=${hasLockup}, score=${lockupScore}, confidence=${lockupConfidence}`);
@@ -4402,19 +4529,31 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     evidence: lockupEvidence,
   };
 
+  logDimensionSuccess('lockup', scores.lockup);
+  } catch (error) {
+    logDimensionError('lockup', error);
+    scores.lockup = { score: 0, reason: '禁售维度降级', details: error.message, fallback: true };
+    logDimensionFallback('lockup', 'exception');
+  }
+
   // ========== 5. 行业评分（基于炒作逻辑）==========
+  logDimensionStart('industry');
+  try {
   console.log(`\n[行业] ========== 开始 ==========`);
 
   // 使用去空格版本搜索
   const textNoSpaceForIndustry = text.replace(/\s+/g, '');
+  const industryMode = /INDUSTRYOVERVIEW|OURINDUSTRY|COMPETITIVELANDSCAPE|INDUSTRY/i.test(textNoSpaceForIndustry.slice(0, 300000)) ? 'english' : 'chinese';
+  console.log(`[industry][path] mode="${industryMode}"`);
   const industrySection = extractSection(
     textNoSpaceForIndustry,
-    [/行業概覽/i, /行业概览/i, /INDUSTRYOVERVIEW/i, /業務/i, /业务/i, /BUSINESS/i],
+    [/行業概覽/i, /行业概览/i, /INDUSTRYOVERVIEW/i, /OURINDUSTRY/i, /COMPETITIVELANDSCAPE/i, /INDUSTRY/i, /業務/i, /业务/i, /BUSINESS/i],
     [/監管/i, /监管/i, /董事/i, /REGULATORY/i, /DIRECTOR/i],
     100000
   );
 
   console.log(`[行业] 行業概覽章节长度: ${industrySection?.length || 0}`);
+  console.log(`[industry][section] len=${industrySection?.length || 0}`);
 
   const industrySearchText = (industrySection && industrySection.length > 500) ? industrySection : textNoSpaceForIndustry.slice(0, 250000);
   const normalizedIndustryText = normalizeText(industrySearchText);
@@ -4471,6 +4610,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   }
   const uniqueTitles = [...new Set(extractedTitles)];
   console.log(`[行业] 标题词(${uniqueTitles.length}个): ${uniqueTitles.slice(0, 8).join(' / ') || '无'}`);
+  console.log(`[industry][titleHits] ${JSON.stringify(uniqueTitles.slice(0, 20))}`);
 
   // Step 2+3: 对每个行业类别计算综合得分
   const industryRankings = INDUSTRY_DEFS.map(def => {
@@ -4518,6 +4658,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   ranked.slice(0, 5).forEach((r, i) => {
     console.log(`  #${i + 1} ${r.def.name}: 总分=${r.totalScore}(标题×5=${r.titleCount * 5}, 关键词=${r.kwCount}), 匹配=[${r.matchedKws.slice(0, 4).join(', ')}]`);
   });
+  console.log(`[industry][keywordHits] top=${JSON.stringify(ranked.slice(0, 5).map(r => ({ name: r.def.name, score: r.totalScore, keywords: r.matchedKws.slice(0, 3) })))}`);
 
   // Step 4: 选出主导行业，写入评分变量
   const winner = ranked.length > 0 ? ranked[0] : null;
@@ -4534,6 +4675,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     console.log(`[行业] ✓ 主导行业: ${d.name}, 总分=${winner.totalScore}, 赛道=${d.trackType}(${d.trackScore}分)`);
   } else {
     console.log(`[行业] ✗ 未识别出明确行业，中性评分(0分)`);
+    logDimensionFallback('industry', 'noIndustryKeywordMatched');
   }
 
   console.log(`[行业] 结果: score=${industryScore}, track=${trackType}, keyword=${matchedKeyword || '无'}`);
@@ -4584,8 +4726,16 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     evidence: industryEvidence,
   };
 
+  logDimensionSuccess('industry', scores.industry);
+  } catch (error) {
+    logDimensionError('industry', error);
+    scores.industry = { score: 0, reason: '行业维度降级', details: error.message, track: 'neutral', fallback: true };
+    logDimensionFallback('industry', 'exception');
+  }
+
   // ========== V5 新增：PE 估值评分 ==========
   console.log(`\n[PE] ========== 开始 ==========`);
+  logDimensionStart('pe');
   try {
     // 1. 发行价：优先 etnet，备选 PDF 提取
     let offerPriceMid = etnetData?.offerPriceMid || null;
@@ -4602,10 +4752,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     // 2. 总股本：从 PDF 提取（关键：不能用 H 股市值）
     const sharesResult = extractTotalShares(text);
     const totalShares  = sharesResult.totalShares;
+    console.log(`[pe][totalShares] source="${sharesResult.source}" value=${totalShares ?? 'null'}`);
 
     // 3. 净利润：从 PDF 提取
     const profitResult  = extractNetProfit(text);
     const netProfitHKD  = profitResult.hkdAmount;
+    console.log(`[pe][netProfit] source="${profitResult.source}" rawValue="${profitResult.hkdAmount ?? ''}" normalized=${netProfitHKD ?? 'null'} unit="${profitResult.unit || ''}"`);
 
     // 4. 同行 PE：通过 etnet 行业代码查询
     let peerMedianPE = null;
@@ -4618,6 +4770,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
           const peData   = await getComparablePE(natureCode);
           peerMedianPE   = peData.median;
           console.log(`[PE] 行业"${industry}"(${natureCode}) 同行PE中位数=${peerMedianPE}`);
+          console.log(`[pe][peerPE] industryCode=${natureCode} median=${peerMedianPE}`);
         } else {
           console.log(`[PE] 行业"${industry}"未找到nature代码`);
         }
@@ -4643,13 +4796,20 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         scoreRule: `ratio=${peResult.evidence.ratio?.toFixed(3) || 'N/A'}，PE评分规则：<0.7→+3, <0.85→+2, <0.95→+1, 0.95-1.05→0, >1.05→-1, >1.15→-2, >1.3→-3`,
       },
     };
+    if (!offerPriceMid || !totalShares || !netProfitHKD) {
+      logDimensionFallback('pe', 'fieldMissing');
+    }
+    logDimensionSuccess('pe', scores.pe);
   } catch (e) {
     console.error(`[PE] 评分异常: ${e.message}`);
+    logDimensionError('pe', e);
     scores.pe = { score: 0, reason: 'PE：计算异常', details: e.message, evidence: {} };
+    logDimensionFallback('pe', 'exception');
   }
 
   // ========== V5 新增：募资规模评分 ==========
   console.log(`\n[募资规模] ========== 开始 ==========`);
+  logDimensionStart('fundraising');
   try {
     // 优先 etnet ipoProceeds，备选 PDF 提取
     let ipoProceeds = etnetData?.ipoProceeds || null;
@@ -4658,10 +4818,16 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       // PDF 中搜索净募资额（港元）
       const noSpace = text.replace(/\s+/g, '');
       const m = /所得款項凈額約([\d.]+)(?:億|百萬)?港元/.exec(noSpace)
-             || /净募资额约([\d.]+)億港元/.exec(noSpace);
+             || /净募资额约([\d.]+)億港元/.exec(noSpace)
+             || /NETPROCEEDS[^\d]{0,30}HK\$?([\d.]+)(BILLION|MILLION|['’]000)?/i.exec(noSpace)
+             || /GROSSPROCEEDS[^\d]{0,30}HK\$?([\d.]+)(BILLION|MILLION|['’]000)?/i.exec(noSpace)
+             || /GLOBALOFFERINGSIZE[^\d]{0,30}HK\$?([\d.]+)(BILLION|MILLION|['’]000)?/i.exec(noSpace);
       if (m) {
         const v = parseFloat(m[1]);
-        ipoProceeds = m[0].includes('億') ? Math.round(v * 1e8) : Math.round(v * 1e6);
+        if (/BILLION|億/i.test(m[2] || m[0])) ipoProceeds = Math.round(v * 1e9);
+        else if (/MILLION|百萬/i.test(m[2] || m[0])) ipoProceeds = Math.round(v * 1e6);
+        else if (/['’]000/i.test(m[2] || m[0])) ipoProceeds = Math.round(v * 1e3);
+        else ipoProceeds = Math.round(v * 1e6);
       }
     }
 
@@ -4691,6 +4857,9 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
         ipoSizeReason = '募资规模中性(0)';
       }
     }
+    if (!ipoProceeds) {
+      logDimensionFallback('fundraising', 'noProceedField');
+    }
 
     scores.ipoSize = {
       score:   ipoSizeScore,
@@ -4703,9 +4872,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       },
     };
     console.log(`[募资规模] ${ipoSizeReason}: ${ipoSizeDetails}`);
+    logDimensionSuccess('fundraising', scores.ipoSize);
   } catch (e) {
     console.error(`[募资规模] 计算异常: ${e.message}`);
+    logDimensionError('fundraising', e);
     scores.ipoSize = { score: 0, reason: '募资规模：计算异常', details: e.message, evidence: {} };
+    logDimensionFallback('fundraising', 'exception');
   }
 
   // ========== 计算总分（当前对外版本仅5维参与）==========
@@ -4732,8 +4904,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   return {
     stockCode:   formatStockCode(stockCode),
-    totalScore,
-    rating,
+    totalScore: Number.isFinite(totalScore) ? totalScore : 0,
+    rating: rating || defaultRating,
     scores: publicScores,
     // 展示项（不计入总分）
     display: {
