@@ -992,6 +992,26 @@ function parsePdfWithPdftotext(pdfPath) {
 }
 
 /**
+ * 快速提取PDF前几页文本（用于指纹识别，避免对压缩流做字符串匹配）
+ * @param {string} pdfPath
+ * @param {number} maxPages
+ * @returns {string|null}
+ */
+function parsePdfQuickPagesWithPdftotext(pdfPath, maxPages = 6) {
+  try {
+    const result = execSync(`pdftotext -layout -enc UTF-8 -f 1 -l ${maxPages} "${pdfPath}" -`, {
+      encoding: 'utf8',
+      timeout: 40000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    return result;
+  } catch (e) {
+    console.log('[PDF] 快速前页提取失败:', e.message);
+    return null;
+  }
+}
+
+/**
  * 验证PDF内容是否属于目标股票
  * @param {string} text - PDF文本内容
  * @param {string} stockCode - 目标股票代码（如 "01810"）
@@ -1658,49 +1678,90 @@ async function searchProspectus(stockCode) {
               }
             };
 
-            // 第2层：快速指纹验证（只下载前100KB，在二进制中搜索文本）
+            const FINGERPRINT_STRONG_SECTION_TERMS = [
+              '風險因素', '风险因素', 'RISK FACTORS',
+              '財務資料', '财务资料', 'FINANCIAL INFORMATION',
+              '行業概覽', '行业概览', 'INDUSTRY OVERVIEW',
+              '如何申請香港公開發售股份', '如何申请香港公开发售股份', 'How to Apply for Hong Kong Offer Shares',
+              '全球發售', '全球发售', 'GLOBAL OFFERING',
+            ];
+            const FINGERPRINT_WEAK_SECTION_TERMS = [
+              '董事', 'DIRECTORS',
+              '預期時間表', '预期时间表', 'EXPECTED TIMETABLE',
+            ];
+            const FINGERPRINT_EXCLUDE_TERMS = [
+              'PHIP', 'POST HEARING INFORMATION PACK', '申請版本', '申请版本', 'Application Proof',
+              '補充', '补充', 'Supplement', 'Supplemental',
+              '公告', 'Announcement', 'Notice',
+            ];
+
+            const scoreCandidateFingerprint = (metrics) => {
+              let score = 0;
+              if (metrics.hasCode) score += 30;
+              if (metrics.hasName) score += 22;
+              score += Math.min(metrics.matchedTerms.length * 5, 20);
+              score += Math.min(metrics.sectionHits * 3, 24);
+              score += Math.min(metrics.strongSectionHits * 8, 32);
+              score += Math.min(Math.floor(metrics.textLength / 60000), 12);
+              score += Math.min(Math.floor(metrics.fileSize / (1024 * 1024)), 8);
+
+              if (metrics.fileSize > 0 && metrics.fileSize < 1 * 1024 * 1024) score -= 12;
+              if (metrics.textLength < 12000) score -= 10;
+              if (metrics.strongSectionHits === 0 && metrics.sectionHits > 0) score -= 10;
+              if (metrics.strongSectionHits === 0 && metrics.weakSectionHits > 0) score -= 6;
+              score -= Math.min(metrics.excludeHits * 12, 24);
+
+              return score;
+            };
+
+            // 第2层：快速指纹验证（提取前几页可读正文，再做中英双语匹配）
             const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0, debugDetail = false) => {
+              const tempPdfPath = path.join(CACHE_DIR, `fingerprint_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
               try {
                 const resp = await axios.get(url, {
                   responseType: 'arraybuffer',
-                  timeout: 15000, // 15秒超时
+                  timeout: 25000,
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Range': 'bytes=0-102400', // 只下载前100KB
                   },
                 });
                 const responseBytes = resp?.data?.byteLength || 0;
-                const rangeHeader = (resp?.headers?.['content-range'] || resp?.headers?.['Content-Range'] || '').toString();
-                const rangeHit = resp?.status === 206 || rangeHeader.length > 0;
                 if (debugDetail) {
-                  console.log(`[fingerprintDebug][input] url="${url}" stockCode=${stockCode} stockName="${stockName}" bytes=${responseBytes} rangeHit=${rangeHit}`);
+                  console.log(`[fingerprintDebug][input] url="${url}" stockCode=${stockCode} stockName="${stockName}" bytes=${responseBytes}`);
                 }
 
-                // 将buffer转为字符串进行搜索（PDF中的文本通常是明文存储）
-                const content = resp.data.toString('utf8', 0, resp.data.byteLength);
-                const contentLatin = resp.data.toString('latin1', 0, resp.data.byteLength);
-                const previewOneLine = (text) => text.slice(0, 300).replace(/\s+/g, ' ').trim();
+                fs.writeFileSync(tempPdfPath, resp.data);
+                let content = parsePdfQuickPagesWithPdftotext(tempPdfPath, 6) || '';
+                if (!content || content.length < 200) {
+                  try {
+                    const parsed = await pdfParse(resp.data, { max: 6 });
+                    content = (parsed?.text || '').trim();
+                  } catch (parseErr) {
+                    if (debugDetail) {
+                      console.log(`[fingerprintDebug][pdfParseFallback] failed=${parseErr.message}`);
+                    }
+                  }
+                }
+                const previewOneLine = (text) => text.slice(0, 200).replace(/\s+/g, ' ').trim();
+                console.log(`[fingerprintQuickText] url="${url}" extractedTextLength=${content.length}`);
+                console.log(`[fingerprintQuickPreview] "${previewOneLine(content)}"`);
 
                 if (debugDetail) {
-                  console.log(`[fingerprintDebug][text] utf8Len=${content.length} latin1Len=${contentLatin.length}`);
-                  console.log(`[fingerprintDebug][utf8Preview] "${previewOneLine(content)}"`);
-                  console.log(`[fingerprintDebug][latin1Preview] "${previewOneLine(contentLatin)}"`);
+                  console.log(`[fingerprintDebug][text] extractedLen=${content.length}`);
                 }
 
-                const mergedContent = `${content}\n${contentLatin}`;
-                const matchedTerms = findMatchedTerms(mergedContent, PROSPECTUS_TERM_DICT.fingerprint);
+                const matchedTerms = findMatchedTerms(content, PROSPECTUS_TERM_DICT.fingerprint);
                 const hasFingerprint = matchedTerms.length > 0;
                 if (debugDetail) {
                   PROSPECTUS_TERM_DICT.fingerprint.slice(0, 20).forEach((term) => {
-                    const hitInUtf8 = content.includes(term);
-                    const hitInLatin1 = contentLatin.includes(term);
-                    console.log(`[fingerprintDebug][term] term="${term}" hitInUtf8=${hitInUtf8} hitInLatin1=${hitInLatin1}`);
+                    const hitInText = normalizeNoSpaceLower(content).includes(normalizeNoSpaceLower(term));
+                    console.log(`[fingerprintDebug][term] term="${term}" hitInText=${hitInText}`);
                   });
                 }
 
                 // 检查股票代码
                 const codeNum = stockCode.replace(/^0+/, '');
-                const hasCode = mergedContent.includes(codeNum);
+                const hasCode = new RegExp(`\\b${codeNum}\\b`).test(content) || new RegExp(`\\b${stockCode}\\b`).test(content);
                 if (debugDetail) {
                   console.log(`[fingerprintDebug][code] pattern="${stockCode}|${codeNum}" hit=${hasCode}`);
                 }
@@ -1708,25 +1769,45 @@ async function searchProspectus(stockCode) {
                 // 检查公司名称
                 const nameParts = stockName.split(/[-－\s]/);
                 const hasName = nameParts.some(part =>
-                  part.length >= 2 && mergedContent.includes(part)
+                  part.length >= 2 && content.includes(part)
                 );
                 if (debugDetail) {
                   const effectiveNameParts = nameParts.filter(part => part.length >= 2);
-                  const matchedNameParts = effectiveNameParts.filter(part => mergedContent.includes(part));
+                  const matchedNameParts = effectiveNameParts.filter(part => content.includes(part));
                   console.log(`[fingerprintDebug][name] nameParts=${JSON.stringify(effectiveNameParts)} matchedNameParts=${JSON.stringify(matchedNameParts)}`);
                 }
 
                 // 检查英文名（如xiaomi）
-                const contentLower = contentLatin.toLowerCase();
+                const contentLower = content.toLowerCase();
                 const hasXiaomi = contentLower.includes('xiaomi');
                 const isListcoNewsPdf = /listconews\/sehk\/\d{4}\/\d{4}\/\d+\.pdf/i.test(url);
                 const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && (hasCode || hasName) && matchedTerms.length >= 1;
+                const sectionHits = findMatchedTerms(content, PROSPECTUS_TERM_DICT.sectionMarkers).length;
+                const strongSectionHits = findMatchedTerms(content, FINGERPRINT_STRONG_SECTION_TERMS).length;
+                const weakSectionHits = findMatchedTerms(content, FINGERPRINT_WEAK_SECTION_TERMS).length;
+                const excludeHits = findMatchedTerms(content, FINGERPRINT_EXCLUDE_TERMS).length;
+                const hasReadableText = content.trim().length >= 200;
 
                 const pass = (hasFingerprint && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
+                const metrics = {
+                  hasCode,
+                  hasName,
+                  matchedTerms,
+                  sectionHits,
+                  strongSectionHits,
+                  weakSectionHits,
+                  excludeHits,
+                  textLength: content.length,
+                  fileSize: candidateFileSize,
+                  hasReadableText,
+                };
+                const score = scoreCandidateFingerprint(metrics);
                 if (debugDetail) {
                   let failReason = 'none';
                   if (!pass) {
-                    if (!hasFingerprint) {
+                    if (!hasReadableText) {
+                      failReason = 'noReadableTextExtracted';
+                    } else if (!hasFingerprint) {
                       failReason = 'noFingerprintTermsMatched';
                     } else if (!(hasCode || hasName || hasXiaomi)) {
                       failReason = 'missingCodeAndNameAndXiaomi';
@@ -1736,14 +1817,19 @@ async function searchProspectus(stockCode) {
                   }
                   console.log(`[fingerprintDebug][decision] hasFingerprint=${hasFingerprint} hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} finalPass=${pass} failReason=${failReason}`);
                 }
-                console.log(`[fingerprint] url="${url}" matchedTerms=[${matchedTerms.join(', ')}] hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} pass=${pass}`);
-                return pass;
+                console.log(`[fingerprint] matchedTerms=[${matchedTerms.join(', ')}]`);
+                console.log(`[fingerprint] hasCode=${hasCode} hasName=${hasName} finalPass=${pass}`);
+                return { pass, score, metrics };
               } catch (e) {
                 // Range请求可能不被支持，返回null表示需要完整下载
                 if (e.response && e.response.status === 416) {
-                  return null;
+                  return { pass: null, score: -999, metrics: null };
                 }
-                return false;
+                return { pass: false, score: -999, metrics: null, error: e.message };
+              } finally {
+                if (fs.existsSync(tempPdfPath)) {
+                  fs.unlinkSync(tempPdfPath);
+                }
               }
             };
 
@@ -1819,24 +1905,42 @@ async function searchProspectus(stockCode) {
             let fingerprintMiss = 0;
             let probeSuccess = 0;
             const target0025 = validationResults.find(({ candidate }) => candidate.url.includes('2026040900025.pdf'));
-            for (const { candidate, result } of validationResults) {
-              console.log(`[搜索][method2][probe][fingerprint] url="${candidate.url}" result=${result}`);
-              if (result === true) {
-                probeSuccess++;
-                results.push({
-                  title: `${stockInfo.n} 招股章程`,
-                  link: candidate.url,
-                  code: formattedCode,
-                  name: stockInfo.n,
-                });
-                break;
-              }
-              if (result === false || result === null) {
+            validationResults.forEach(({ candidate, result }, idx) => {
+              const metrics = result?.metrics || {};
+              const sizeMB = ((candidate.fileSize || 0) / 1024 / 1024).toFixed(2);
+              const sectionHits = metrics.sectionHits || 0;
+              const strongSectionHits = metrics.strongSectionHits || 0;
+              const textLength = metrics.textLength || 0;
+              const codeHit = !!metrics.hasCode;
+              const nameHit = !!metrics.hasName;
+              const score = Number.isFinite(result?.score) ? result.score : -999;
+              console.log(`[PDF候选评分] idx=${idx} url="${candidate.url}" sizeMB=${sizeMB} textLength=${textLength} codeHit=${codeHit} nameHit=${nameHit} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits} score=${score}`);
+            });
+
+            const passedCandidates = validationResults
+              .filter(({ result }) => result?.pass === true)
+              .sort((a, b) => (b.result.score || -999) - (a.result.score || -999));
+
+            for (const { result } of validationResults) {
+              if (result?.pass === false || result?.pass === null) {
                 fingerprintMiss++;
               }
             }
+
+            if (passedCandidates.length > 0) {
+              const selected = passedCandidates[0];
+              const selectedIdx = validationResults.findIndex(item => item.candidate.url === selected.candidate.url);
+              probeSuccess = 1;
+              console.log(`[PDF候选选择] selectedIdx=${selectedIdx} selectedUrl="${selected.candidate.url}" reason="highestScore"`);
+              results.push({
+                title: `${stockInfo.n} 招股章程`,
+                link: selected.candidate.url,
+                code: formattedCode,
+                name: stockInfo.n,
+              });
+            }
             if (target0025) {
-              console.log(`[搜索][method2][probe][target0025] reached=true fileSize=${target0025.candidate.fileSize} fingerprintResult=${target0025.result}`);
+              console.log(`[搜索][method2][probe][target0025] reached=true fileSize=${target0025.candidate.fileSize} fingerprintResult=${target0025.result?.pass}`);
             }
 
             const filtered = sizeTooSmall + fingerprintMiss;
