@@ -1074,78 +1074,171 @@ function parsePdfQuickPagesWithPdftotext(pdfPath, maxPages = 6) {
 async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}) {
   const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : 6;
   const source = options.source || 'unknown';
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 30000;
   const initialContentLength = Number.isFinite(options.contentLengthHeader) ? options.contentLengthHeader : null;
   const initialFileSize = Number.isFinite(options.initialFileSize) ? options.initialFileSize : null;
-  const fail = (failReason, extra = {}) => ({
-    ok: false,
-    url,
-    source,
-    contentLengthHeader: initialContentLength,
-    bufferSize: 0,
-    fileSizeBytes: initialFileSize || 0,
-    sizeMB: Number((((initialFileSize || 0) / 1024 / 1024)).toFixed(2)),
-    extractedTextLength: 0,
-    previewText: '',
-    matchedTerms: [],
-    codeHit: false,
-    nameHit: false,
-    nameHitStrong: false,
-    nameHitWeak: false,
-    sectionHits: 0,
-    strongSectionHits: 0,
-    weakSectionHits: 0,
-    excludeHits: [],
-    score: -999,
-    scoreReason: failReason,
-    failReason,
-    ...extra,
-  });
+  const normalizedCode = String(stockCode || '').padStart(5, '0');
+  const isProbeTarget0025 = normalizedCode === '00068' && /2026040900025\.pdf/i.test(url);
+  const probeTargetLog = (tag, msg = '') => {
+    if (!isProbeTarget0025) return;
+    console.log(`[probeTarget][00068][0025][${tag}]${msg ? ` ${msg}` : ''}`);
+  };
+  const logLightProfileFail = (stage, failReason, message = '') => {
+    console.log(`[lightProfile][fail] url="${url}" stage="${stage}" failReason="${failReason}" message="${message || 'none'}"`);
+    if (isProbeTarget0025) {
+      console.log(`[probeTarget][00068][0025][fail] stage="${stage}" failReason="${failReason}" message="${message || 'none'}"`);
+    }
+  };
+  const fail = (stage, failReason, extra = {}) => {
+    const failMessage = extra.failMessage || 'none';
+    logLightProfileFail(stage, failReason, failMessage);
+    return {
+      ok: false,
+      url,
+      source,
+      contentLengthHeader: initialContentLength,
+      bufferSize: 0,
+      fileSizeBytes: initialFileSize || 0,
+      sizeMB: Number((((initialFileSize || 0) / 1024 / 1024)).toFixed(2)),
+      extractedTextLength: 0,
+      previewText: '',
+      matchedTerms: [],
+      codeHit: false,
+      nameHit: false,
+      nameHitStrong: false,
+      nameHitWeak: false,
+      sectionHits: 0,
+      strongSectionHits: 0,
+      weakSectionHits: 0,
+      excludeHits: [],
+      score: -999,
+      scoreReason: failReason,
+      failReason,
+      failStage: stage,
+      ...extra,
+    };
+  };
+
+  console.log(`[lightProfile][start] url="${url}" stockCode=${normalizedCode} stockName="${stockName || ''}"`);
+  if (isProbeTarget0025) probeTargetLog('start');
 
   let pdfBuffer;
   let fileSizeBytes = initialFileSize || 0;
   let contentLengthHeader = initialContentLength;
+  let response;
 
   try {
-    const resp = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 15000,
-      maxContentLength: 30 * 1024 * 1024,
+    console.log(`[lightProfile][request] url="${url}" method=GET timeout=${timeoutMs}`);
+    response = await axios.get(url, {
+      responseType: 'stream',
+      timeout: timeoutMs,
+      maxContentLength: 40 * 1024 * 1024,
+      maxBodyLength: 40 * 1024 * 1024,
       headers: {
         'User-Agent': 'Mozilla/5.0',
         Referer: 'https://www1.hkexnews.hk/',
       },
       validateStatus: (status) => status >= 200 && status < 400,
     });
-    pdfBuffer = Buffer.from(resp.data);
-    if (pdfBuffer.length > 0) fileSizeBytes = pdfBuffer.length;
-    const headerLength = parseInt(resp.headers?.['content-length'] || '', 10);
-    if (Number.isFinite(headerLength) && headerLength > 0) contentLengthHeader = headerLength;
   } catch (err) {
-    return fail('downloadFailed', { failMessage: err.message });
+    return fail('request', 'downloadFailed', { failMessage: err.message });
+  }
+
+  const status = response?.status || 0;
+  const contentType = String(response?.headers?.['content-type'] || '');
+  const headerLength = parseInt(response?.headers?.['content-length'] || '', 10);
+  if (Number.isFinite(headerLength) && headerLength > 0) contentLengthHeader = headerLength;
+  console.log(`[lightProfile][response] url="${url}" status=${status} contentType="${contentType}" contentLength=${contentLengthHeader || 0}`);
+  if (isProbeTarget0025) {
+    probeTargetLog('response', `status=${status} contentLength=${contentLengthHeader || 0} contentType="${contentType}"`);
+  }
+
+  try {
+    const stream = response?.data;
+    if (!stream || typeof stream.on !== 'function') {
+      return fail('response', 'downloadFailed', { failMessage: 'response stream unavailable', contentLengthHeader, fileSizeBytes });
+    }
+
+    let totalBytes = 0;
+    const chunks = [];
+    let chunkLogCount = 0;
+    await new Promise((resolve, reject) => {
+      stream.on('data', (chunk) => {
+        const size = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+        totalBytes += size;
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        if (chunkLogCount < 3 || chunkLogCount % 20 === 0) {
+          console.log(`[lightProfile][stream] url="${url}" event="data" chunkBytes=${size} totalBytes=${totalBytes}`);
+        }
+        chunkLogCount += 1;
+      });
+      stream.on('end', () => {
+        console.log(`[lightProfile][stream] url="${url}" event="end" totalBytes=${totalBytes}`);
+        resolve();
+      });
+      stream.on('error', (err) => {
+        console.log(`[lightProfile][stream] url="${url}" event="error" message="${err.message}"`);
+        reject(err);
+      });
+      stream.on('aborted', () => {
+        const err = new Error('stream aborted by remote host');
+        console.log(`[lightProfile][stream] url="${url}" event="error" message="${err.message}"`);
+        reject(err);
+      });
+    });
+    pdfBuffer = Buffer.concat(chunks, totalBytes);
+  } catch (err) {
+    return fail('stream', 'downloadFailed', { failMessage: err.message, contentLengthHeader, fileSizeBytes });
   }
 
   if (!pdfBuffer || pdfBuffer.length === 0) {
-    return fail('downloadFailed', { contentLengthHeader, fileSizeBytes });
+    return fail('buffer', 'downloadFailed', { contentLengthHeader, fileSizeBytes, failMessage: 'empty buffer' });
   }
+  fileSizeBytes = pdfBuffer.length;
+  console.log(`[lightProfile][buffer] url="${url}" bufferSize=${pdfBuffer.length}`);
+  if (isProbeTarget0025) probeTargetLog('buffer', `size=${pdfBuffer.length}`);
 
   let extractedText = '';
   let pdftotextFailed = false;
+  let pdftotextOk = false;
+  let pdfParseTried = false;
+  let pdfParseOk = false;
   const tempPdfPath = path.join(CACHE_DIR, `tmp_light_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
   try {
-    fs.writeFileSync(tempPdfPath, pdfBuffer);
+    try {
+      fs.writeFileSync(tempPdfPath, pdfBuffer);
+      console.log(`[lightProfile][tempfile] url="${url}" tempPath="${tempPdfPath}" writeOk=true`);
+    } catch (writeErr) {
+      console.log(`[lightProfile][tempfile] url="${url}" tempPath="${tempPdfPath}" writeOk=false`);
+      return fail('tempfile', 'tempFileWriteFailed', {
+        contentLengthHeader,
+        fileSizeBytes,
+        failMessage: writeErr.message,
+      });
+    }
+
     extractedText = parsePdfQuickPagesWithPdftotext(tempPdfPath, maxPages) || '';
-    pdftotextFailed = !extractedText || extractedText.length < 200;
-    if (!extractedText || extractedText.length < 200) {
+    pdftotextOk = extractedText.length >= 200;
+    pdftotextFailed = !pdftotextOk;
+    console.log(`[lightProfile][pdftotext] url="${url}" ok=${pdftotextOk} extractedTextLength=${extractedText.length}`);
+
+    if (!pdftotextOk) {
+      pdfParseTried = true;
       try {
         const parsed = await pdfParse(pdfBuffer, { max: maxPages });
         extractedText = (parsed?.text || '').trim();
+        pdfParseOk = extractedText.length >= 50;
       } catch (parseErr) {
-        return fail('pdftotextFailedAndPdfParseFailed', {
+        console.log(`[lightProfile][pdfparseFallback] url="${url}" tried=true ok=false extractedTextLength=0`);
+        return fail('pdfparseFallback', 'pdftotextFailedAndPdfParseFailed', {
           contentLengthHeader,
           fileSizeBytes,
           failMessage: parseErr.message,
         });
       }
+      console.log(`[lightProfile][pdfparseFallback] url="${url}" tried=true ok=${pdfParseOk} extractedTextLength=${extractedText.length}`);
+    } else {
+      console.log(`[lightProfile][pdfparseFallback] url="${url}" tried=false ok=false extractedTextLength=${extractedText.length}`);
     }
   } finally {
     if (fs.existsSync(tempPdfPath)) {
@@ -1154,7 +1247,7 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
   }
 
   if (!extractedText || extractedText.trim().length < 50) {
-    return fail('noReadableTextExtracted', { contentLengthHeader, fileSizeBytes });
+    return fail('pdftotext', 'noReadableTextExtracted', { contentLengthHeader, fileSizeBytes });
   }
 
   const normalizedContent = normalizeQuickFingerprintText(extractedText);
@@ -1186,8 +1279,12 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
     textLength: extractedText.length,
     fileSize: fileSizeBytes,
     pdftotextFailed,
+    pdftotextOk,
+    pdfParseTried,
+    pdfParseOk,
   };
   const score = scoreCandidateFingerprint(metrics);
+  console.log(`[lightProfile][done] url="${url}" sizeMB=${(fileSizeBytes / 1024 / 1024).toFixed(2)} extractedTextLength=${extractedText.length} score=${score} scoreReason="ok"`);
 
   return {
     ok: true,
@@ -1882,6 +1979,10 @@ async function searchProspectus(stockCode) {
 
             // 第2层：快速指纹验证（提取前几页可读正文，再做中英双语匹配）
             const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0, debugDetail = false) => {
+              const isProbeTarget0025 = String(stockCode || '').padStart(5, '0') === '00068' && /2026040900025\.pdf/i.test(url);
+              if (isProbeTarget0025) {
+                console.log('[probeTarget][00068][0025][start]');
+              }
               try {
                 const profile = await buildLightPdfProfile(url, stockCode, stockName, {
                   source: 'method2-probe',
@@ -1892,11 +1993,17 @@ async function searchProspectus(stockCode) {
                   if (debugDetail) {
                     console.log(`[fingerprintDebug][profileFail] url="${url}" failReason=${profile.failReason} message=${profile.failMessage || 'none'}`);
                   }
+                  if (isProbeTarget0025) {
+                    console.log(`[probeTarget][00068][0025][fail] stage="${profile.failStage || 'unknown'}" failReason="${profile.failReason || 'downloadFailed'}" message="${profile.failMessage || 'none'}"`);
+                  }
                   return { pass: false, score: -999, metrics: null, failReason: profile.failReason || 'downloadFailed', error: profile.failMessage };
                 }
 
                 console.log(`[fingerprintQuickText] url="${url}" extractedTextLength=${profile.extractedTextLength}`);
                 console.log(`[fingerprintQuickPreview] "${profile.previewText}"`);
+                if (isProbeTarget0025) {
+                  console.log(`[probeTarget][00068][0025][extract] extractedTextLength=${profile.extractedTextLength} preview="${profile.previewText}"`);
+                }
                 const hasFingerprint = (profile.matchedTerms || []).length > 0;
                 const hasCode = !!profile.codeHit;
                 const hasName = !!profile.nameHit;
@@ -1938,10 +2045,17 @@ async function searchProspectus(stockCode) {
                 if (debugDetail) {
                   console.log(`[fingerprintDebug][decision] hasFingerprint=${hasFingerprint} hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} finalPass=${pass} failReason=${failReason}`);
                 }
+                if (isProbeTarget0025) {
+                  console.log(`[probeTarget][00068][0025][features] matchedTerms=[${(profile.matchedTerms || []).join(', ')}] hasCode=${hasCode} hasName=${hasName} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits}`);
+                  console.log(`[probeTarget][00068][0025][decision] finalPass=${pass} failReason=${failReason}`);
+                }
                 console.log(`[fingerprint] matchedTerms=[${(profile.matchedTerms || []).join(', ')}]`);
                 console.log(`[fingerprint] hasCode=${hasCode} hasName=${hasName} finalPass=${pass}`);
                 return { pass, score, metrics, failReason };
               } catch (e) {
+                if (isProbeTarget0025) {
+                  console.log(`[probeTarget][00068][0025][fail] stage="unknown" failReason="downloadFailed" message="${e.message}"`);
+                }
                 return { pass: false, score: -999, metrics: null, error: e.message, failReason: 'downloadFailed' };
               }
             };
@@ -2007,13 +2121,19 @@ async function searchProspectus(stockCode) {
             // ========== 快速指纹验证（并行验证前15个）==========
             const topCandidates = candidateUrls.slice(0, 15);
             console.log(`[搜索][method2][probe][topCandidates] count=${topCandidates.length} links=${JSON.stringify(topCandidates.map(item => item.url))}`);
-            const validationResults = await Promise.all(
-              topCandidates.map(async (candidate, index) => {
-                const debugDetail = index < 3 || candidate.url.includes('2026040900025.pdf');
+            const validationResults = new Array(topCandidates.length);
+            const PROFILE_CONCURRENCY = 4;
+            let nextIndex = 0;
+            const workers = Array.from({ length: Math.min(PROFILE_CONCURRENCY, topCandidates.length) }, async () => {
+              while (nextIndex < topCandidates.length) {
+                const currentIndex = nextIndex++;
+                const candidate = topCandidates[currentIndex];
+                const debugDetail = currentIndex < 3 || candidate.url.includes('2026040900025.pdf');
                 const result = await quickFingerprintCheck(candidate.url, formattedCode, stockInfo.n, candidate.fileSize, debugDetail);
-                return { candidate, result };
-              })
-            );
+                validationResults[currentIndex] = { candidate, result };
+              }
+            });
+            await Promise.all(workers);
 
             let fingerprintMiss = 0;
             let probeSuccess = 0;
