@@ -1064,6 +1064,156 @@ function parsePdfQuickPagesWithPdftotext(pdfPath, maxPages = 6) {
 }
 
 /**
+ * 构建轻量PDF画像（前几页+文件大小），供候选预评分复用
+ * @param {string} url
+ * @param {string} stockCode
+ * @param {string} stockName
+ * @param {object} options
+ * @returns {Promise<object>}
+ */
+async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}) {
+  const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : 6;
+  const source = options.source || 'unknown';
+  const initialContentLength = Number.isFinite(options.contentLengthHeader) ? options.contentLengthHeader : null;
+  const initialFileSize = Number.isFinite(options.initialFileSize) ? options.initialFileSize : null;
+  const fail = (failReason, extra = {}) => ({
+    ok: false,
+    url,
+    source,
+    contentLengthHeader: initialContentLength,
+    bufferSize: 0,
+    fileSizeBytes: initialFileSize || 0,
+    sizeMB: Number((((initialFileSize || 0) / 1024 / 1024)).toFixed(2)),
+    extractedTextLength: 0,
+    previewText: '',
+    matchedTerms: [],
+    codeHit: false,
+    nameHit: false,
+    nameHitStrong: false,
+    nameHitWeak: false,
+    sectionHits: 0,
+    strongSectionHits: 0,
+    weakSectionHits: 0,
+    excludeHits: [],
+    score: -999,
+    scoreReason: failReason,
+    failReason,
+    ...extra,
+  });
+
+  let pdfBuffer;
+  let fileSizeBytes = initialFileSize || 0;
+  let contentLengthHeader = initialContentLength;
+
+  try {
+    const resp = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxContentLength: 30 * 1024 * 1024,
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Referer: 'https://www1.hkexnews.hk/',
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+    pdfBuffer = Buffer.from(resp.data);
+    if (pdfBuffer.length > 0) fileSizeBytes = pdfBuffer.length;
+    const headerLength = parseInt(resp.headers?.['content-length'] || '', 10);
+    if (Number.isFinite(headerLength) && headerLength > 0) contentLengthHeader = headerLength;
+  } catch (err) {
+    return fail('downloadFailed', { failMessage: err.message });
+  }
+
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    return fail('downloadFailed', { contentLengthHeader, fileSizeBytes });
+  }
+
+  let extractedText = '';
+  let pdftotextFailed = false;
+  const tempPdfPath = path.join(CACHE_DIR, `tmp_light_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+  try {
+    fs.writeFileSync(tempPdfPath, pdfBuffer);
+    extractedText = parsePdfQuickPagesWithPdftotext(tempPdfPath, maxPages) || '';
+    pdftotextFailed = !extractedText || extractedText.length < 200;
+    if (!extractedText || extractedText.length < 200) {
+      try {
+        const parsed = await pdfParse(pdfBuffer, { max: maxPages });
+        extractedText = (parsed?.text || '').trim();
+      } catch (parseErr) {
+        return fail('pdftotextFailedAndPdfParseFailed', {
+          contentLengthHeader,
+          fileSizeBytes,
+          failMessage: parseErr.message,
+        });
+      }
+    }
+  } finally {
+    if (fs.existsSync(tempPdfPath)) {
+      fs.unlinkSync(tempPdfPath);
+    }
+  }
+
+  if (!extractedText || extractedText.trim().length < 50) {
+    return fail('noReadableTextExtracted', { contentLengthHeader, fileSizeBytes });
+  }
+
+  const normalizedContent = normalizeQuickFingerprintText(extractedText);
+  const matchedTerms = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.fingerprint);
+  const sectionHits = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.sectionMarkers).length;
+  const strongSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_STRONG_SECTION_TERMS).length;
+  const weakSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_WEAK_SECTION_TERMS).length;
+  const excludeHits = findMatchedTerms(normalizedContent, FINGERPRINT_EXCLUDE_TERMS);
+  const codeNum = String(stockCode || '').replace(/^0+/, '');
+  const codeHit = Boolean(codeNum && new RegExp(`\\b${codeNum}\\b`).test(normalizedContent))
+    || (stockCode ? new RegExp(`\\b${stockCode}\\b`).test(normalizedContent) : false);
+  const normalizedName = normalizeStockNameForFingerprint(stockName);
+  const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 3);
+  const matchedNameParts = nameParts.filter((part) => normalizedContent.includes(part));
+  const nameHitStrong = nameParts.length > 0 && matchedNameParts.length === nameParts.length;
+  const nameHitWeak = matchedNameParts.length > 0;
+  const nameHit = nameHitStrong || nameHitWeak;
+  const previewText = extractedText.slice(0, 200).replace(/\s+/g, ' ').trim();
+  const metrics = {
+    hasCode: codeHit,
+    hasName: nameHit,
+    hasNameStrong: nameHitStrong,
+    hasNameWeak: nameHitWeak,
+    matchedTerms,
+    sectionHits,
+    strongSectionHits,
+    weakSectionHits,
+    excludeHits: excludeHits.length,
+    textLength: extractedText.length,
+    fileSize: fileSizeBytes,
+    pdftotextFailed,
+  };
+  const score = scoreCandidateFingerprint(metrics);
+
+  return {
+    ok: true,
+    url,
+    source,
+    contentLengthHeader,
+    bufferSize: pdfBuffer.length,
+    fileSizeBytes,
+    sizeMB: Number((fileSizeBytes / 1024 / 1024).toFixed(2)),
+    extractedTextLength: extractedText.length,
+    previewText,
+    matchedTerms,
+    codeHit,
+    nameHit,
+    nameHitStrong,
+    nameHitWeak,
+    sectionHits,
+    strongSectionHits,
+    weakSectionHits,
+    excludeHits,
+    score,
+    scoreReason: 'ok',
+  };
+}
+
+/**
  * 验证PDF内容是否属于目标股票
  * @param {string} text - PDF文本内容
  * @param {string} stockCode - 目标股票代码（如 "01810"）
@@ -1732,80 +1882,34 @@ async function searchProspectus(stockCode) {
 
             // 第2层：快速指纹验证（提取前几页可读正文，再做中英双语匹配）
             const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0, debugDetail = false) => {
-              const tempPdfPath = path.join(CACHE_DIR, `fingerprint_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
               try {
-                const resp = await axios.get(url, {
-                  responseType: 'arraybuffer',
-                  timeout: 25000,
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                  },
+                const profile = await buildLightPdfProfile(url, stockCode, stockName, {
+                  source: 'method2-probe',
+                  initialFileSize: candidateFileSize,
+                  maxPages: 6,
                 });
-                const responseBytes = resp?.data?.byteLength || 0;
-                if (debugDetail) {
-                  console.log(`[fingerprintDebug][input] url="${url}" stockCode=${stockCode} stockName="${stockName}" bytes=${responseBytes}`);
-                }
-
-                fs.writeFileSync(tempPdfPath, resp.data);
-                let content = parsePdfQuickPagesWithPdftotext(tempPdfPath, 6) || '';
-                let pdftotextFailed = !content || content.length < 200;
-                if (!content || content.length < 200) {
-                  try {
-                    const parsed = await pdfParse(resp.data, { max: 6 });
-                    content = (parsed?.text || '').trim();
-                    console.log(`[candidateTextExtract][fallback] url="${url}" pdftotextFailed=${pdftotextFailed} pdfParseTried=true extractedTextLength=${content.length}`);
-                  } catch (parseErr) {
-                    if (debugDetail) {
-                      console.log(`[fingerprintDebug][pdfParseFallback] failed=${parseErr.message}`);
-                    }
-                    console.log(`[candidateTextExtract][fallback] url="${url}" pdftotextFailed=${pdftotextFailed} pdfParseTried=true extractedTextLength=0`);
+                if (!profile.ok) {
+                  if (debugDetail) {
+                    console.log(`[fingerprintDebug][profileFail] url="${url}" failReason=${profile.failReason} message=${profile.failMessage || 'none'}`);
                   }
-                }
-                const normalizedContent = normalizeQuickFingerprintText(content);
-                const previewOneLine = (text) => text.slice(0, 200).replace(/\s+/g, ' ').trim();
-                console.log(`[fingerprintQuickText] url="${url}" extractedTextLength=${content.length}`);
-                console.log(`[fingerprintQuickPreview] "${previewOneLine(content)}"`);
-
-                if (debugDetail) {
-                  console.log(`[fingerprintDebug][text] extractedLen=${content.length}`);
+                  return { pass: false, score: -999, metrics: null, failReason: profile.failReason || 'downloadFailed', error: profile.failMessage };
                 }
 
-                const matchedTerms = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.fingerprint);
-                const hasFingerprint = matchedTerms.length > 0;
-                if (debugDetail) {
-                  PROSPECTUS_TERM_DICT.fingerprint.slice(0, 20).forEach((term) => {
-                    const hitInText = normalizeNoSpaceLower(normalizedContent).includes(normalizeNoSpaceLower(term));
-                    console.log(`[fingerprintDebug][term] term="${term}" hitInText=${hitInText}`);
-                  });
-                }
-
-                // 检查股票代码
-                const codeNum = stockCode.replace(/^0+/, '');
-                const hasCode = new RegExp(`\\b${codeNum}\\b`).test(normalizedContent) || new RegExp(`\\b${stockCode}\\b`).test(normalizedContent);
-                if (debugDetail) {
-                  console.log(`[fingerprintDebug][code] pattern="${stockCode}|${codeNum}" hit=${hasCode}`);
-                }
-
-                // 检查公司名称
-                const normalizedName = normalizeStockNameForFingerprint(stockName);
-                const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 3);
-                const matchedNameParts = nameParts.filter(part => normalizedContent.includes(part));
-                const hasNameStrong = nameParts.length > 0 && matchedNameParts.length === nameParts.length;
-                const hasNameWeak = matchedNameParts.length > 0;
-                const hasName = hasNameStrong || hasNameWeak;
-                if (debugDetail) {
-                  console.log(`[fingerprintDebug][name] rawName="${stockName}" normalizedName="${normalizedName}" nameParts=${JSON.stringify(nameParts)} matchedNameParts=${JSON.stringify(matchedNameParts)} hasNameStrong=${hasNameStrong} hasNameWeak=${hasNameWeak}`);
-                }
-
-                // 检查英文名（如xiaomi）
-                const contentLower = normalizedContent.toLowerCase();
+                console.log(`[fingerprintQuickText] url="${url}" extractedTextLength=${profile.extractedTextLength}`);
+                console.log(`[fingerprintQuickPreview] "${profile.previewText}"`);
+                const hasFingerprint = (profile.matchedTerms || []).length > 0;
+                const hasCode = !!profile.codeHit;
+                const hasName = !!profile.nameHit;
+                const hasNameStrong = !!profile.nameHitStrong;
+                const hasNameWeak = !!profile.nameHitWeak;
+                const contentLower = String(profile.previewText || '').toLowerCase();
                 const hasXiaomi = contentLower.includes('xiaomi');
                 const isListcoNewsPdf = /listconews\/sehk\/\d{4}\/\d{4}\/\d+\.pdf/i.test(url);
-                const sectionHits = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.sectionMarkers).length;
-                const strongSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_STRONG_SECTION_TERMS).length;
-                const weakSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_WEAK_SECTION_TERMS).length;
-                const excludeHits = findMatchedTerms(normalizedContent, FINGERPRINT_EXCLUDE_TERMS).length;
-                const hasReadableText = content.trim().length >= 200;
+                const sectionHits = profile.sectionHits || 0;
+                const strongSectionHits = profile.strongSectionHits || 0;
+                const weakSectionHits = profile.weakSectionHits || 0;
+                const excludeHits = (profile.excludeHits || []).length;
+                const hasReadableText = (profile.extractedTextLength || 0) >= 200;
                 const isProspectusLike = hasFingerprint || strongSectionHits >= 1 || sectionHits >= 2;
                 const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && isProspectusLike && (hasCode || hasNameWeak || hasXiaomi);
                 const pass = (isProspectusLike && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
@@ -1814,44 +1918,31 @@ async function searchProspectus(stockCode) {
                   hasName,
                   hasNameStrong,
                   hasNameWeak,
-                  matchedTerms,
+                  matchedTerms: profile.matchedTerms || [],
                   sectionHits,
                   strongSectionHits,
                   weakSectionHits,
                   excludeHits,
-                  textLength: content.length,
-                  fileSize: candidateFileSize,
+                  textLength: profile.extractedTextLength || 0,
+                  fileSize: profile.fileSizeBytes || candidateFileSize || 0,
                   hasReadableText,
                 };
-                const score = scoreCandidateFingerprint(metrics);
+                const score = Number.isFinite(profile.score) ? profile.score : scoreCandidateFingerprint(metrics);
                 let failReason = 'none';
                 if (!pass) {
-                  if (!hasReadableText) {
-                    failReason = 'noReadableTextExtracted';
-                  } else if (!isProspectusLike) {
-                    failReason = 'notProspectusLike';
-                  } else if (!(hasCode || hasName || hasXiaomi)) {
-                    failReason = 'missingCodeAndNameAndXiaomi';
-                  } else {
-                    failReason = 'unknown';
-                  }
+                  if (!hasReadableText) failReason = 'noReadableTextExtracted';
+                  else if (!isProspectusLike) failReason = 'notProspectusLike';
+                  else if (!(hasCode || hasName || hasXiaomi)) failReason = 'missingCodeAndNameAndXiaomi';
+                  else failReason = 'unknown';
                 }
                 if (debugDetail) {
                   console.log(`[fingerprintDebug][decision] hasFingerprint=${hasFingerprint} hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} finalPass=${pass} failReason=${failReason}`);
                 }
-                console.log(`[fingerprint] matchedTerms=[${matchedTerms.join(', ')}]`);
+                console.log(`[fingerprint] matchedTerms=[${(profile.matchedTerms || []).join(', ')}]`);
                 console.log(`[fingerprint] hasCode=${hasCode} hasName=${hasName} finalPass=${pass}`);
                 return { pass, score, metrics, failReason };
               } catch (e) {
-                // Range请求可能不被支持，返回null表示需要完整下载
-                if (e.response && e.response.status === 416) {
-                  return { pass: null, score: -999, metrics: null, failReason: 'httpRangeNotSupported' };
-                }
                 return { pass: false, score: -999, metrics: null, error: e.message, failReason: 'downloadFailed' };
-              } finally {
-                if (fs.existsSync(tempPdfPath)) {
-                  fs.unlinkSync(tempPdfPath);
-                }
               }
             };
 
@@ -4631,19 +4722,27 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
       }
     }
 
+    const safeScore = Number.isFinite(scoreResult?.totalScore) ? scoreResult.totalScore
+      : Number.isFinite(scoreResult?.total) ? scoreResult.total
+      : Number.isFinite(scoreResult?.score) ? scoreResult.score
+      : 0;
+    const safeRecommendation = scoreResult?.recommendation ?? scoreResult?.advice ?? scoreResult?.rating ?? scoreResult?.ratingLabel ?? '';
+    const safeRating = scoreResult?.rating ?? scoreResult?.ratingLabel ?? safeRecommendation ?? '';
+    console.log(`[scorePipeline][savePayload] stockCode=${stockCode} score=${safeScore} recommendation=${safeRecommendation} jsonFields=${JSON.stringify({ totalScore: scoreResult?.totalScore, total: scoreResult?.total, score: scoreResult?.score, rating: scoreResult?.rating, ratingLabel: scoreResult?.ratingLabel, recommendation: scoreResult?.recommendation, advice: scoreResult?.advice })}`);
+
     // 检查是否已存在（去重）
     let existingIPO = data.ipos.find(ipo => ipo.code === stockCode);
 
     if (existingIPO) {
       // 更新现有记录
-      existingIPO.score = scoreResult.totalScore;
-      existingIPO.rating = scoreResult.rating;
+      existingIPO.score = safeScore;
+      existingIPO.rating = safeRating;
       existingIPO.scoreDetails = scoreResult.scores;
       existingIPO.lastUpdate = new Date().toISOString();
       if (prospectusInfo) {
         existingIPO.name = prospectusInfo.name || existingIPO.name;
       }
-      console.log(`[保存] 更新现有记录: ${stockCode} - ${scoreResult.totalScore}分`);
+      console.log(`[保存] 更新现有记录: ${stockCode} - ${safeScore}分`);
     } else {
       // 添加新记录
       const newIPO = {
@@ -4651,8 +4750,8 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
         name: prospectusInfo?.name || `股票${stockCode}`,
         industry: '待分类',
         status: 'scored', // 标记为已评分
-        score: scoreResult.totalScore,
-        rating: scoreResult.rating,
+        score: safeScore,
+        rating: safeRating,
         scoreDetails: scoreResult.scores,
         lastUpdate: new Date().toISOString(),
         prospectus: prospectusInfo ? {
@@ -4662,7 +4761,7 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
       };
 
       data.ipos.unshift(newIPO); // 添加到开头
-      console.log(`[保存] 新增记录: ${stockCode} - ${scoreResult.totalScore}分`);
+      console.log(`[保存] 新增记录: ${stockCode} - ${safeScore}分`);
     }
 
     // 更新元数据
@@ -4714,34 +4813,35 @@ app.get('/api/score/:code', async (req, res) => {
 
       console.log(`[API][candidateBatch] source=method1 count=${candidateCount}`);
 
-      const scoredCandidates = searchResults.map((candidate, idx) => {
-        const candidateText = normalizeQuickFingerprintText([candidate.title, candidate.linkText, candidate.link, candidate.name].filter(Boolean).join(' '));
-        const matchedTerms = findMatchedTerms(candidateText, PROSPECTUS_TERM_DICT.fingerprint);
-        const sectionHits = findMatchedTerms(candidateText, PROSPECTUS_TERM_DICT.sectionMarkers).length;
-        const strongSectionHits = findMatchedTerms(candidateText, FINGERPRINT_STRONG_SECTION_TERMS).length;
-        const weakSectionHits = findMatchedTerms(candidateText, FINGERPRINT_WEAK_SECTION_TERMS).length;
-        const excludeHits = findMatchedTerms(candidateText, FINGERPRINT_EXCLUDE_TERMS).length;
-        const codeNum = code.replace(/^0+/, '');
-        const hasCode = Boolean(codeNum && new RegExp(`\\b${codeNum}\\b`).test(candidateText)) || new RegExp(`\\b${code}\\b`).test(candidateText);
-        const normalizedName = normalizeStockNameForFingerprint(candidate.name || '');
-        const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 3);
-        const matchedNameParts = nameParts.filter((part) => candidateText.includes(part));
-        const hasName = matchedNameParts.length > 0;
+      const scoredCandidatesRaw = await Promise.all(searchResults.map(async (candidate, idx) => {
+        console.log(`[API][candidateProfile][start] idx=${idx} url="${candidate.link}"`);
+        const profile = await buildLightPdfProfile(candidate.link, code, candidate.name || '', {
+          source: 'method1',
+          maxPages: 6,
+        });
+        if (!profile.ok) {
+          console.log(`[API][candidateProfile][fail] idx=${idx} url="${candidate.link}" failReason="${profile.failReason}"`);
+          console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=${(profile.sizeMB || 0).toFixed(2)} textLength=${profile.extractedTextLength || 0} codeHit=false nameHit=false sectionHits=0 strongSectionHits=0 score=-999 scoreReason="${profile.scoreReason}"`);
+          return { idx, candidate, metrics: null, score: -999, scoreReason: profile.scoreReason };
+        }
+        console.log(`[API][candidateProfile][raw] idx=${idx} source=method1 contentLengthHeader=${profile.contentLengthHeader || 0} bufferSize=${profile.bufferSize || 0} fileSizeBytes=${profile.fileSizeBytes || 0} sizeMB=${profile.sizeMB.toFixed(2)} extractedTextLength=${profile.extractedTextLength || 0} preview="${profile.previewText}"`);
+        console.log(`[API][candidateProfile][features] idx=${idx} codeHit=${profile.codeHit} nameHit=${profile.nameHit} matchedTerms=[${(profile.matchedTerms || []).join(', ')}] sectionHits=${profile.sectionHits || 0} strongSectionHits=${profile.strongSectionHits || 0} excludeHits=[${(profile.excludeHits || []).join(', ')}]`);
         const metrics = {
-          hasCode,
-          hasName,
-          matchedTerms,
-          sectionHits,
-          strongSectionHits,
-          weakSectionHits,
-          excludeHits,
-          textLength: candidateText.length,
-          fileSize: 0,
+          hasCode: profile.codeHit,
+          hasName: profile.nameHit,
+          matchedTerms: profile.matchedTerms || [],
+          sectionHits: profile.sectionHits || 0,
+          strongSectionHits: profile.strongSectionHits || 0,
+          weakSectionHits: profile.weakSectionHits || 0,
+          excludeHits: (profile.excludeHits || []).length,
+          textLength: profile.extractedTextLength || 0,
+          fileSize: profile.fileSizeBytes || 0,
         };
-        const score = scoreCandidateFingerprint(metrics);
-        console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=0.00 textLength=${metrics.textLength} codeHit=${hasCode} nameHit=${hasName} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits} score=${score}`);
-        return { idx, candidate, metrics, score };
-      }).sort((a, b) => b.score - a.score);
+        const score = Number.isFinite(profile.score) ? profile.score : scoreCandidateFingerprint(metrics);
+        console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=${profile.sizeMB.toFixed(2)} textLength=${metrics.textLength} codeHit=${metrics.hasCode} nameHit=${metrics.hasName} sectionHits=${metrics.sectionHits} strongSectionHits=${metrics.strongSectionHits} score=${score} scoreReason="${profile.scoreReason}"`);
+        return { idx, candidate, metrics, score, scoreReason: profile.scoreReason };
+      }));
+      const scoredCandidates = scoredCandidatesRaw.sort((a, b) => b.score - a.score);
 
       if (scoredCandidates.length > 0) {
         console.log(`[API][candidatePick] source=method1 pickedIdx=${scoredCandidates[0].idx} pickedUrl="${scoredCandidates[0].candidate.link}" reason="highestScore"`);
@@ -4778,7 +4878,42 @@ app.get('/api/score/:code', async (req, res) => {
     }
 
     // 评分
-    const scoreResult = await scoreProspectus(pdfText, code);
+    console.log(`[scorePipeline][input] stockCode=${formatStockCode(code)} rawTextLength=${pdfText?.length || 0}`);
+    const scoreResultRaw = await scoreProspectus(pdfText, code);
+    const scoreResultKeys = Object.keys(scoreResultRaw || {});
+    console.log(`[scorePipeline][scoreProspectusReturn] stockCode=${formatStockCode(code)} keys=[${scoreResultKeys.join(', ')}]`);
+    console.log(`[scorePipeline][scoreProspectusReturn][core] stockCode=${formatStockCode(code)} totalScore=${scoreResultRaw?.totalScore} recommendation=${scoreResultRaw?.recommendation} rating=${scoreResultRaw?.rating} ratingLabel=${scoreResultRaw?.ratingLabel}`);
+
+    const mappedScore = Number.isFinite(scoreResultRaw?.totalScore) ? scoreResultRaw.totalScore
+      : Number.isFinite(scoreResultRaw?.total) ? scoreResultRaw.total
+      : Number.isFinite(scoreResultRaw?.score) ? scoreResultRaw.score
+      : null;
+    const mappedRecommendation = scoreResultRaw?.recommendation ?? scoreResultRaw?.advice ?? scoreResultRaw?.rating ?? scoreResultRaw?.ratingLabel ?? null;
+    const mappedRating = scoreResultRaw?.rating ?? scoreResultRaw?.ratingLabel ?? scoreResultRaw?.recommendation ?? scoreResultRaw?.advice ?? null;
+
+    const scoreResult = {
+      ...(scoreResultRaw || {}),
+      totalScore: mappedScore,
+      recommendation: mappedRecommendation,
+      rating: mappedRating,
+    };
+
+    if (!Number.isFinite(scoreResultRaw?.totalScore) && Number.isFinite(mappedScore)) {
+      console.log(`[scorePipeline][fallback] stockCode=${formatStockCode(code)} reason="totalScoreMissingUsedAlias" appliedField="totalScore"`);
+    }
+    if (!scoreResultRaw?.rating && mappedRating) {
+      console.log(`[scorePipeline][fallback] stockCode=${formatStockCode(code)} reason="ratingMissingUsedAlias" appliedField="rating"`);
+    }
+    if (!scoreResultRaw?.recommendation && mappedRecommendation) {
+      console.log(`[scorePipeline][fallback] stockCode=${formatStockCode(code)} reason="recommendationMissingUsedAlias" appliedField="recommendation"`);
+    }
+    console.log(`[scorePipeline][apiMapping] stockCode=${formatStockCode(code)} mappedScore=${scoreResult.totalScore} mappedRecommendation=${scoreResult.recommendation} mappedRating=${scoreResult.rating}`);
+    if (!Number.isFinite(scoreResult.totalScore)) {
+      console.log(`[scorePipeline][error] stockCode=${formatStockCode(code)} missingField="totalScore"`);
+    }
+    if (!scoreResult.rating) {
+      console.log(`[scorePipeline][error] stockCode=${formatStockCode(code)} missingField="rating"`);
+    }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒`);
