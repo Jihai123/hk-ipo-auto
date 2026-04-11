@@ -62,6 +62,58 @@ const PROSPECTUS_TERM_DICT = {
   offerPriceTerms: ['發售價', '发售价', '招股價', '招股价', 'Offer Price', 'Maximum Offer Price'],
   oldShareTerms: ['銷售股份', '销售股份', 'Sale Shares', 'Selling Shares', 'Selling Shareholders'],
 };
+const FINGERPRINT_STRONG_SECTION_TERMS = [
+  '風險因素', '风险因素', 'RISK FACTORS',
+  '財務資料', '财务资料', 'FINANCIAL INFORMATION',
+  '行業概覽', '行业概览', 'INDUSTRY OVERVIEW',
+  '如何申請香港公開發售股份', '如何申请香港公开发售股份', 'How to Apply for Hong Kong Offer Shares',
+  '全球發售', '全球发售', 'GLOBAL OFFERING',
+];
+const FINGERPRINT_WEAK_SECTION_TERMS = [
+  '董事', 'DIRECTORS',
+  '預期時間表', '预期时间表', 'EXPECTED TIMETABLE',
+];
+const FINGERPRINT_EXCLUDE_TERMS = [
+  'PHIP', 'POST HEARING INFORMATION PACK', '申請版本', '申请版本', 'Application Proof',
+  '補充', '补充', 'Supplement', 'Supplemental',
+  '公告', 'Announcement', 'Notice',
+];
+
+function scoreCandidateFingerprint(metrics) {
+  let score = 0;
+  if (metrics.hasCode) score += 30;
+  if (metrics.hasName) score += 22;
+  score += Math.min((metrics.matchedTerms || []).length * 5, 20);
+  score += Math.min((metrics.sectionHits || 0) * 3, 24);
+  score += Math.min((metrics.strongSectionHits || 0) * 8, 32);
+  score += Math.min(Math.floor((metrics.textLength || 0) / 60000), 12);
+  score += Math.min(Math.floor((metrics.fileSize || 0) / (1024 * 1024)), 8);
+
+  if ((metrics.fileSize || 0) > 0 && (metrics.fileSize || 0) < 1 * 1024 * 1024) score -= 12;
+  if ((metrics.textLength || 0) < 12000) score -= 10;
+  if ((metrics.strongSectionHits || 0) === 0 && (metrics.sectionHits || 0) > 0) score -= 10;
+  if ((metrics.strongSectionHits || 0) === 0 && (metrics.weakSectionHits || 0) > 0) score -= 6;
+  score -= Math.min((metrics.excludeHits || 0) * 12, 24);
+
+  return score;
+}
+
+function normalizeQuickFingerprintText(input = '') {
+  return String(input)
+    .replace(/([A-Za-z])\s{1,2}([A-Za-z])/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeStockNameForFingerprint(stockName = '') {
+  return String(stockName)
+    .toUpperCase()
+    .replace(/[()（）.,，&/\\-]/g, ' ')
+    .replace(/\b(HOLDINGS?|HLDGS?|LIMITED|LTD|INCORPORATED|INC|GROUP|COMPANY|CO|CORP|CORPORATION|TECHNOLOGY|TECH)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function normalizeNoSpaceLower(input = '') {
   return String(input).replace(/\s+/g, '').toLowerCase();
@@ -1678,42 +1730,6 @@ async function searchProspectus(stockCode) {
               }
             };
 
-            const FINGERPRINT_STRONG_SECTION_TERMS = [
-              '風險因素', '风险因素', 'RISK FACTORS',
-              '財務資料', '财务资料', 'FINANCIAL INFORMATION',
-              '行業概覽', '行业概览', 'INDUSTRY OVERVIEW',
-              '如何申請香港公開發售股份', '如何申请香港公开发售股份', 'How to Apply for Hong Kong Offer Shares',
-              '全球發售', '全球发售', 'GLOBAL OFFERING',
-            ];
-            const FINGERPRINT_WEAK_SECTION_TERMS = [
-              '董事', 'DIRECTORS',
-              '預期時間表', '预期时间表', 'EXPECTED TIMETABLE',
-            ];
-            const FINGERPRINT_EXCLUDE_TERMS = [
-              'PHIP', 'POST HEARING INFORMATION PACK', '申請版本', '申请版本', 'Application Proof',
-              '補充', '补充', 'Supplement', 'Supplemental',
-              '公告', 'Announcement', 'Notice',
-            ];
-
-            const scoreCandidateFingerprint = (metrics) => {
-              let score = 0;
-              if (metrics.hasCode) score += 30;
-              if (metrics.hasName) score += 22;
-              score += Math.min(metrics.matchedTerms.length * 5, 20);
-              score += Math.min(metrics.sectionHits * 3, 24);
-              score += Math.min(metrics.strongSectionHits * 8, 32);
-              score += Math.min(Math.floor(metrics.textLength / 60000), 12);
-              score += Math.min(Math.floor(metrics.fileSize / (1024 * 1024)), 8);
-
-              if (metrics.fileSize > 0 && metrics.fileSize < 1 * 1024 * 1024) score -= 12;
-              if (metrics.textLength < 12000) score -= 10;
-              if (metrics.strongSectionHits === 0 && metrics.sectionHits > 0) score -= 10;
-              if (metrics.strongSectionHits === 0 && metrics.weakSectionHits > 0) score -= 6;
-              score -= Math.min(metrics.excludeHits * 12, 24);
-
-              return score;
-            };
-
             // 第2层：快速指纹验证（提取前几页可读正文，再做中英双语匹配）
             const quickFingerprintCheck = async (url, stockCode, stockName, candidateFileSize = 0, debugDetail = false) => {
               const tempPdfPath = path.join(CACHE_DIR, `fingerprint_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
@@ -1732,16 +1748,20 @@ async function searchProspectus(stockCode) {
 
                 fs.writeFileSync(tempPdfPath, resp.data);
                 let content = parsePdfQuickPagesWithPdftotext(tempPdfPath, 6) || '';
+                let pdftotextFailed = !content || content.length < 200;
                 if (!content || content.length < 200) {
                   try {
                     const parsed = await pdfParse(resp.data, { max: 6 });
                     content = (parsed?.text || '').trim();
+                    console.log(`[candidateTextExtract][fallback] url="${url}" pdftotextFailed=${pdftotextFailed} pdfParseTried=true extractedTextLength=${content.length}`);
                   } catch (parseErr) {
                     if (debugDetail) {
                       console.log(`[fingerprintDebug][pdfParseFallback] failed=${parseErr.message}`);
                     }
+                    console.log(`[candidateTextExtract][fallback] url="${url}" pdftotextFailed=${pdftotextFailed} pdfParseTried=true extractedTextLength=0`);
                   }
                 }
+                const normalizedContent = normalizeQuickFingerprintText(content);
                 const previewOneLine = (text) => text.slice(0, 200).replace(/\s+/g, ' ').trim();
                 console.log(`[fingerprintQuickText] url="${url}" extractedTextLength=${content.length}`);
                 console.log(`[fingerprintQuickPreview] "${previewOneLine(content)}"`);
@@ -1750,48 +1770,50 @@ async function searchProspectus(stockCode) {
                   console.log(`[fingerprintDebug][text] extractedLen=${content.length}`);
                 }
 
-                const matchedTerms = findMatchedTerms(content, PROSPECTUS_TERM_DICT.fingerprint);
+                const matchedTerms = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.fingerprint);
                 const hasFingerprint = matchedTerms.length > 0;
                 if (debugDetail) {
                   PROSPECTUS_TERM_DICT.fingerprint.slice(0, 20).forEach((term) => {
-                    const hitInText = normalizeNoSpaceLower(content).includes(normalizeNoSpaceLower(term));
+                    const hitInText = normalizeNoSpaceLower(normalizedContent).includes(normalizeNoSpaceLower(term));
                     console.log(`[fingerprintDebug][term] term="${term}" hitInText=${hitInText}`);
                   });
                 }
 
                 // 检查股票代码
                 const codeNum = stockCode.replace(/^0+/, '');
-                const hasCode = new RegExp(`\\b${codeNum}\\b`).test(content) || new RegExp(`\\b${stockCode}\\b`).test(content);
+                const hasCode = new RegExp(`\\b${codeNum}\\b`).test(normalizedContent) || new RegExp(`\\b${stockCode}\\b`).test(normalizedContent);
                 if (debugDetail) {
                   console.log(`[fingerprintDebug][code] pattern="${stockCode}|${codeNum}" hit=${hasCode}`);
                 }
 
                 // 检查公司名称
-                const nameParts = stockName.split(/[-－\s]/);
-                const hasName = nameParts.some(part =>
-                  part.length >= 2 && content.includes(part)
-                );
+                const normalizedName = normalizeStockNameForFingerprint(stockName);
+                const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 3);
+                const matchedNameParts = nameParts.filter(part => normalizedContent.includes(part));
+                const hasNameStrong = nameParts.length > 0 && matchedNameParts.length === nameParts.length;
+                const hasNameWeak = matchedNameParts.length > 0;
+                const hasName = hasNameStrong || hasNameWeak;
                 if (debugDetail) {
-                  const effectiveNameParts = nameParts.filter(part => part.length >= 2);
-                  const matchedNameParts = effectiveNameParts.filter(part => content.includes(part));
-                  console.log(`[fingerprintDebug][name] nameParts=${JSON.stringify(effectiveNameParts)} matchedNameParts=${JSON.stringify(matchedNameParts)}`);
+                  console.log(`[fingerprintDebug][name] rawName="${stockName}" normalizedName="${normalizedName}" nameParts=${JSON.stringify(nameParts)} matchedNameParts=${JSON.stringify(matchedNameParts)} hasNameStrong=${hasNameStrong} hasNameWeak=${hasNameWeak}`);
                 }
 
                 // 检查英文名（如xiaomi）
-                const contentLower = content.toLowerCase();
+                const contentLower = normalizedContent.toLowerCase();
                 const hasXiaomi = contentLower.includes('xiaomi');
                 const isListcoNewsPdf = /listconews\/sehk\/\d{4}\/\d{4}\/\d+\.pdf/i.test(url);
-                const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && (hasCode || hasName) && matchedTerms.length >= 1;
-                const sectionHits = findMatchedTerms(content, PROSPECTUS_TERM_DICT.sectionMarkers).length;
-                const strongSectionHits = findMatchedTerms(content, FINGERPRINT_STRONG_SECTION_TERMS).length;
-                const weakSectionHits = findMatchedTerms(content, FINGERPRINT_WEAK_SECTION_TERMS).length;
-                const excludeHits = findMatchedTerms(content, FINGERPRINT_EXCLUDE_TERMS).length;
+                const sectionHits = findMatchedTerms(normalizedContent, PROSPECTUS_TERM_DICT.sectionMarkers).length;
+                const strongSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_STRONG_SECTION_TERMS).length;
+                const weakSectionHits = findMatchedTerms(normalizedContent, FINGERPRINT_WEAK_SECTION_TERMS).length;
+                const excludeHits = findMatchedTerms(normalizedContent, FINGERPRINT_EXCLUDE_TERMS).length;
                 const hasReadableText = content.trim().length >= 200;
-
-                const pass = (hasFingerprint && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
+                const isProspectusLike = hasFingerprint || strongSectionHits >= 1 || sectionHits >= 2;
+                const allowRelaxed = isListcoNewsPdf && candidateFileSize > 3000000 && isProspectusLike && (hasCode || hasNameWeak || hasXiaomi);
+                const pass = (isProspectusLike && (hasCode || hasName || hasXiaomi)) || allowRelaxed;
                 const metrics = {
                   hasCode,
                   hasName,
+                  hasNameStrong,
+                  hasNameWeak,
                   matchedTerms,
                   sectionHits,
                   strongSectionHits,
@@ -1802,30 +1824,30 @@ async function searchProspectus(stockCode) {
                   hasReadableText,
                 };
                 const score = scoreCandidateFingerprint(metrics);
-                if (debugDetail) {
-                  let failReason = 'none';
-                  if (!pass) {
-                    if (!hasReadableText) {
-                      failReason = 'noReadableTextExtracted';
-                    } else if (!hasFingerprint) {
-                      failReason = 'noFingerprintTermsMatched';
-                    } else if (!(hasCode || hasName || hasXiaomi)) {
-                      failReason = 'missingCodeAndNameAndXiaomi';
-                    } else {
-                      failReason = 'unknown';
-                    }
+                let failReason = 'none';
+                if (!pass) {
+                  if (!hasReadableText) {
+                    failReason = 'noReadableTextExtracted';
+                  } else if (!isProspectusLike) {
+                    failReason = 'notProspectusLike';
+                  } else if (!(hasCode || hasName || hasXiaomi)) {
+                    failReason = 'missingCodeAndNameAndXiaomi';
+                  } else {
+                    failReason = 'unknown';
                   }
+                }
+                if (debugDetail) {
                   console.log(`[fingerprintDebug][decision] hasFingerprint=${hasFingerprint} hasCode=${hasCode} hasName=${hasName} allowRelaxed=${allowRelaxed} finalPass=${pass} failReason=${failReason}`);
                 }
                 console.log(`[fingerprint] matchedTerms=[${matchedTerms.join(', ')}]`);
                 console.log(`[fingerprint] hasCode=${hasCode} hasName=${hasName} finalPass=${pass}`);
-                return { pass, score, metrics };
+                return { pass, score, metrics, failReason };
               } catch (e) {
                 // Range请求可能不被支持，返回null表示需要完整下载
                 if (e.response && e.response.status === 416) {
-                  return { pass: null, score: -999, metrics: null };
+                  return { pass: null, score: -999, metrics: null, failReason: 'httpRangeNotSupported' };
                 }
-                return { pass: false, score: -999, metrics: null, error: e.message };
+                return { pass: false, score: -999, metrics: null, error: e.message, failReason: 'downloadFailed' };
               } finally {
                 if (fs.existsSync(tempPdfPath)) {
                   fs.unlinkSync(tempPdfPath);
@@ -1914,7 +1936,8 @@ async function searchProspectus(stockCode) {
               const codeHit = !!metrics.hasCode;
               const nameHit = !!metrics.hasName;
               const score = Number.isFinite(result?.score) ? result.score : -999;
-              console.log(`[PDF候选评分] idx=${idx} url="${candidate.url}" sizeMB=${sizeMB} textLength=${textLength} codeHit=${codeHit} nameHit=${nameHit} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits} score=${score}`);
+              const scoreReason = score === -999 ? (result?.failReason || result?.error || 'unknown') : 'ok';
+              console.log(`[PDF候选评分] idx=${idx} url="${candidate.url}" sizeMB=${sizeMB} textLength=${textLength} codeHit=${codeHit} nameHit=${nameHit} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits} score=${score} scoreReason="${scoreReason}"`);
             });
 
             const passedCandidates = validationResults
@@ -1941,6 +1964,8 @@ async function searchProspectus(stockCode) {
             }
             if (target0025) {
               console.log(`[搜索][method2][probe][target0025] reached=true fileSize=${target0025.candidate.fileSize} fingerprintResult=${target0025.result?.pass}`);
+              const targetMetrics = target0025.result?.metrics || {};
+              console.log(`[搜索][method2][probe][target0025][detail] extractedTextLength=${targetMetrics.textLength || 0} matchedTerms=[${(targetMetrics.matchedTerms || []).join(', ')}] hasCode=${!!targetMetrics.hasCode} hasName=${!!targetMetrics.hasName} finalPass=${target0025.result?.pass} failReason=${target0025.result?.failReason || 'none'}`);
             }
 
             const filtered = sizeTooSmall + fingerprintMiss;
@@ -4687,23 +4712,58 @@ app.get('/api/score/:code', async (req, res) => {
         });
       }
 
-      console.log(`[API] 找到 ${candidateCount} 个候选PDF，逐个尝试验证...`);
+      console.log(`[API][candidateBatch] source=method1 count=${candidateCount}`);
 
-      // 逐个尝试下载和验证PDF
+      const scoredCandidates = searchResults.map((candidate, idx) => {
+        const candidateText = normalizeQuickFingerprintText([candidate.title, candidate.linkText, candidate.link, candidate.name].filter(Boolean).join(' '));
+        const matchedTerms = findMatchedTerms(candidateText, PROSPECTUS_TERM_DICT.fingerprint);
+        const sectionHits = findMatchedTerms(candidateText, PROSPECTUS_TERM_DICT.sectionMarkers).length;
+        const strongSectionHits = findMatchedTerms(candidateText, FINGERPRINT_STRONG_SECTION_TERMS).length;
+        const weakSectionHits = findMatchedTerms(candidateText, FINGERPRINT_WEAK_SECTION_TERMS).length;
+        const excludeHits = findMatchedTerms(candidateText, FINGERPRINT_EXCLUDE_TERMS).length;
+        const codeNum = code.replace(/^0+/, '');
+        const hasCode = Boolean(codeNum && new RegExp(`\\b${codeNum}\\b`).test(candidateText)) || new RegExp(`\\b${code}\\b`).test(candidateText);
+        const normalizedName = normalizeStockNameForFingerprint(candidate.name || '');
+        const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 3);
+        const matchedNameParts = nameParts.filter((part) => candidateText.includes(part));
+        const hasName = matchedNameParts.length > 0;
+        const metrics = {
+          hasCode,
+          hasName,
+          matchedTerms,
+          sectionHits,
+          strongSectionHits,
+          weakSectionHits,
+          excludeHits,
+          textLength: candidateText.length,
+          fileSize: 0,
+        };
+        const score = scoreCandidateFingerprint(metrics);
+        console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=0.00 textLength=${metrics.textLength} codeHit=${hasCode} nameHit=${hasName} sectionHits=${sectionHits} strongSectionHits=${strongSectionHits} score=${score}`);
+        return { idx, candidate, metrics, score };
+      }).sort((a, b) => b.score - a.score);
+
+      if (scoredCandidates.length > 0) {
+        console.log(`[API][candidatePick] source=method1 pickedIdx=${scoredCandidates[0].idx} pickedUrl="${scoredCandidates[0].candidate.link}" reason="highestScore"`);
+      }
+
+      // 按评分排序后下载和验证PDF（最高分优先，失败再fallback）
       let lastError = null;
-      for (let i = 0; i < candidateCount; i++) {
-        const candidate = searchResults[i];
-        console.log(`[API] 尝试第 ${i + 1}/${candidateCount} 个: ${candidate.link.substring(0, 60)}...`);
+      for (let i = 0; i < scoredCandidates.length; i++) {
+        const { idx, candidate } = scoredCandidates[i];
+        console.log(`[API][candidateVerify] order=${i + 1} idx=${idx} url="${candidate.link}"`);
 
         try {
           pdfText = await downloadAndParsePDF(candidate.link, code, candidate.name || '');
           prospectusInfo = candidate;
-          console.log(`[API] ✓ 第 ${i + 1} 个PDF验证通过`);
-          break; // 找到有效的招股书，退出循环
+          console.log(`[API][candidateVerifyResult] idx=${idx} valid=true confidence=1 reason="downloadAndParsePDFValidated"`);
+          break;
         } catch (err) {
-          console.log(`[API] ✗ 第 ${i + 1} 个PDF验证失败: ${err.message}`);
+          console.log(`[API][candidateVerifyResult] idx=${idx} valid=false confidence=0 reason="${err.message}"`);
           lastError = err;
-          // continue 到下一个PDF
+          if (i + 1 < scoredCandidates.length) {
+            console.log(`[API][candidateFallback] fromIdx=${idx} toIdx=${scoredCandidates[i + 1].idx} reason="verifyFailedTryNextByScore"`);
+          }
         }
       }
 
