@@ -19,9 +19,17 @@ export default function NewHeroSection() {
   const handleSearch = async (stockCode) => {
     setIsLoading(true);
     setError(null);
+    const requestUrl = `/api/score/${stockCode}`;
+    const requestStartAt = Date.now();
+    console.log('[score/front/react][request][start]', {
+      triggerSource: 'hero_search',
+      code: stockCode,
+      url: requestUrl,
+      timeout: 'browser-default',
+    });
 
     try {
-      const response = await fetch(`/api/score/${stockCode}`);
+      const response = await fetch(requestUrl);
       const data = await response.json();
 
       if (data.success) {
@@ -29,8 +37,25 @@ export default function NewHeroSection() {
       } else {
         setError(data.message || '评分失败，请重试');
       }
+      console.log('[score/front/react][request][end]', {
+        triggerSource: 'hero_search',
+        code: stockCode,
+        url: requestUrl,
+        timeout: 'browser-default',
+        duration: Date.now() - requestStartAt,
+        status: response.status,
+        requestId: response.headers.get('X-Request-Id') || '',
+      });
     } catch (err) {
       setError('网络错误，请检查连接');
+      console.error('[score/front/react][request][fail]', {
+        triggerSource: 'hero_search',
+        code: stockCode,
+        url: requestUrl,
+        timeout: 'browser-default',
+        duration: Date.now() - requestStartAt,
+        errorMessage: err.message,
+      });
     } finally {
       setIsLoading(false);
     }
