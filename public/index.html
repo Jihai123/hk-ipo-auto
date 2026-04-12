@@ -2368,7 +2368,7 @@
   </footer>
 
   <script>
-    const API_BASE = '/hk';
+    const API_BASE = '';
     const REQUEST_TIMEOUT_MS = 180000; // 3 minutes frontend timeout
     let loadingTimerInterval = null;
     let loadingStartTime = null;
@@ -2377,12 +2377,12 @@
     // Quick search
     function quickSearch(code) {
       document.getElementById('stockCode').value = code;
-      handleSearch(new Event('submit'));
+      handleSearch(new Event('submit'), 'quick_search');
     }
 
     // Search handler
-    async function handleSearch(e) {
-      e.preventDefault();
+    async function handleSearch(e, triggerSource = 'form_submit') {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
 
       const code = document.getElementById('stockCode').value.trim();
       if (!code) {
@@ -2397,6 +2397,14 @@
 
       currentAbortController = new AbortController();
       const timeoutId = setTimeout(() => currentAbortController.abort(), REQUEST_TIMEOUT_MS);
+      const requestUrl = `${API_BASE}/api/score/${code}`;
+      const requestStartAt = Date.now();
+      console.log('[score/front/web][request][start]', {
+        triggerSource,
+        code,
+        url: requestUrl,
+        timeout: REQUEST_TIMEOUT_MS,
+      });
 
       showLoading();
       hideError();
@@ -2407,7 +2415,7 @@
         // Simulate progress stages based on timing
         const progressTimer = startProgressSimulation();
 
-        const response = await fetch(`${API_BASE}/api/score/${code}`, {
+        const response = await fetch(requestUrl, {
           signal: currentAbortController.signal,
         });
 
@@ -2428,6 +2436,15 @@
             if (!data.success) throw new Error(data.error || '评分失败');
             setProgress(4, '生成评分完成', '分析完成！', 100);
             displayResult(data);
+            console.log('[score/front/web][request][end]', {
+              triggerSource,
+              code,
+              url: requestUrl,
+              timeout: REQUEST_TIMEOUT_MS,
+              duration: Date.now() - requestStartAt,
+              requestId: response.headers.get('X-Request-Id') || '',
+              status: response.status,
+            });
             return;
           } catch (parseErr) {
             throw new Error('服务器响应格式异常，请稍后重试');
@@ -2443,9 +2460,27 @@
         setProgress(4, '评分完成!', '分析完成！', 100);
         await new Promise(r => setTimeout(r, 300)); // Brief pause for UX
         displayResult(data);
+        console.log('[score/front/web][request][end]', {
+          triggerSource,
+          code,
+          url: requestUrl,
+          timeout: REQUEST_TIMEOUT_MS,
+          duration: Date.now() - requestStartAt,
+          requestId: response.headers.get('X-Request-Id') || '',
+          status: response.status,
+        });
       } catch (error) {
         clearTimeout(timeoutId);
         let friendlyMessage = error.message;
+        console.error('[score/front/web][request][fail]', {
+          triggerSource,
+          code,
+          url: requestUrl,
+          timeout: REQUEST_TIMEOUT_MS,
+          duration: Date.now() - requestStartAt,
+          errorName: error.name,
+          errorMessage: error.message,
+        });
 
         // 转换为更友好的错误提示
         if (error.name === 'AbortError') {
@@ -2903,14 +2938,14 @@
     function retryLastSearch() {
       const code = document.getElementById('stockCode').value.trim();
       if (code) {
-        handleSearch(new Event('submit'));
+        handleSearch(new Event('submit'), 'retry_button');
       }
     }
 
     // Enter key submit
     document.getElementById('stockCode').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
-        handleSearch(e);
+        handleSearch(e, 'keypress_enter');
       }
     });
 

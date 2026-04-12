@@ -1,4 +1,5 @@
 const { request } = require('./api.js');
+const SCORE_REQUEST_TIMEOUT = 180000;
 
 function safeJoin(arr, sep) {
   if (!Array.isArray(arr)) return '';
@@ -62,18 +63,20 @@ function normalizeWebsiteScoreResponse(resp, code) {
   };
 }
 
-function fetchScore(code) {
+function fetchScore(code, options = {}) {
+  const triggerSource = options.triggerSource || 'unknown';
   const stockCode = encodeURIComponent(code);
+  const reqMeta = { triggerSource, code };
 
-  return request('/api/score/' + stockCode)
+  return request('/api/score/' + stockCode, 'GET', {}, SCORE_REQUEST_TIMEOUT, reqMeta)
     .then(function (websiteResp) {
       if (websiteResp && websiteResp.success) {
         return normalizeWebsiteScoreResponse(websiteResp, code);
       }
-      return request('/api/mp/score/' + stockCode);
+      return request('/api/mp/score/' + stockCode, 'GET', {}, SCORE_REQUEST_TIMEOUT, reqMeta);
     })
     .catch(function () {
-      return request('/api/mp/score/' + stockCode);
+      return request('/api/mp/score/' + stockCode, 'GET', {}, SCORE_REQUEST_TIMEOUT, reqMeta);
     });
 }
 

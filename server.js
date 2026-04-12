@@ -42,6 +42,11 @@ const { crawlIPOListFromETNet } = require('./crawlers/etnet/ipoList');
 const app = express();
 const PORT = process.env.PORT || 3010;
 const IPO_DEBUG = process.env.IPO_DEBUG === '1';
+const recentScoreRequests = new Map();
+
+function createRequestId() {
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // ==================== 中英双语关键词词典（最小升级） ====================
 const PROSPECTUS_TERM_DICT = {
@@ -2226,7 +2231,17 @@ async function searchProspectus(stockCode) {
  * @param {string} stockName - 股票名称（用于验证）
  * @param {boolean} skipValidation - 是否跳过内容验证（默认false）
  */
-async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValidation = false) {
+async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValidation = false, context = {}) {
+  const requestId = context.requestId || 'no-request-id';
+  const stageStartAt = new Map();
+  const stageStart = (stage) => {
+    stageStartAt.set(stage, Date.now());
+    console.log(`[scorePipeline][stage][start] requestId=${requestId} stockCode=${formatStockCode(stockCode)} stage=${stage}`);
+  };
+  const stageEnd = (stage, status = 'ok', detail = '') => {
+    const durationMs = Date.now() - (stageStartAt.get(stage) || Date.now());
+    console.log(`[scorePipeline][stage][end] requestId=${requestId} stockCode=${formatStockCode(stockCode)} stage=${stage} status=${status} durationMs=${durationMs}${detail ? ` detail="${detail}"` : ''}`);
+  };
   // 先检查缓存
   const cached = readCache(stockCode);
   if (cached) {
@@ -2253,6 +2268,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
   const tempPdfPath = path.join(CACHE_DIR, `temp_${stockCode}_${Date.now()}.pdf`);
 
   try {
+    stageStart('pdfDownload');
     const response = await axios.get(pdfUrl, {
       responseType: 'arraybuffer',
       timeout: 180000, // 3分钟超时
@@ -2265,6 +2281,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
 
     const pdfBuffer = response.data;
     console.log(`[PDF] 大小: ${(pdfBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+    stageEnd('pdfDownload', 'ok', `sizeBytes=${pdfBuffer.byteLength}`);
 
     // 保存PDF到临时文件
     fs.writeFileSync(tempPdfPath, pdfBuffer);
@@ -2273,6 +2290,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     let usedPdftotext = false;
 
     // 方法1: 优先使用pdftotext（对中文支持更好）
+    stageStart('pdftotext/pdf-parse');
     text = parsePdfWithPdftotext(tempPdfPath);
 
     if (text && text.length > 10000) {
@@ -2300,6 +2318,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
         console.log('[PDF][parserSource] source="none" textLength=0');
       }
     }
+    stageEnd('pdftotext/pdf-parse', 'ok', `usedPdftotext=${usedPdftotext} textLength=${text ? text.length : 0}`);
 
     // 检测解析结果
     if (!text || text.length < 120) {
@@ -2307,6 +2326,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     }
 
     // 检查是否为完整招股书（而非公告）- 基于前10000字符多关键词综合判断
+    stageStart('verify');
     const verifyWindowRaw = text.slice(0, 10000);
     const verifyWindow = verifyWindowRaw.replace(/\s+/g, '').toLowerCase();
     console.log(`[pdfVerify][window] textLength=${text.length} windowLength=${verifyWindowRaw.length}`);
@@ -2359,10 +2379,14 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
 
     // 写入缓存
     writeCache(stockCode, text);
+    stageEnd('verify', 'ok');
 
     return text;
 
   } catch (error) {
+    stageEnd('pdfDownload', 'fail', error.message);
+    stageEnd('pdftotext/pdf-parse', 'fail', error.message);
+    stageEnd('verify', 'fail', error.message);
     console.error('[PDF] 解析失败:', error.message);
     throw new Error(`PDF解析失败: ${error.message}`);
   } finally {
@@ -2755,12 +2779,15 @@ function extractOfferPriceFromText(text) {
  * 新增维度：PE估值（-3~+3）、募资规模（-1~+1）
  * 绿鞋检测：展示项，不计分
  */
-async function scoreProspectus(rawText, stockCode) {
+async function scoreProspectus(rawText, stockCode, context = {}) {
+  const requestId = context.requestId || 'no-request-id';
   const text = rawText;
   const normalizedText = normalizeText(rawText);
   const SPONSORS = getAllSponsors();
+  const scoreStartAt = Date.now();
+  const dimensionTimers = new Map();
 
-  console.log(`[评分] 开始评分(V5): ${stockCode}, 文本长度: ${text.length}`);
+  console.log(`[评分] 开始评分(V5): ${stockCode}, 文本长度: ${text.length}, requestId=${requestId}`);
 
   const scores = {
     oldShares:   { score: 0, reason: '', details: '' },
@@ -2777,16 +2804,20 @@ async function scoreProspectus(rawText, stockCode) {
     return `${value.reason || ''}${value.details ? ` | ${String(value.details).slice(0, 80)}` : ''}`.slice(0, 140);
   };
   const logDimensionStart = (name) => {
-    console.log(`[dimension][start] stockCode=${formatStockCode(stockCode)} name="${name}"`);
+    dimensionTimers.set(name, Date.now());
+    console.log(`[dimension][start] requestId=${requestId} stockCode=${formatStockCode(stockCode)} name="${name}"`);
   };
   const logDimensionSuccess = (name, payload) => {
-    console.log(`[dimension][success] stockCode=${formatStockCode(stockCode)} name="${name}" score=${payload?.score ?? 0} summary="${summarizeDimension(payload)}"`);
+    const durationMs = Date.now() - (dimensionTimers.get(name) || Date.now());
+    console.log(`[dimension][success] requestId=${requestId} stockCode=${formatStockCode(stockCode)} name="${name}" durationMs=${durationMs} score=${payload?.score ?? 0} summary="${summarizeDimension(payload)}"`);
   };
   const logDimensionFallback = (name, reason) => {
-    console.log(`[dimension][fallback] stockCode=${formatStockCode(stockCode)} name="${name}" reason="${reason}"`);
+    const durationMs = Date.now() - (dimensionTimers.get(name) || Date.now());
+    console.log(`[dimension][fallback] requestId=${requestId} stockCode=${formatStockCode(stockCode)} name="${name}" durationMs=${durationMs} reason="${reason}"`);
   };
   const logDimensionError = (name, error) => {
-    console.error(`[dimension][error] stockCode=${formatStockCode(stockCode)} name="${name}" errorName="${error?.name || 'Error'}" message="${error?.message || ''}" stackTop="${(error?.stack || '').split('\n')[0] || ''}"`);
+    const durationMs = Date.now() - (dimensionTimers.get(name) || Date.now());
+    console.error(`[dimension][error] requestId=${requestId} stockCode=${formatStockCode(stockCode)} name="${name}" durationMs=${durationMs} errorName="${error?.name || 'Error'}" message="${error?.message || ''}" stackTop="${(error?.stack || '').split('\n')[0] || ''}"`);
   };
 
   // ── V5：提前爬取 etnet 数据（不阻塞失败，graceful降级）──
@@ -4920,7 +4951,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   console.log(`[评分] 各维度(对外5维): 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score}`);
   console.log(`[评分] 扩展维度(暂不对外): PE${scores.pe.score} 募资${scores.ipoSize.score}`);
 
-  return {
+  const result = {
     stockCode:   formatStockCode(stockCode),
     totalScore: Number.isFinite(totalScore) ? totalScore : 0,
     rating: rating || defaultRating,
@@ -4934,6 +4965,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     },
     _version: 'v5',
   };
+  console.log(`[评分] 完成评分(V5): requestId=${requestId} stockCode=${formatStockCode(stockCode)} durationMs=${Date.now() - scoreStartAt}`);
+  return result;
 }
 
 // ==================== API路由 ====================
@@ -5092,26 +5125,47 @@ function saveScoreToIPOList(stockCode, scoreResult, prospectusInfo) {
 // 主评分API
 app.get('/api/score/:code', async (req, res) => {
   const { code } = req.params;
+  const formattedCode = formatStockCode(code);
   const startTime = Date.now();
+  const requestId = req.get('X-Request-Id') || createRequestId();
+  const stageStart = new Map();
+  const markStageStart = (stage) => {
+    stageStart.set(stage, Date.now());
+    console.log(`[scorePipeline][stage][start] requestId=${requestId} stockCode=${formattedCode} stage=${stage}`);
+  };
+  const markStageEnd = (stage, status = 'ok', detail = '') => {
+    const durationMs = Date.now() - (stageStart.get(stage) || Date.now());
+    console.log(`[scorePipeline][stage][end] requestId=${requestId} stockCode=${formattedCode} stage=${stage} status=${status} durationMs=${durationMs}${detail ? ` detail="${detail}"` : ''}`);
+  };
+  res.set('X-Request-Id', requestId);
 
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`[API] 评分请求: ${code}`);
+  console.log(`[API] 评分请求: ${code}, requestId=${requestId}`);
   console.log(`${'='.repeat(60)}`);
+  const previousRequestAt = recentScoreRequests.get(formattedCode);
+  if (previousRequestAt && (startTime - previousRequestAt) <= 15000) {
+    console.warn(`[scorePipeline][dedupe-diagnose] requestId=${requestId} stockCode=${formattedCode} duplicateWithinMs=${startTime - previousRequestAt} note="短时间同code重复请求"`);
+  }
+  recentScoreRequests.set(formattedCode, startTime);
 
   try {
     // 先检查缓存
+    markStageStart('cacheRead');
     let pdfText = readCache(code);
+    markStageEnd('cacheRead', 'ok', pdfText ? 'cacheHit=true' : 'cacheHit=false');
     let prospectusInfo = null;
 
     if (pdfText) {
       console.log(`[API] 使用缓存文本`);
     } else {
       // 搜索招股书（带120秒超时保护）
+      markStageStart('candidateSearch');
       const searchResults = await withTimeout(
         searchProspectus(code),
         120000,
         '搜索招股书超时，该股票可能暂无招股书或港交所响应缓慢，请稍后重试'
       );
+      markStageEnd('candidateSearch', 'ok', `candidateCount=${searchResults.length}`);
       const candidateCount = searchResults.length;
 
       if (candidateCount === 0) {
@@ -5123,6 +5177,7 @@ app.get('/api/score/:code', async (req, res) => {
 
       console.log(`[API][candidateBatch] source=method1 count=${candidateCount}`);
 
+      markStageStart('lightProfile');
       const scoredCandidatesRaw = await Promise.all(searchResults.map(async (candidate, idx) => {
         console.log(`[API][candidateProfile][start] idx=${idx} url="${candidate.link}"`);
         const profile = await buildLightPdfProfile(candidate.link, code, candidate.name || '', {
@@ -5151,6 +5206,7 @@ app.get('/api/score/:code', async (req, res) => {
         console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=${profile.sizeMB.toFixed(2)} textLength=${metrics.textLength} codeHit=${metrics.hasCode} nameHit=${metrics.hasName} sectionHits=${metrics.sectionHits} strongSectionHits=${metrics.strongSectionHits} score=${score} scoreReason="${profile.scoreReason}"`);
         return { idx, candidate, metrics, score, scoreReason: profile.scoreReason };
       }));
+      markStageEnd('lightProfile', 'ok', `candidateCount=${scoredCandidatesRaw.length}`);
       const scoredCandidates = scoredCandidatesRaw.sort((a, b) => b.score - a.score);
 
       if (scoredCandidates.length > 0) {
@@ -5164,7 +5220,7 @@ app.get('/api/score/:code', async (req, res) => {
         console.log(`[API][candidateVerify] order=${i + 1} idx=${idx} url="${candidate.link}"`);
 
         try {
-          pdfText = await downloadAndParsePDF(candidate.link, code, candidate.name || '');
+          pdfText = await downloadAndParsePDF(candidate.link, code, candidate.name || '', false, { requestId });
           prospectusInfo = candidate;
           console.log(`[API][candidateVerifyResult] idx=${idx} valid=true confidence=1 reason="downloadAndParsePDFValidated"`);
           break;
@@ -5188,11 +5244,13 @@ app.get('/api/score/:code', async (req, res) => {
     }
 
     // 评分
-    console.log(`[scorePipeline][input] stockCode=${formatStockCode(code)} rawTextLength=${pdfText?.length || 0}`);
-    const scoreResultRaw = await scoreProspectus(pdfText, code);
+    console.log(`[scorePipeline][input] requestId=${requestId} stockCode=${formatStockCode(code)} rawTextLength=${pdfText?.length || 0}`);
+    markStageStart('each dimension');
+    const scoreResultRaw = await scoreProspectus(pdfText, code, { requestId });
+    markStageEnd('each dimension');
     const scoreResultKeys = Object.keys(scoreResultRaw || {});
-    console.log(`[scorePipeline][scoreProspectusReturn] stockCode=${formatStockCode(code)} keys=[${scoreResultKeys.join(', ')}]`);
-    console.log(`[scorePipeline][scoreProspectusReturn][core] stockCode=${formatStockCode(code)} totalScore=${scoreResultRaw?.totalScore} recommendation=${scoreResultRaw?.recommendation} rating=${scoreResultRaw?.rating} ratingLabel=${scoreResultRaw?.ratingLabel}`);
+    console.log(`[scorePipeline][scoreProspectusReturn] requestId=${requestId} stockCode=${formatStockCode(code)} keys=[${scoreResultKeys.join(', ')}]`);
+    console.log(`[scorePipeline][scoreProspectusReturn][core] requestId=${requestId} stockCode=${formatStockCode(code)} totalScore=${scoreResultRaw?.totalScore} recommendation=${scoreResultRaw?.recommendation} rating=${scoreResultRaw?.rating} ratingLabel=${scoreResultRaw?.ratingLabel}`);
 
     const mappedScore = Number.isFinite(scoreResultRaw?.totalScore) ? scoreResultRaw.totalScore
       : Number.isFinite(scoreResultRaw?.total) ? scoreResultRaw.total
@@ -5217,7 +5275,7 @@ app.get('/api/score/:code', async (req, res) => {
     if (!scoreResultRaw?.recommendation && mappedRecommendation) {
       console.log(`[scorePipeline][fallback] stockCode=${formatStockCode(code)} reason="recommendationMissingUsedAlias" appliedField="recommendation"`);
     }
-    console.log(`[scorePipeline][apiMapping] stockCode=${formatStockCode(code)} mappedScore=${scoreResult.totalScore} mappedRecommendation=${scoreResult.recommendation} mappedRating=${scoreResult.rating}`);
+    console.log(`[scorePipeline][apiMapping] requestId=${requestId} stockCode=${formatStockCode(code)} mappedScore=${scoreResult.totalScore} mappedRecommendation=${scoreResult.recommendation} mappedRating=${scoreResult.rating}`);
     if (!Number.isFinite(scoreResult.totalScore)) {
       console.log(`[scorePipeline][error] stockCode=${formatStockCode(code)} missingField="totalScore"`);
     }
@@ -5226,7 +5284,7 @@ app.get('/api/score/:code', async (req, res) => {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒`);
+    console.log(`[API] 完成: ${scoreResult.totalScore}分, ${scoreResult.rating}, 耗时${elapsed}秒, requestId=${requestId}`);
 
     const response = {
       success: true,
@@ -5243,12 +5301,14 @@ app.get('/api/score/:code', async (req, res) => {
     }
 
     // 🎯 自动保存评分记录（用户评分即数据）
+    markStageStart('save');
     saveScoreToIPOList(code, scoreResult, prospectusInfo);
+    markStageEnd('save');
 
     res.json(response);
 
   } catch (error) {
-    console.error(`[API] 错误: ${error.message}`);
+    console.error(`[API] 错误: ${error.message}, requestId=${requestId}`);
     res.status(500).json({
       success: false,
       error: error.message,

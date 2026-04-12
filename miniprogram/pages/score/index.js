@@ -266,7 +266,7 @@ Page({
       return;
     }
 
-    this.requestScore();
+    this.requestScore('on_load');
   },
 
   onUnload() {
@@ -274,7 +274,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.requestScore().finally(() => {
+    this.requestScore('pull_down_refresh').finally(() => {
       wx.stopPullDownRefresh();
     });
   },
@@ -299,7 +299,7 @@ Page({
     }
   },
 
-  async requestScore() {
+  async requestScore(triggerSource = 'manual_retry') {
     this.setData({
       status: 'loading',
       loadingIndex: 0,
@@ -310,7 +310,7 @@ Page({
     this.startLoadingTimer();
 
     try {
-      const res = await fetchScore(this.data.code);
+      const res = await fetchScore(this.data.code, { triggerSource });
       const dimensions = Array.isArray(res && res.dimensions) ? res.dimensions : [];
       const hasCoreContent = Number.isFinite(res && res.totalScore) || dimensions.length > 0 || !!(res && res.ratingLabel);
 
@@ -376,7 +376,7 @@ Page({
   },
 
   onRetry() {
-    this.requestScore();
+    this.requestScore('retry_button');
   },
 
   onBackHome() {
