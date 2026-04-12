@@ -272,6 +272,61 @@ function isLikelyDataTable(table = null) {
   return table.headers.length >= 2 || table.dataRows.some(r => r.length >= 3);
 }
 
+function isEmptyStateTable(table = null) {
+  if (!table) return false;
+  const text = String(table.text || '');
+  return /沒有相關資料|没有相关资料/.test(text);
+}
+
+function isTableHidden(table = null, $ = null) {
+  if (!table || !$) return false;
+  const node = table.rawNode;
+  if (!node) return false;
+  const $node = $(node);
+  const hiddenAttr = String($node.attr('hidden') || '').toLowerCase();
+  const style = String($node.attr('style') || '').replace(/\s+/g, '').toLowerCase();
+  const className = String($node.attr('class') || '').toLowerCase();
+  if (hiddenAttr === 'hidden') return true;
+  if (style.includes('display:none') || style.includes('visibility:hidden')) return true;
+  if (/(hidden|hide|d-none)/.test(className)) return true;
+  return false;
+}
+
+function getDataRowCount(table = null) {
+  if (!table?.dataRows?.length) return 0;
+  return table.dataRows.slice(1).filter((cells) => {
+    if (!cells || !cells.length) return false;
+    const rowText = cells.join(' ').replace(/\s+/g, ' ').trim();
+    if (!rowText) return false;
+    if (/沒有相關資料|没有相关资料/.test(rowText)) return false;
+    if (isNoiseRow(cells)) return false;
+    const nonEmptyCells = cells.filter(c => String(c || '').trim()).length;
+    if (nonEmptyCells >= 3) return true;
+    const valueHits = [normalizeCode(rowText), normalizeDate(rowText), parseNumeric(rowText)].filter(Boolean).length;
+    return valueHits >= 2 || rowText.length >= 12;
+  }).length;
+}
+
+function getHeaderMatchScore(headers = [], include = []) {
+  if (!headers.length || !include.length) return 0;
+  const normalizedHeaders = headers.map(h => normalizeHeaderKey(h)).filter(Boolean);
+  return include.reduce((acc, keyword) => {
+    const target = normalizeHeaderKey(keyword);
+    if (!target) return acc;
+    if (normalizedHeaders.some(h => h.includes(target) || target.includes(h))) return acc + 1;
+    return acc;
+  }, 0);
+}
+
+function getNodeDistanceInContainer($container, anchorNode, tableNode) {
+  if (!$container?.length || !anchorNode || !tableNode) return 999;
+  const allNodes = $container.find('*').toArray();
+  const anchorPos = allNodes.indexOf(anchorNode);
+  const tablePos = allNodes.indexOf(tableNode);
+  if (anchorPos < 0 || tablePos < 0) return 999;
+  return Math.abs(tablePos - anchorPos);
+}
+
 function collectCandidateTablesFromAnchor($, $anchor, tableLookup, tableFilter = null, limit = 20) {
   const seen = new Set();
   const candidates = [];
@@ -320,21 +375,21 @@ function collectCandidateTablesFromAnchor($, $anchor, tableLookup, tableFilter =
   return { candidates: candidates.slice(0, limit), meta };
 }
 
-function getTableCandidateFeatures(table = null) {
+function getTableCandidateFeatures(table = null, opts = {}) {
   if (!table) return null;
+  const { $, include = [], anchorNode = null, $container = null } = opts;
   const headersText = table.headers.join('|');
   const rows = table.dataRows.slice(1);
   const rowsCount = rows.length;
   const hasHeaderRow = table.headers.length >= 2;
-  const hasNoDataText = /沒有相關資料|没有相关资料/.test(table.text || '');
+  const hasNoDataText = isEmptyStateTable(table);
   const hasCodeLink = /(?:\/quote|\/stocks|\b\d{4,5}\b)/i.test(table.text || '');
   const hasListingDateLike = includesAny(headersText, ['上市日期', '挂牌日期', '掛牌日期', '预期上市日期']);
-  const candidateDataRows = rows.filter(cells => {
-    if (!cells.length) return false;
-    if (isNoiseRow(cells)) return false;
-    const rowText = cells.join(' ');
-    return !!(normalizeCode(rowText) || normalizeDate(rowText) || rowText.length >= 8);
-  }).length;
+  const dataRowCount = getDataRowCount(table);
+  const candidateDataRows = dataRowCount;
+  const isHidden = isTableHidden(table, $);
+  const headerMatchScore = getHeaderMatchScore(table.headers, include);
+  const distanceToTitle = getNodeDistanceInContainer($container, anchorNode, table.rawNode);
   return {
     rowsCount,
     hasHeaderRow,
@@ -342,20 +397,30 @@ function getTableCandidateFeatures(table = null) {
     hasCodeLink,
     hasListingDateLike,
     candidateDataRows,
+    dataRowCount,
+    isHidden,
+    headerMatchScore,
+    distanceToTitle,
   };
 }
 
-function scoreCandidateTable(table = null, moduleType = '') {
-  const f = getTableCandidateFeatures(table);
+function scoreCandidateTable(table = null, moduleType = '', opts = {}) {
+  const f = getTableCandidateFeatures(table, opts);
   if (!f) return -1;
   const headersText = table.headers.join('|');
   const text = table.text || '';
   let score = 0;
   if (f.hasHeaderRow) score += 3;
+  score += f.headerMatchScore * 4;
   if (f.hasListingDateLike) score += 2;
   if (f.hasCodeLink) score += 2;
   score += Math.min(f.candidateDataRows, 6);
-  if (f.hasNoDataText) score += 1;
+  if (f.hasNoDataText) score -= 10;
+  if (f.dataRowCount <= 0) score -= 8;
+  if (f.isHidden) score -= 7;
+  if (Number.isFinite(f.distanceToTitle) && f.distanceToTitle < 999) {
+    score += Math.max(0, 5 - Math.floor(f.distanceToTitle / 8));
+  }
   if (/免責聲明|免责声明|資料來源|资料来源/.test(text)) score -= 5;
   if (/上市时间表|上市時間表|即将上市新股|即將上市新股/.test(text)) score -= 4;
 
@@ -395,6 +460,7 @@ function findModuleTableByTitle($, tableLookup, options) {
     containerType: null,
     tablesFoundInContainer: 0,
   };
+  let selectedBecause = null;
 
   for (let i = 0; i < candidates.length; i += 1) {
     const el = candidates[i];
@@ -406,28 +472,94 @@ function findModuleTableByTitle($, tableLookup, options) {
     if (exclude.some(keyword => text.includes(keyword))) continue;
     selectedMeta.anchorFound = true;
     selectedMeta.anchorTag = el.tagName || null;
+    const $anchor = $(el);
+    const $container = $anchor.closest('.DivFigureBox');
 
     const { candidates: foundTables, meta } = collectCandidateTablesFromAnchor(
       $,
-      $(el),
+      $anchor,
       tableLookup,
       tableFilter,
       moduleType === TABLE_TYPE.recentNewStocks ? 30 : 20,
     );
     selectedMeta = { ...selectedMeta, ...meta };
     foundTables.forEach((table) => {
-      const features = getTableCandidateFeatures(table);
-      const score = scoreCandidateTable(table, moduleType);
-      debugCandidates.push({ tableIndex: table.tableIndex, ...features, score });
+      const features = getTableCandidateFeatures(table, {
+        $,
+        include,
+        anchorNode: el,
+        $container,
+      });
+      const score = scoreCandidateTable(table, moduleType, {
+        $,
+        include,
+        anchorNode: el,
+        $container,
+      });
+      const rejectReasons = [];
+      if (features.hasNoDataText) rejectReasons.push('containsNoData');
+      if (features.dataRowCount <= 0) rejectReasons.push('noDataRows');
+      if (features.isHidden) rejectReasons.push('hiddenTable');
+      if (features.headerMatchScore <= 0) rejectReasons.push('weakHeaderMatch');
+      const candidate = {
+        tableIndex: table.tableIndex,
+        rowsCount: features.rowsCount,
+        dataRowCount: features.dataRowCount,
+        containsNoData: features.hasNoDataText,
+        isHidden: features.isHidden,
+        headerCells: table.dataRows?.[0] || [],
+        normalizedHeaders: table.headers || [],
+        textPreview: String(table.text || '').slice(0, 220),
+        headerMatchScore: features.headerMatchScore,
+        distanceToTitle: features.distanceToTitle,
+        finalScore: score,
+        selected: false,
+        rejectReasons,
+      };
+      debugCandidates.push(candidate);
       if (score > bestScore) {
         bestScore = score;
         best = table;
+        selectedBecause = [
+          `dataRowCount=${features.dataRowCount}`,
+          `headerMatchScore=${features.headerMatchScore}`,
+          `distanceToTitle=${features.distanceToTitle}`,
+        ].join(', ');
       }
     });
-    if (best && bestScore >= 8) break;
   }
 
   const titleLabel = include.join('/');
+
+  if (best) {
+    debugCandidates.forEach((item) => {
+      item.selected = item.tableIndex === best.tableIndex;
+      if (item.selected) item.rejectReasons = [];
+    });
+  }
+
+  console.log(`[IPO][parser][candidates][${moduleType || titleLabel}]`, {
+    module: moduleType || include.join('/'),
+    candidateCount: debugCandidates.length,
+    candidates: debugCandidates,
+  });
+
+  const bestFeatures = best
+    ? getTableCandidateFeatures(best, { $, include })
+    : null;
+  const warning = best
+    ? (bestFeatures?.hasNoDataText || (bestFeatures?.dataRowCount || 0) <= 0
+      ? 'selected_table_low_confidence_or_empty'
+      : null)
+    : 'no_table_selected';
+  console.log(`[IPO][parser][tableSelected][${moduleType || titleLabel}]`, {
+    selectedTableIndex: best ? best.tableIndex : null,
+    candidateCount: debugCandidates.length,
+    selectedScore: bestScore,
+    selectedBecause,
+    warning,
+  });
+
   console.log('[IPO][parser][title-scan]', {
     module: moduleType || titleLabel,
     title: titleLabel,
@@ -442,7 +574,18 @@ function findModuleTableByTitle($, tableLookup, options) {
     selectedScore: bestScore,
   });
 
-  return { table: best, meta: selectedMeta };
+  return {
+    table: best,
+    meta: selectedMeta,
+    diagnostics: {
+      candidateCount: debugCandidates.length,
+      selectedTableIndex: best ? best.tableIndex : null,
+      selectedScore: bestScore,
+      selectedBecause,
+      selectedTableWasEmptyState: !!bestFeatures?.hasNoDataText,
+      selectedTableDataRowCount: bestFeatures?.dataRowCount ?? 0,
+    },
+  };
 }
 
 function isNoiseRow(cells = []) {
@@ -484,8 +627,7 @@ function logRowsDebug(prefix, payload) {
 }
 
 function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
-  const code = normalizeCode(raw.code)
-    || (moduleType === TABLE_TYPE.hearingPassed ? normalizeCode(raw.name) || normalizeCode(raw.rowText) : null);
+  const code = normalizeCode(raw.code);
   const { name, statusText: parsedStatus } = extractNameStatus(raw.name);
   const listingDate = normalizeDateOrRaw(raw.listingDate);
   const rowText = String(raw.rowText || '').replace(/\s+/g, ' ');
@@ -588,12 +730,21 @@ function normalizeByModule(moduleType, raw, filterStats, rowDebug = null) {
 
 function parseModuleTable(tableInfo, moduleType) {
   if (!tableInfo || !tableInfo.dataRows?.length) {
-    return { records: [], filterStats: null, matched: false, emptyState: false };
+    return {
+      records: [],
+      filterStats: null,
+      matched: false,
+      emptyState: false,
+      selectedTableWasEmptyState: false,
+      selectedTableDataRowCount: 0,
+    };
   }
 
   const rowsLogPrefix = getRowsLogPrefix(moduleType);
   const enableRowsLog = !!rowsLogPrefix;
   const map = resolveColumnMap(tableInfo.headers, moduleType);
+  const hasCodeColumn = map.code >= 0
+    && tableInfo.headers.some(h => includesAny(h, ['代号', '代码', '股份代号', 'stock code']));
   const filterStats = {
     module: moduleType,
     totalRows: 0,
@@ -613,6 +764,15 @@ function parseModuleTable(tableInfo, moduleType) {
       normalizedHeaders: tableInfo.headers || [],
       columnMap: map,
     });
+    if (moduleType === TABLE_TYPE.hearingPassed) {
+      logRowsDebug('[IPO][parser][fieldCheck][hearingPassed]', {
+        hasCodeColumn,
+        codeColumnIndex: hasCodeColumn ? map.code : -1,
+        codeAssigned: null,
+        skipCodeReason: hasCodeColumn ? null : 'no_code_column',
+        normalizedHeaders: tableInfo.headers || [],
+      });
+    }
     if (moduleType === TABLE_TYPE.recentNewStocks) {
       logRowsDebug(rowsLogPrefix, {
         stage: 'headerAliasMapping',
@@ -684,7 +844,9 @@ function parseModuleTable(tableInfo, moduleType) {
         statusText: null,
       }
       : {
-        code: getCellByModule(cells, map.code, tableInfo.headers, moduleType) || cells[0] || null,
+        code: moduleType === TABLE_TYPE.hearingPassed && !hasCodeColumn
+          ? null
+          : (getCellByModule(cells, map.code, tableInfo.headers, moduleType) || cells[0] || null),
         name: getCellByModule(cells, map.name, tableInfo.headers, moduleType) || cells[1] || null,
         rowText: cells.join(' | '),
         listingDate: getCellByModule(cells, map.listingDate, tableInfo.headers, moduleType),
@@ -764,7 +926,25 @@ function parseModuleTable(tableInfo, moduleType) {
   const records = moduleType === TABLE_TYPE.hearingPassed
     ? uniqByName(list)
     : uniqByCode(list);
-  return { records, filterStats, matched: true, emptyState };
+  const selectedTableDataRowCount = getDataRowCount(tableInfo);
+  if (enableRowsLog && moduleType === TABLE_TYPE.recentNewStocks && records.length === 0) {
+    logRowsDebug(rowsLogPrefix, {
+      stage: 'emptyDiagnosis',
+      selectedTableWasEmptyState: hasEmptyStateText,
+      selectedTableDataRowCount,
+      reason: hasEmptyStateText
+        ? 'selected_empty_state_table'
+        : (selectedTableDataRowCount > 0 ? 'rows_filtered_out' : 'no_real_data_rows'),
+    });
+  }
+  return {
+    records,
+    filterStats,
+    matched: true,
+    emptyState,
+    selectedTableWasEmptyState: hasEmptyStateText,
+    selectedTableDataRowCount,
+  };
 }
 
 function parseTodayGreyMarketCard($) {
@@ -889,9 +1069,22 @@ async function crawlIPOListFromETNet() {
   const subscribingTable = subscribingFound.table;
   const listingSoonTable = listingSoonFound.table;
   const hearingPassedTable = hearingPassedFound.table;
+  let recentFallbackDiagnostics = null;
   const recentNewStocksTable = recentNewStocksFound.table
-    || (!recentNewStocksFound.meta.anchorFound
-      ? tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']))
+    || (!recentNewStocksFound.meta.anchorFound ? (() => {
+      const fallback = tables.find(t => includesAny(t.headers.join('|'), ['每手股数', '入场费', '认购倍数', '一手中签率', '按盘价', '累积升跌']));
+      if (fallback) {
+        recentFallbackDiagnostics = {
+          candidateCount: 1,
+          selectedTableIndex: fallback.tableIndex,
+          selectedScore: null,
+          selectedBecause: 'fallback_header_alias',
+          selectedTableWasEmptyState: isEmptyStateTable(fallback),
+          selectedTableDataRowCount: getDataRowCount(fallback),
+        };
+      }
+      return fallback;
+    })()
       : null);
   const todayGreyMarketTable = todayGreyMarketFound.table;
 
@@ -942,12 +1135,12 @@ async function crawlIPOListFromETNet() {
   console.log('[IPO][parser]', {
     matchedTables,
     modules: {
-      todayGreyMarket: { matched: matched.todayGreyMarket, emptyState: false, count: result.todayGreyMarket.length },
-      todayListed: { matched: parsed.todayListed.matched, emptyState: parsed.todayListed.emptyState, count: result.todayListed.length },
-      subscribing: { matched: parsed.subscribing.matched, emptyState: parsed.subscribing.emptyState, count: result.subscribing.length },
-      listingSoon: { matched: parsed.listingSoon.matched, emptyState: parsed.listingSoon.emptyState, count: result.listingSoon.length },
-      hearingPassed: { matched: parsed.hearingPassed.matched, emptyState: parsed.hearingPassed.emptyState, count: result.hearingPassed.length },
-      recentNewStocks: { matched: parsed.recentNewStocks.matched, emptyState: parsed.recentNewStocks.emptyState, count: result.recentNewStocks.length },
+      todayGreyMarket: { matched: matched.todayGreyMarket, emptyState: false, count: result.todayGreyMarket.length, candidateCount: todayGreyMarketFound.diagnostics?.candidateCount || 0, selectedTableIndex: todayGreyMarketFound.diagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: todayGreyMarketFound.diagnostics?.selectedTableWasEmptyState ?? false, selectedTableDataRowCount: todayGreyMarketFound.diagnostics?.selectedTableDataRowCount ?? 0 },
+      todayListed: { matched: parsed.todayListed.matched, emptyState: parsed.todayListed.emptyState, count: result.todayListed.length, candidateCount: todayListedFound.diagnostics?.candidateCount || 0, selectedTableIndex: todayListedFound.diagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: parsed.todayListed.selectedTableWasEmptyState, selectedTableDataRowCount: parsed.todayListed.selectedTableDataRowCount },
+      subscribing: { matched: parsed.subscribing.matched, emptyState: parsed.subscribing.emptyState, count: result.subscribing.length, candidateCount: subscribingFound.diagnostics?.candidateCount || 0, selectedTableIndex: subscribingFound.diagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: parsed.subscribing.selectedTableWasEmptyState, selectedTableDataRowCount: parsed.subscribing.selectedTableDataRowCount },
+      listingSoon: { matched: parsed.listingSoon.matched, emptyState: parsed.listingSoon.emptyState, count: result.listingSoon.length, candidateCount: listingSoonFound.diagnostics?.candidateCount || 0, selectedTableIndex: listingSoonFound.diagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: parsed.listingSoon.selectedTableWasEmptyState, selectedTableDataRowCount: parsed.listingSoon.selectedTableDataRowCount },
+      hearingPassed: { matched: parsed.hearingPassed.matched, emptyState: parsed.hearingPassed.emptyState, count: result.hearingPassed.length, candidateCount: hearingPassedFound.diagnostics?.candidateCount || 0, selectedTableIndex: hearingPassedFound.diagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: parsed.hearingPassed.selectedTableWasEmptyState, selectedTableDataRowCount: parsed.hearingPassed.selectedTableDataRowCount },
+      recentNewStocks: { matched: parsed.recentNewStocks.matched, emptyState: parsed.recentNewStocks.emptyState, count: result.recentNewStocks.length, candidateCount: recentNewStocksFound.diagnostics?.candidateCount || recentFallbackDiagnostics?.candidateCount || 0, selectedTableIndex: recentNewStocksFound.diagnostics?.selectedTableIndex ?? recentFallbackDiagnostics?.selectedTableIndex ?? null, selectedTableWasEmptyState: parsed.recentNewStocks.selectedTableWasEmptyState, selectedTableDataRowCount: parsed.recentNewStocks.selectedTableDataRowCount },
     },
     sample: {
       todayGreyMarket: result.todayGreyMarket[0] || null,
