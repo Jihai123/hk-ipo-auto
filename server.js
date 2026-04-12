@@ -6001,6 +6001,24 @@ function buildMiniProgramDimensions(scores = {}) {
     .filter(Boolean);
 }
 
+function buildMiniProgramHighlights(display = {}) {
+  const highlights = [];
+  if (display?.hasGreenShoe === true || display?.hasGreenShoe === false) {
+    highlights.push({
+      key: 'greenShoe',
+      label: '绿鞋机制',
+      emphasis: 'high',
+      tone: display.hasGreenShoe ? 'positive' : 'warning',
+      value: display.hasGreenShoe ? '有绿鞋' : '无绿鞋',
+      summary: display.hasGreenShoe
+        ? '检测到超额配售/稳定价格机制（展示项，不计分）'
+        : '未检测到超额配售/稳定价格机制（展示项，不计分）',
+      actionable: '建议在小程序评分页用醒目卡片展示该信息',
+    });
+  }
+  return highlights;
+}
+
 function normalizeRating(ratingLabel = '', score = 0) {
   const text = String(ratingLabel || '').trim();
   if (text === '强烈推荐' || text === '建议申购') return { rating: 'buy', ratingLabel: text };
@@ -6180,6 +6198,7 @@ app.get('/api/mp/score/:code', async (req, res) => {
       elapsed: 0,
       dimensions: [],
       display: {},
+      highlights: [],
       error: { type: 'invalid_code', message: 'invalid stock code' },
       errorMessage: 'invalid stock code',
     });
@@ -6206,6 +6225,7 @@ app.get('/api/mp/score/:code', async (req, res) => {
           elapsed: Math.round((Date.now() - startedAt) / 1000),
           dimensions: [],
           display: {},
+          highlights: [],
           error: { type: 'prospectus_not_found', message: 'prospectus not found' },
           errorMessage: 'prospectus not found',
         });
@@ -6233,6 +6253,7 @@ app.get('/api/mp/score/:code', async (req, res) => {
         elapsed: Math.round((Date.now() - startedAt) / 1000),
         dimensions: [],
         display: {},
+        highlights: [],
         error: { type: 'pdf_candidates_failed', message: 'all prospectus candidates failed' },
         errorMessage: 'all prospectus candidates failed',
       });
@@ -6256,6 +6277,7 @@ app.get('/api/mp/score/:code', async (req, res) => {
       elapsed,
       dimensions: buildMiniProgramDimensions(scoreResult.scores || {}),
       display: scoreResult.display || {},
+      highlights: buildMiniProgramHighlights(scoreResult.display || {}),
       error: null,
       errorMessage: null,
       // 兼容旧字段
@@ -6271,6 +6293,7 @@ app.get('/api/mp/score/:code', async (req, res) => {
       elapsed: Math.round((Date.now() - startedAt) / 1000),
       dimensions: [],
       display: {},
+      highlights: [],
       error: {
         type: 'score_failed',
         message: error.message || 'unknown error',
