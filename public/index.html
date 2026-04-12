@@ -916,6 +916,44 @@
     .score-item-value.negative { color: var(--color-danger); }
     .score-item-value.warning { color: var(--color-warning); }
 
+    .greenshoe-highlight {
+      margin: 18px 20px 6px;
+      border-radius: var(--radius-lg);
+      border: 1px solid transparent;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .greenshoe-highlight .label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      margin-bottom: 3px;
+    }
+    .greenshoe-highlight .value {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .greenshoe-highlight .hint {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+    .greenshoe-highlight.is-yes {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.12));
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .greenshoe-highlight.is-yes .value { color: #047857; }
+    .greenshoe-highlight.is-no {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(249, 115, 22, 0.1));
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+    .greenshoe-highlight.is-no .value { color: #b45309; }
+
     .expand-icon {
       color: var(--color-text-faint);
       transition: transform 0.2s;
@@ -2126,6 +2164,8 @@
         <!-- Dynamic -->
       </div>
 
+      <div id="greenShoeNotice"></div>
+
       <div class="prospectus-links" id="prospectusLinks">
         <!-- Dynamic -->
       </div>
@@ -2470,6 +2510,20 @@
       let linksHtml = '';
 
       const display = data.display || {};
+      const greenShoeNoticeEl = document.getElementById('greenShoeNotice');
+      if (display.hasGreenShoe !== undefined && display.hasGreenShoe !== null) {
+        greenShoeNoticeEl.innerHTML = `
+          <div class="greenshoe-highlight ${display.hasGreenShoe ? 'is-yes' : 'is-no'}">
+            <div>
+              <div class="label">⚠️ 绿鞋机制（展示项，不计分）</div>
+              <div class="value">${display.hasGreenShoe ? '有绿鞋（存在超额配售/稳定价格安排）' : '无绿鞋（未检索到超额配售条款）'}</div>
+            </div>
+            <div class="hint">评分时请重点关注</div>
+          </div>
+        `;
+      } else {
+        greenShoeNoticeEl.innerHTML = '';
+      }
       const displayMeta = [];
       if (display.industry) displayMeta.push(`所属行业: ${display.industry}`);
       if (display.hasGreenShoe !== undefined && display.hasGreenShoe !== null) {
