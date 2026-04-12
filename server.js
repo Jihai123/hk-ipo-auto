@@ -1030,17 +1030,17 @@ function clearCache(code) {
  */
 function parsePdfWithPdftotext(pdfPath) {
   try {
-    const peMode = /profitfortheyear|consolidatedstatementofprofitorloss|totalnumberofshares/i.test(text.replace(/\s+/g, '').slice(0, 300000)) ? 'english' : 'chinese';
-    console.log(`[pe][path] mode="${peMode}"`);
+    console.log(`[PDF][pdftotext][start] path="${pdfPath}"`);
     // 使用pdftotext命令行工具，-layout保持布局，-enc UTF-8确保中文编码正确
     const result = execSync(`pdftotext -layout -enc UTF-8 "${pdfPath}" -`, {
       encoding: 'utf8',
       timeout: 300000, // 5分钟超时
       maxBuffer: 100 * 1024 * 1024, // 100MB输出缓冲
     });
+    console.log(`[PDF][pdftotext][ok] path="${pdfPath}" textLength=${result?.length || 0}`);
     return result;
   } catch (e) {
-    console.log('[PDF] pdftotext解析失败:', e.message);
+    console.log(`[PDF][pdftotext][fail] path="${pdfPath}" message="${e.message}"`);
     return null;
   }
 }
@@ -2273,12 +2273,12 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     let usedPdftotext = false;
 
     // 方法1: 优先使用pdftotext（对中文支持更好）
-    console.log('[PDF] 尝试使用pdftotext解析...');
     text = parsePdfWithPdftotext(tempPdfPath);
 
     if (text && text.length > 10000) {
       usedPdftotext = true;
       console.log(`[PDF] pdftotext解析成功: ${text.length}字符`);
+      console.log(`[PDF][parserSource] source="pdftotext" textLength=${text.length}`);
 
       // 检查中文是否正确解析（统计[]符号）
       const bracketCount = (text.match(/\[\]/g) || []).length;
@@ -2294,40 +2294,58 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
         });
         text = data.text;
         console.log(`[PDF] pdf-parse解析完成: ${data.numpages}页, ${text.length}字符`);
+        console.log(`[PDF][parserSource] source="pdf-parse" pages=${data.numpages} textLength=${text.length}`);
       } catch (parseErr) {
         console.log('[PDF] pdf-parse也失败:', parseErr.message);
+        console.log('[PDF][parserSource] source="none" textLength=0');
       }
     }
 
     // 检测解析结果
-    // 完整招股书通常有100万+字符，至少应有10万字符
-    // 如果只有几千字符，可能是公告/通知而非招股书
-    if (!text || text.length < 5000) {
+    if (!text || text.length < 120) {
       throw new Error('PDF可能为扫描版，无法提取文字内容');
     }
 
-    // 检查是否为完整招股书（而非公告）
-    const frontPages = text.slice(0, 30000); // 前几页
-    const frontPagesNoSpace = frontPages.replace(/\s+/g, '').toLowerCase();
+    // 检查是否为完整招股书（而非公告）- 基于前10000字符多关键词综合判断
+    const verifyWindowRaw = text.slice(0, 10000);
+    const verifyWindow = verifyWindowRaw.replace(/\s+/g, '').toLowerCase();
+    console.log(`[pdfVerify][window] textLength=${text.length} windowLength=${verifyWindowRaw.length}`);
 
-    // 1️⃣ 前几页必须含 Prospectus / 招股章程
-    const prospectusKeywords = ['prospectus', '招股章程', '招股書', '招股书', 'global offering'];
-    const hasProspectusKeyword = prospectusKeywords.some(k => frontPagesNoSpace.includes(k.toLowerCase()));
-    console.log(`[PDF验证] 前几页含招股章程关键字: ${hasProspectusKeyword}`);
+    const strongTerms = [
+      '招股章程', '本招股章程', 'prospectus', 'globaloffering', 'hongkongpublicoffering',
+      'internationaloffering', 'shareoffer',
+    ];
+    const structureTerms = ['全球發售', '香港公開發售', '國際發售', '預期時間表', '包銷', '重要提示'];
+    const negativeTerms = ['公告', '補充公告', '通函', '翌日披露報表', '月報表', '表決結果', '委任', '更改', '澄清公告'];
 
-    // 2️⃣ 招股书应该包含特定章节
-    const markersFound = findMatchedTerms(text, PROSPECTUS_TERM_DICT.sectionMarkers);
-    console.log(`[pdfVerify] matchedSectionTerms=[${markersFound.join(', ')}]`);
-    console.log(`[PDF验证] 文本长度: ${text.length}, 招股书章节标记: ${markersFound.length}/${PROSPECTUS_TERM_DICT.sectionMarkers.length}`);
+    const strongHits = strongTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
+    const structureHits = structureTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
+    const negativeHits = negativeTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
+    console.log(`[pdfVerify][terms] strongHits=[${strongHits.join(', ')}] structureHits=[${structureHits.join(', ')}] negativeHits=[${negativeHits.join(', ')}]`);
 
-    // 验证失败条件
-    if (!hasProspectusKeyword) {
-      throw new Error(`PDF前几页未找到"招股章程/Prospectus"关键字，可能下载的是公告而非招股书`);
+    const lengthBonus = text.length >= 50000 ? 2 : text.length >= 10000 ? 1 : 0;
+    const verifyScore = strongHits.length * 6 + structureHits.length * 2 - negativeHits.length * 4 + lengthBonus;
+    console.log(`[pdfVerify][score] score=${verifyScore} strong=${strongHits.length} structure=${structureHits.length} negative=${negativeHits.length} lengthBonus=${lengthBonus}`);
+
+    const likelyProspectus = (
+      strongHits.length >= 2 ||
+      (strongHits.length >= 1 && structureHits.length >= 1) ||
+      (strongHits.length >= 1 && verifyScore >= 4)
+    );
+
+    if (text.length < 1200 && strongHits.length === 0 && structureHits.length === 0) {
+      console.log('[pdfVerify][decision] pass=false reason="scanLikelyNoTextAndNoTerms"');
+      throw new Error('PDF可能为扫描版，无法提取文字内容');
     }
 
-    if (text.length < 50000 && markersFound.length < 3) {
-      throw new Error(`PDF内容太少(${text.length}字符)且缺少招股书章节标记，可能下载的是公告而非完整招股书`);
+    if (!likelyProspectus) {
+      const reason = negativeHits.length > 0
+        ? `关键词更像公告，negativeHits=${negativeHits.join(',')}`
+        : `缺少招股书关键词，strong=${strongHits.length} structure=${structureHits.length}`;
+      console.log(`[pdfVerify][decision] pass=false reason="${reason}"`);
+      throw new Error(`PDF验证未通过：${reason}`);
     }
+    console.log('[pdfVerify][decision] pass=true reason="keywordCompositePass"');
 
     // 内容验证：确保PDF属于目标股票
     if (!skipValidation) {
