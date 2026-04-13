@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "港股打新专家",
+  "navigationBarTitleText": "新股信息参考",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "stock-card": "/components/stock-card/index"

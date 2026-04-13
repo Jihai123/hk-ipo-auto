@@ -301,7 +301,7 @@ Page({
     wx.navigateTo({
       url: `/pages/score/index?code=${code}`,
       fail: () => {
-        wx.showToast({ title: '跳转评分页失败', icon: 'none' });
+        wx.showToast({ title: '打开详情页失败', icon: 'none' });
       },
     });
   },

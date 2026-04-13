@@ -167,3 +167,27 @@
 .method-item { padding: 12rpx 0; border-bottom: 1rpx solid #f1f5f9; }
 .method-item-name { display: block; font-size: 26rpx; font-weight: 600; color: #0f172a; }
 .method-item-desc { display: block; margin-top: 4rpx; font-size: 23rpx; color: #475569; line-height: 1.5; }
+
+.review-hero-card {
+  background: linear-gradient(150deg, #1e293b 0%, #334155 100%);
+}
+
+.review-card {
+  margin-bottom: 10rpx;
+}
+
+.review-action {
+  margin-top: 12rpx;
+  height: 60rpx;
+  font-size: 23rpx;
+  background: #334155;
+}
+
+.review-disclaimer {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #334155;
+  background: #f8fafc;
+  border: 1rpx solid #cbd5e1;
+}

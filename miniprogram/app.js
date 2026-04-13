@@ -1,5 +1,5 @@
 App({
   globalData: {
-    appName: '港股打新小程序',
+    appName: '新股信息参考工具',
   },
 });
