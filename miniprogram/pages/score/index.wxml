@@ -2,14 +2,14 @@
   <page-state
     wx:if="{{status === 'loading'}}"
     mode="loading"
-    title="评分生成中"
+    title="{{reviewMode ? '数据加载中' : '评分生成中'}}"
     subtitle="{{loadingText}}"
   />
 
   <page-state
     wx:elif="{{status === 'empty'}}"
     mode="empty"
-    title="暂无可展示评分结果"
+    title="{{reviewMode ? '暂无可展示信息' : '暂无可展示评分结果'}}"
     subtitle="{{errorInfo.message}}"
     actionText="重试"
     bindaction="onRetry"
@@ -18,14 +18,47 @@
   <page-state
     wx:elif="{{status === 'error'}}"
     mode="error"
-    title="评分获取失败"
+    title="{{reviewMode ? '数据获取失败' : '评分获取失败'}}"
     subtitle="{{errorInfo.message}}"
     actionText="重试"
     bindaction="onRetry"
   />
 
   <block wx:else>
-    <view class="hero-card">
+    <block wx:if="{{reviewMode}}">
+      <view class="hero-card review-detail-hero">
+        <view class="hero-stock">
+          <text class="stock-name">{{scoreData.name}}</text>
+          <text class="stock-code">{{scoreData.code}}</text>
+        </view>
+        <text class="decision-text">{{detailViewModel.summaryText}}</text>
+      </view>
+
+      <view class="section">
+        <view class="section-title">{{detailViewModel.infoTitle}}</view>
+        <view class="card market-compact">
+          <view class="market-row" wx:for="{{detailViewModel.summaryRows}}" wx:key="label">
+            <text class="market-label">{{item.label}}</text>
+            <text class="market-value">{{item.value}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section" wx:for="{{detailViewModel.sections}}" wx:key="key">
+        <view class="section-title">{{item.title}}</view>
+        <view class="card market-compact">
+          <view class="market-row" wx:for="{{item.rows}}" wx:key="label">
+            <text class="market-label">{{item.label}}</text>
+            <text class="market-value">{{item.value}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="card review-disclaimer">{{detailViewModel.disclaimer}}</view>
+    </block>
+
+    <block wx:else>
+<view class="hero-card">
       <view class="hero-stock">
         <text class="stock-name">{{scoreData.name}}</text>
         <text class="stock-code">{{scoreData.code}}</text>
@@ -117,5 +150,6 @@
         <text class="empty-text">市场数据待更新</text>
       </view>
     </view>
+    </block>
   </block>
 </view>

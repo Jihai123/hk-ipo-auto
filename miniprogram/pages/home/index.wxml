@@ -7,7 +7,52 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
+    <block wx:if="{{reviewMode}}">
+      <view class="hero-card review-hero-card">
+        <view class="hero-top">
+          <text class="hero-title">{{homeViewModel.headerTitle}}</text>
+          <text class="hero-subtitle">{{homeViewModel.headerSubtitle}}</text>
+        </view>
+        <view class="hero-market">
+          <text class="hero-conclusion">{{homeViewModel.summaryText}}</text>
+        </view>
+        <view class="hero-search-row">
+          <input class="hero-input" placeholder="{{homeViewModel.searchPlaceholder}}" maxlength="5" value="{{searchCode}}" bindinput="onSearchInput" />
+          <view class="hero-search-btn" bindtap="onSearchSubmit">{{homeViewModel.searchActionText}}</view>
+        </view>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <view class="section-title">{{homeViewModel.sectionTitle}}</view>
+          <view class="section-note">{{homeViewModel.sectionNote}}</view>
+        </view>
+        <view class="card review-card" wx:for="{{homeViewModel.cards}}" wx:key="code" bindtap="onTapRecommendCard" data-code="{{item.code}}">
+          <view class="stock-line">
+            <view class="stock-left">
+              <text class="stock-name">{{item.nameText}}</text>
+              <text class="stock-code">{{item.codeText}}</text>
+            </view>
+            <text class="status-chip status-listed">{{item.statusText}}</text>
+          </view>
+          <view class="meta-line">
+            <text class="meta-text">日期 {{item.dateInfoText}}</text>
+          </view>
+          <view class="listed-metrics" wx:if="{{item.metaRows.length > 0}}">
+            <view class="listed-metric" wx:for="{{item.metaRows}}" wx:key="label">
+              <text class="listed-metric-label">{{item.label}}</text>
+              <text class="listed-metric-value">{{item.value}}</text>
+            </view>
+          </view>
+          <view class="hero-search-btn review-action" bindtap="onTapRecommendCard" data-code="{{item.code}}">{{item.actionText}}</view>
+        </view>
+      </view>
+
+      <view class="card review-disclaimer">{{homeViewModel.disclaimer}}</view>
+    </block>
+
+    <block wx:else>
+<view class="hero-card">
       <view class="hero-top">
         <text class="hero-title">港股打新专家</text>
         <text class="hero-subtitle">新股评分 × 市场表现 × 关键依据</text>
@@ -229,5 +274,6 @@
         </view>
       </view>
     </view>
+    </block>
   </block>
 </view>

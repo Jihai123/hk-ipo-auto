@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "评分详情",
+  "navigationBarTitleText": "新股信息详情",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "page-state": "/components/page-state/index",

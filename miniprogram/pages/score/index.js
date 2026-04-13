@@ -1,11 +1,13 @@
 const { fetchScore } = require('../../services/score.js');
 const { mapErrorMessage } = require('../../utils/score');
 const { normalizeDimensionName } = require('../../utils/dimensions');
+const { REVIEW_MODE } = require('../../utils/review-config');
+const { buildDetailViewModel } = require('../../utils/review-adapter');
 
 const LOADING_STEPS = [
-  '正在获取评分...',
-  '正在分析招股书...',
-  '正在整理结果...',
+  '正在获取公开信息...',
+  '正在整理数据字段...',
+  '正在生成展示内容...',
 ];
 
 function toNumber(value, fallback = 0) {
@@ -235,6 +237,8 @@ function buildMarketInfo(display = {}) {
 
 Page({
   data: {
+    reviewMode: REVIEW_MODE,
+    detailViewModel: null,
     code: '',
     status: 'loading',
     loadingText: LOADING_STEPS[0],
@@ -252,6 +256,7 @@ Page({
   },
 
   onLoad(options) {
+    wx.setNavigationBarTitle({ title: REVIEW_MODE ? '新股信息详情' : '评分详情' });
     const code = String((options && options.code) || '').trim();
     this.setData({ code });
 
@@ -361,6 +366,13 @@ Page({
         keyFactors,
         allDimensions,
         marketInfo,
+        detailViewModel: buildDetailViewModel({
+          result: {
+            ...res,
+            dimensions: allDimensions,
+          },
+          code: this.data.code,
+        }, REVIEW_MODE),
       });
     } catch (err) {
       this.setData({

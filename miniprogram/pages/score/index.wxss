@@ -191,3 +191,16 @@
 
 .market-label { display: block; font-size: 22rpx; color: #64748b; }
 .market-value { display: block; margin-top: 4rpx; font-size: 28rpx; color: #0f172a; font-weight: 600; }
+
+.review-detail-hero {
+  background: linear-gradient(145deg, #1e293b, #334155);
+}
+
+.review-disclaimer {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #334155;
+  background: #f8fafc;
+  border: 1rpx solid #cbd5e1;
+}

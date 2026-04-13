@@ -11,6 +11,8 @@ const {
   normalizeRecentListedPerformance,
   compareByListingDateDesc,
 } = require('../../utils/recent-listed');
+const { REVIEW_MODE } = require('../../utils/review-config');
+const { buildHomeViewModel } = require('../../utils/review-adapter');
 
 const IPO_FRONT_DEBUG = true;
 
@@ -141,6 +143,8 @@ function buildHeroConclusion(topRecommendations, sentimentText) {
 
 Page({
   data: {
+    reviewMode: REVIEW_MODE,
+    homeViewModel: null,
     loading: true,
     error: '',
     searchCode: '',
@@ -172,6 +176,7 @@ Page({
   },
 
   onLoad() {
+    wx.setNavigationBarTitle({ title: REVIEW_MODE ? '新股信息参考' : '港股打新专家' });
     this.setData({ recentSearches: loadSearchHistory().slice(0, 3) });
     this.loadHomeData();
   },
@@ -253,22 +258,32 @@ Page({
         groups: windowGroupEntries,
         firstGroupSample: nextWindowGroups.todayGreyMarket?.[0] || null,
       });
+      const recentPerformance = (timelineSummary.recentNewStocks || timelineSummary.recentListed || [])
+        .filter(isRecentListedPerformance)
+        .sort(compareByListingDateDesc)
+        .map(normalizeRecentListedPerformance)
+        .slice(0, 3);
+      const homeViewModel = buildHomeViewModel({
+        topList: Array.isArray(res.topList) ? res.topList : [],
+        timelineSummary,
+        statusMap,
+        updatedAt: timelineRes && timelineRes.updatedAt,
+      }, REVIEW_MODE);
+
       this.setData({
         loading: false,
         topRecommendations,
-        recentPerformance: (timelineSummary.recentNewStocks || timelineSummary.recentListed || [])
-          .filter(isRecentListedPerformance)
-          .sort(compareByListingDateDesc)
-          .map(normalizeRecentListedPerformance)
-          .slice(0, 3),
+        recentPerformance,
         windowGroups: nextWindowGroups,
         marketSentiment,
         heroConclusion,
+        homeViewModel,
       });
     } catch (err) {
       this.setData({
         loading: false,
         error: err && err.message ? err.message : '网络请求失败，请重试',
+        homeViewModel: buildHomeViewModel({}, REVIEW_MODE),
       });
     }
   },
@@ -333,7 +348,7 @@ Page({
       url: `/pages/score/index?code=${code}`,
       fail: () => {
         wx.showToast({
-          title: `已预留评分页路径：${code}`,
+          title: `已预留详情页路径：${code}`,
           icon: 'none',
         });
       },
