@@ -1012,6 +1012,32 @@
       font-style: italic;
     }
 
+    .industry-summary-text {
+      margin-top: 6px;
+      color: var(--color-text-secondary);
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.9;
+    }
+
+    .industry-summary-text.is-collapsed {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+    }
+
+    .industry-summary-toggle {
+      margin-top: 8px;
+      border: none;
+      background: transparent;
+      color: var(--color-accent-mid);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+    }
+
     /* Industry tags */
     .industry-tag {
       display: inline-block;
@@ -2778,12 +2804,42 @@
       }
 
       if (key === 'industry') {
+        const industryInfo = ev.industry || score.industry || {};
+        const level1Value = industryInfo.level1?.value || '--';
+        const level2Value = industryInfo.level2?.value || '';
+        const level2Source = industryInfo.level2?.source || ev.chosenSource || 'none';
+        const sourceLabelMap = {
+          etnet_summary: 'ETNet 业务简介',
+          prospectus_business: '招股书业务章节',
+          prospectus_fallback_weak: '招股书文本回退',
+          none: '--'
+        };
+        const level2SourceLabel = sourceLabelMap[level2Source] || level2Source;
+        const level2Confidence = Number.isFinite(Number(industryInfo.level2?.confidence))
+          ? Number(industryInfo.level2.confidence).toFixed(2)
+          : '--';
+        const businessSummaryRaw = (industryInfo.businessSummary || '').trim();
+        const businessSummary = businessSummaryRaw
+          ? escapeHtml(businessSummaryRaw).replace(/\n+/g, '<br>')
+          : '不足以提取公司介绍';
+
+        html += `<div><span class="label">所属行业:</span> <span class="value">${escapeHtml(level1Value)}</span></div>`;
+        html += `<div><span class="label">业务语义识别:</span> <span class="highlight">${escapeHtml(level2Value || '未识别到高置信度赛道')}</span></div>`;
+        html += `<div><span class="label">来源:</span> <span class="value">${escapeHtml(level2SourceLabel)}</span></div>`;
+        html += `<div><span class="label">置信度:</span> <span class="value">${level2Confidence}</span></div>`;
+
         if (ev.matchedKeyword) {
           html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.matchedKeyword}</span></div>`;
           if (ev.matchedContext) {
             html += `<div class="context">"...${ev.matchedContext}..."</div>`;
           }
         }
+        html += `<div style="margin-top: 10px;"><span class="label">公司介绍:</span></div>`;
+        html += `<div class="industry-summary-text ${businessSummaryRaw ? 'is-collapsed' : ''}">${businessSummary}</div>`;
+        if (businessSummaryRaw) {
+          html += `<button class="industry-summary-toggle" onclick="toggleBusinessSummary(this, event)">展开</button>`;
+        }
+
         if (ev.trackCategories) {
           html += `<div style="margin-top: 10px;"><span class="label">赛道分类:</span></div>`;
           html += `<div style="margin-left: 10px; color: #64748b; font-size: 11px; line-height: 1.8;">
@@ -2794,6 +2850,14 @@
             ❌ 回避: ${ev.trackCategories.avoid}
           </div>`;
         }
+
+        if (Array.isArray(ev.rejectedCandidates) && ev.rejectedCandidates.length > 0) {
+          const rejectedPreview = ev.rejectedCandidates
+            .slice(0, 3)
+            .map(item => `${item.label}（置信度 ${Number(item.confidence || 0).toFixed(2)}）`)
+            .join('、');
+          html += `<div style="margin-top: 10px;"><span class="label">候选但未采用:</span> <span class="value">${rejectedPreview}</span></div>`;
+        }
       }
 
       html += '</div>';
@@ -2803,6 +2867,14 @@
     // Toggle detail expand/collapse
     function toggleDetail(element) {
       element.classList.toggle('expanded');
+    }
+
+    function toggleBusinessSummary(button, event) {
+      if (event) event.stopPropagation();
+      const summaryEl = button.previousElementSibling;
+      if (!summaryEl) return;
+      const isCollapsed = summaryEl.classList.toggle('is-collapsed');
+      button.textContent = isCollapsed ? '展开' : '收起';
     }
 
     // Score class helpers
