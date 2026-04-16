@@ -2400,6 +2400,15 @@
     let loadingStartTime = null;
     let currentAbortController = null;
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // Quick search
     function quickSearch(code) {
       document.getElementById('stockCode').value = code;
@@ -2461,8 +2470,7 @@
             const data = JSON.parse(text);
             if (!data.success) throw new Error(data.error || '评分失败');
             setProgress(4, '生成评分完成', '分析完成！', 100);
-            displayResult(data);
-            console.log('[score/front/web][request][end]', {
+            console.log('[score/front/web][request][success]', {
               triggerSource,
               code,
               url: requestUrl,
@@ -2471,6 +2479,12 @@
               requestId: response.headers.get('X-Request-Id') || '',
               status: response.status,
             });
+            try {
+              displayResult(data);
+            } catch (renderError) {
+              renderError.phase = 'render';
+              throw renderError;
+            }
             return;
           } catch (parseErr) {
             throw new Error('服务器响应格式异常，请稍后重试');
@@ -2485,8 +2499,7 @@
 
         setProgress(4, '评分完成!', '分析完成！', 100);
         await new Promise(r => setTimeout(r, 300)); // Brief pause for UX
-        displayResult(data);
-        console.log('[score/front/web][request][end]', {
+        console.log('[score/front/web][request][success]', {
           triggerSource,
           code,
           url: requestUrl,
@@ -2495,18 +2508,33 @@
           requestId: response.headers.get('X-Request-Id') || '',
           status: response.status,
         });
+        try {
+          displayResult(data);
+        } catch (renderError) {
+          renderError.phase = 'render';
+          throw renderError;
+        }
       } catch (error) {
         clearTimeout(timeoutId);
         let friendlyMessage = error.message;
-        console.error('[score/front/web][request][fail]', {
-          triggerSource,
-          code,
-          url: requestUrl,
-          timeout: REQUEST_TIMEOUT_MS,
-          duration: Date.now() - requestStartAt,
-          errorName: error.name,
-          errorMessage: error.message,
-        });
+        if (error.phase === 'render') {
+          console.error('[score/front/web][render][industry][error]', {
+            triggerSource,
+            code,
+            errorName: error.name,
+            errorMessage: error.message,
+          });
+        } else {
+          console.error('[score/front/web][request][fail]', {
+            triggerSource,
+            code,
+            url: requestUrl,
+            timeout: REQUEST_TIMEOUT_MS,
+            duration: Date.now() - requestStartAt,
+            errorName: error.name,
+            errorMessage: error.message,
+          });
+        }
 
         // 转换为更友好的错误提示
         if (error.name === 'AbortError') {
@@ -2806,7 +2834,7 @@
       if (key === 'industry') {
         const industryInfo = ev.industry || score.industry || {};
         const level1Value = industryInfo.level1?.value || '--';
-        const level2Value = industryInfo.level2?.value || '';
+        const level2Value = industryInfo.level2?.value || '未识别到高置信度赛道';
         const level2Source = industryInfo.level2?.source || ev.chosenSource || 'none';
         const sourceLabelMap = {
           etnet_summary: 'ETNet 业务简介',
@@ -2819,12 +2847,11 @@
           ? Number(industryInfo.level2.confidence).toFixed(2)
           : '--';
         const businessSummaryRaw = (industryInfo.businessSummary || '').trim();
-        const businessSummary = businessSummaryRaw
-          ? escapeHtml(businessSummaryRaw).replace(/\n+/g, '<br>')
-          : '不足以提取公司介绍';
+        const businessSummaryText = industryInfo.businessSummary || '不足以提取公司介绍';
+        const businessSummary = escapeHtml(businessSummaryText).replace(/\n+/g, '<br>');
 
         html += `<div><span class="label">所属行业:</span> <span class="value">${escapeHtml(level1Value)}</span></div>`;
-        html += `<div><span class="label">业务语义识别:</span> <span class="highlight">${escapeHtml(level2Value || '未识别到高置信度赛道')}</span></div>`;
+        html += `<div><span class="label">业务语义识别:</span> <span class="highlight">${escapeHtml(level2Value)}</span></div>`;
         html += `<div><span class="label">来源:</span> <span class="value">${escapeHtml(level2SourceLabel)}</span></div>`;
         html += `<div><span class="label">置信度:</span> <span class="value">${level2Confidence}</span></div>`;
 
