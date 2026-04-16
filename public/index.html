@@ -1029,13 +1029,52 @@
 
     .industry-summary-toggle {
       margin-top: 8px;
-      border: none;
-      background: transparent;
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-alt);
       color: var(--color-accent-mid);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      padding: 0;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      transition: all 0.2s ease;
+    }
+
+    .industry-summary-toggle:hover {
+      border-color: rgba(45, 91, 143, 0.28);
+      background: var(--color-accent-light);
+    }
+
+    .industry-detail-row {
+      margin-bottom: 8px;
+    }
+
+    .industry-detail-row .label {
+      min-width: 92px;
+    }
+
+    .industry-reference {
+      color: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    .industry-sector-badge {
+      display: inline-block;
+      background: var(--color-accent-light);
+      color: var(--color-accent-mid);
+      border: 1px solid rgba(45, 91, 143, 0.16);
+      border-radius: var(--radius-full);
+      padding: 2px 12px;
+      font-weight: 700;
+    }
+
+    .industry-summary-block {
+      margin-top: 10px;
+    }
+
+    .industry-summary-brief {
+      color: var(--color-text-primary);
+      font-weight: 500;
     }
 
     /* Industry tags */
@@ -2839,23 +2878,29 @@
         const hasLevel2 = Boolean(level2Value);
         const businessSummaryRaw = (industryInfo.businessSummary || '').trim();
         const summaryText = businessSummaryRaw || '暂无数据';
-        const summaryPreview = buildIndustrySummaryPreview(summaryText, 150);
-        const summaryPreviewHtml = escapeHtml(summaryPreview).replace(/\n+/g, '<br>');
-        const summaryFullHtml = escapeHtml(summaryText).replace(/\n+/g, '<br>');
+        const summaryBrief = buildIndustryBrief(summaryText, 28, 40);
+        const summaryPreview = buildIndustrySummaryPreview(summaryText, 140);
+        const summaryPreviewHtml = formatIndustrySummaryText(summaryPreview);
+        const summaryPreviewEncoded = encodeURIComponent(summaryPreview);
+        const summaryFullEncoded = encodeURIComponent(summaryText);
 
-        html += `<div><span class="label">行业赛道:</span> <span class="value">${escapeHtml(trackValue)}</span></div>`;
-        html += `<div><span class="label">所属行业:</span> <span class="value">${escapeHtml(level1Value)}</span></div>`;
+        html += `<div class="industry-detail-row"><span class="label">行业赛道:</span> <span class="value">${escapeHtml(trackValue)}</span></div>`;
 
         if (hasLevel2) {
-          html += `<div><span class="label">参考判断:</span> <span class="highlight">${escapeHtml(level2Value)}</span></div>`;
+          html += `<div class="industry-detail-row"><span class="label">参考判断:</span> <span class="industry-reference">${escapeHtml(level2Value)}（供参考）</span></div>`;
         } else {
-          html += `<div><span class="label">参考提示:</span> <span class="value">系统未做明确判断，请参考下方公司描述</span></div>`;
+          html += `<div class="industry-detail-row"><span class="label">参考判断:</span> <span class="value">暂未形成明确判断（供参考）</span></div>`;
         }
 
-        html += `<div style="margin-top: 10px;"><span class="label">公司介绍:</span></div>`;
-        html += `<div class="industry-summary-text" data-preview="${escapeHtml(summaryPreviewHtml)}" data-full="${escapeHtml(summaryFullHtml)}" data-expanded="false">${summaryPreviewHtml}</div>`;
+        html += `<div class="industry-detail-row"><span class="label">所属行业:</span> <span class="industry-sector-badge">${escapeHtml(level1Value)}</span></div>`;
+
+        html += `<div class="industry-summary-block"><span class="label">公司介绍摘要:</span>`;
+        html += `<div class="industry-summary-text industry-summary-brief">${formatIndustrySummaryText(summaryBrief)}</div></div>`;
+
+        html += `<div class="industry-summary-block"><span class="label">公司介绍:</span>`;
+        html += `<div class="industry-summary-text is-collapsed" data-preview="${summaryPreviewEncoded}" data-full="${summaryFullEncoded}" data-expanded="false">${summaryPreviewHtml}</div></div>`;
         if (summaryText.length > summaryPreview.length) {
-          html += `<button class="industry-summary-toggle" onclick="toggleBusinessSummary(this, event)">展开</button>`;
+          html += `<button class="industry-summary-toggle" onclick="toggleBusinessSummary(this, event)">展开全文 ↓</button>`;
         }
       }
 
@@ -2870,18 +2915,39 @@
 
     function toggleBusinessSummary(button, event) {
       if (event) event.stopPropagation();
-      const summaryEl = button.previousElementSibling;
+      const summaryWrap = button.previousElementSibling;
+      const summaryEl = summaryWrap?.querySelector('.industry-summary-text');
       if (!summaryEl) return;
       const isExpanded = summaryEl.dataset.expanded === 'true';
-      summaryEl.innerHTML = isExpanded ? (summaryEl.dataset.preview || '') : (summaryEl.dataset.full || '');
+      const previewText = decodeURIComponent(summaryEl.dataset.preview || '');
+      const fullText = decodeURIComponent(summaryEl.dataset.full || '');
+      summaryEl.innerHTML = isExpanded ? formatIndustrySummaryText(previewText) : formatIndustrySummaryText(fullText);
       summaryEl.dataset.expanded = isExpanded ? 'false' : 'true';
-      button.textContent = isExpanded ? '展开' : '收起';
+      summaryEl.classList.toggle('is-collapsed', isExpanded);
+      button.textContent = isExpanded ? '展开全文 ↓' : '收起 ↑';
     }
 
     function buildIndustrySummaryPreview(text, maxLength = 150) {
       if (!text) return '';
       if (text.length <= maxLength) return text;
       return `${text.slice(0, maxLength).trim()}...`;
+    }
+
+    function buildIndustryBrief(text, minLength = 28, maxLength = 40) {
+      if (!text) return '暂无公司介绍摘要';
+      if (text.length <= maxLength) return text;
+      const candidate = text.slice(0, maxLength);
+      const punctuation = ['。', '；', '，', ',', ';', ':', '：'];
+      let cutIndex = -1;
+      punctuation.forEach(mark => {
+        const idx = candidate.lastIndexOf(mark);
+        if (idx >= minLength && idx > cutIndex) cutIndex = idx;
+      });
+      return cutIndex > 0 ? candidate.slice(0, cutIndex) : `${candidate.trim()}...`;
+    }
+
+    function formatIndustrySummaryText(text) {
+      return escapeHtml(text || '').replace(/\n+/g, '<br>');
     }
 
     // Score class helpers
