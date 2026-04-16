@@ -4839,9 +4839,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   // ========== 5. 行业评分（L1=ETNet行业, L2=业务语义）==========
   logDimensionStart('industry');
+  let industryStage = 'enter';
   try {
   console.log(`\n[行业] ========== 开始 ==========`);
-  const codeForIndustry = formatStockCode(code);
+  const codeForIndustry = formatStockCode(stockCode);
+  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
 
   let industryScore = 0;
   let industryReason = '⚪ 中性赛道';
@@ -4854,7 +4856,11 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let fellBackToNeutralBecauseL2Insufficient = false;
 
   // L1: ETNet 基本资料中的行业
+  industryStage = 'before_etnet_fetch';
+  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
   const etnetDetail = await fetchEtnetIpoDetail(codeForIndustry);
+  industryStage = 'after_etnet_fetch';
+  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
   let industryL1 = etnetData?.industry || null;
   let businessSummary = '';
   let summaryQuality = 'missing';
@@ -4892,6 +4898,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let chosenReason = 'no_valid_input';
   let l2DetectResult = { chosen: null, candidates: [], rejectedCandidates: [], businessTags: [] };
 
+  industryStage = 'before_l2_detect';
+  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
   for (const source of sourcePriority) {
     const sourceText = source === 'etnet_summary'
       ? businessSummary
@@ -4951,6 +4959,8 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     chosenReason = chosenReason === 'no_valid_input' ? 'l2_missing' : 'l2_confidence_insufficient';
   }
 
+  industryStage = 'before_finalize';
+  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
   const industryEvidence = {
     sourcePriority: ['etnet_industry', 'etnet_summary', 'prospectus_business', 'prospectus_fallback'],
     chosenSource,
@@ -5018,6 +5028,20 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   logDimensionSuccess('industry', scores.industry);
   } catch (error) {
+    const exceptionCode = (() => {
+      try {
+        return formatStockCode(stockCode);
+      } catch (_) {
+        return String(stockCode || '');
+      }
+    })();
+    const stackTop = (error?.stack || '').split('\n').slice(0, 2).join(' | ');
+    console.error(`[Industry][exception] ${JSON.stringify({
+      code: exceptionCode,
+      message: error?.message || '',
+      stackTop,
+      stage: typeof industryStage === 'string' ? industryStage : 'unknown',
+    })}`);
     logDimensionError('industry', error);
     scores.industry = { score: 0, reason: '行业维度降级', details: error.message, track: 'neutral', fallback: true };
     logDimensionFallback('industry', 'exception');
