@@ -2833,57 +2833,29 @@
 
       if (key === 'industry') {
         const industryInfo = ev.industry || score.industry || {};
+        const trackValue = score.reason || '--';
         const level1Value = industryInfo.level1?.value || '--';
-        const level2Value = industryInfo.level2?.value || '未识别到高置信度赛道';
-        const level2Source = industryInfo.level2?.source || ev.chosenSource || 'none';
-        const sourceLabelMap = {
-          etnet_summary: 'ETNet 业务简介',
-          prospectus_business: '招股书业务章节',
-          prospectus_fallback_weak: '招股书文本回退',
-          none: '--'
-        };
-        const level2SourceLabel = sourceLabelMap[level2Source] || level2Source;
-        const level2Confidence = Number.isFinite(Number(industryInfo.level2?.confidence))
-          ? Number(industryInfo.level2.confidence).toFixed(2)
-          : '--';
+        const level2Value = (industryInfo.level2?.value || '').trim();
+        const hasLevel2 = Boolean(level2Value);
         const businessSummaryRaw = (industryInfo.businessSummary || '').trim();
-        const businessSummaryText = industryInfo.businessSummary || '不足以提取公司介绍';
-        const businessSummary = escapeHtml(businessSummaryText).replace(/\n+/g, '<br>');
+        const summaryText = businessSummaryRaw || '暂无数据';
+        const summaryPreview = buildIndustrySummaryPreview(summaryText, 150);
+        const summaryPreviewHtml = escapeHtml(summaryPreview).replace(/\n+/g, '<br>');
+        const summaryFullHtml = escapeHtml(summaryText).replace(/\n+/g, '<br>');
 
+        html += `<div><span class="label">行业赛道:</span> <span class="value">${escapeHtml(trackValue)}</span></div>`;
         html += `<div><span class="label">所属行业:</span> <span class="value">${escapeHtml(level1Value)}</span></div>`;
-        html += `<div><span class="label">业务语义识别:</span> <span class="highlight">${escapeHtml(level2Value)}</span></div>`;
-        html += `<div><span class="label">来源:</span> <span class="value">${escapeHtml(level2SourceLabel)}</span></div>`;
-        html += `<div><span class="label">置信度:</span> <span class="value">${level2Confidence}</span></div>`;
 
-        if (ev.matchedKeyword) {
-          html += `<div><span class="label">匹配关键词:</span> <span class="highlight">${ev.matchedKeyword}</span></div>`;
-          if (ev.matchedContext) {
-            html += `<div class="context">"...${ev.matchedContext}..."</div>`;
-          }
+        if (hasLevel2) {
+          html += `<div><span class="label">参考判断:</span> <span class="highlight">${escapeHtml(level2Value)}</span></div>`;
+        } else {
+          html += `<div><span class="label">参考提示:</span> <span class="value">系统未做明确判断，请参考下方公司描述</span></div>`;
         }
+
         html += `<div style="margin-top: 10px;"><span class="label">公司介绍:</span></div>`;
-        html += `<div class="industry-summary-text ${businessSummaryRaw ? 'is-collapsed' : ''}">${businessSummary}</div>`;
-        if (businessSummaryRaw) {
+        html += `<div class="industry-summary-text" data-preview="${escapeHtml(summaryPreviewHtml)}" data-full="${escapeHtml(summaryFullHtml)}" data-expanded="false">${summaryPreviewHtml}</div>`;
+        if (summaryText.length > summaryPreview.length) {
           html += `<button class="industry-summary-toggle" onclick="toggleBusinessSummary(this, event)">展开</button>`;
-        }
-
-        if (ev.trackCategories) {
-          html += `<div style="margin-top: 10px;"><span class="label">赛道分类:</span></div>`;
-          html += `<div style="margin-left: 10px; color: #64748b; font-size: 11px; line-height: 1.8;">
-            🔥 热门: ${ev.trackCategories.hot}<br>
-            📈 成长: ${ev.trackCategories.growth}<br>
-            ⚪ 中性: ${ev.trackCategories.neutral}<br>
-            📉 低弹: ${ev.trackCategories.low}<br>
-            ❌ 回避: ${ev.trackCategories.avoid}
-          </div>`;
-        }
-
-        if (Array.isArray(ev.rejectedCandidates) && ev.rejectedCandidates.length > 0) {
-          const rejectedPreview = ev.rejectedCandidates
-            .slice(0, 3)
-            .map(item => `${item.label}（置信度 ${Number(item.confidence || 0).toFixed(2)}）`)
-            .join('、');
-          html += `<div style="margin-top: 10px;"><span class="label">候选但未采用:</span> <span class="value">${rejectedPreview}</span></div>`;
         }
       }
 
@@ -2900,8 +2872,16 @@
       if (event) event.stopPropagation();
       const summaryEl = button.previousElementSibling;
       if (!summaryEl) return;
-      const isCollapsed = summaryEl.classList.toggle('is-collapsed');
-      button.textContent = isCollapsed ? '展开' : '收起';
+      const isExpanded = summaryEl.dataset.expanded === 'true';
+      summaryEl.innerHTML = isExpanded ? (summaryEl.dataset.preview || '') : (summaryEl.dataset.full || '');
+      summaryEl.dataset.expanded = isExpanded ? 'false' : 'true';
+      button.textContent = isExpanded ? '展开' : '收起';
+    }
+
+    function buildIndustrySummaryPreview(text, maxLength = 150) {
+      if (!text) return '';
+      if (text.length <= maxLength) return text;
+      return `${text.slice(0, maxLength).trim()}...`;
     }
 
     // Score class helpers
