@@ -706,6 +706,87 @@ const INDUSTRY_DEFS = [
   },
 ];
 
+// ==================== 行业语义识别 v2.1（L1/L2 拆分） ====================
+const INDUSTRY_L2_PATTERNS = [
+  {
+    label: '消费电子ODM',
+    track: 'low',
+    score: -1,
+    strongSignals: ['ODM', '智能手机', '筆記本電腦', '笔记本电脑', '服务器', '服務器', '消费电子', '消費電子'],
+    comboRules: [['ODM', '智能手机'], ['ODM', '笔记本电脑'], ['消费电子', 'ODM'], ['消费电子', '服务器']],
+  },
+  {
+    label: '半导体',
+    track: 'hot',
+    score: 2,
+    strongSignals: ['半导体', '半導體', '芯片', '晶圆', '晶圓', '封装', '封裝', '先进制程', 'EDA'],
+    comboRules: [['半导体', '芯片'], ['晶圆', '封装'], ['先进制程', '芯片']],
+  },
+  {
+    label: 'AI硬件',
+    track: 'growth',
+    score: 1,
+    strongSignals: ['人工智能', 'AI', 'AIoT', '算力', '服务器', '服務器', '数据中心', '數據中心', '智能硬件'],
+    comboRules: [['AI', '服务器'], ['人工智能', '数据中心'], ['AIoT', '智能硬件'], ['算力', '服务器']],
+  },
+  {
+    label: 'SaaS/软件服务',
+    track: 'growth',
+    score: 1,
+    strongSignals: ['SaaS', '软件服务', '軟件服務', '企业软件', '雲服務', '云服务', '信息技术服务'],
+    comboRules: [['SaaS', '软件服务'], ['企业软件', '云服务']],
+  },
+  {
+    label: '医疗器械',
+    track: 'growth',
+    score: 1,
+    strongSignals: ['医疗器械', '醫療器械', '医疗设备', '醫療設備', '诊断', '診斷'],
+    comboRules: [['医疗器械', '诊断']],
+  },
+  {
+    label: '创新药',
+    track: 'hot',
+    score: 2,
+    strongSignals: ['创新药', '創新藥', '生物医药', '生物醫藥', 'ADC', 'CAR-T'],
+    comboRules: [['创新药', '生物医药']],
+  },
+  {
+    label: '物业管理',
+    track: 'avoid',
+    score: -2,
+    strongSignals: ['物业管理', '物業管理', '物管'],
+    comboRules: [['物业管理', '物管']],
+  },
+  {
+    label: '房地产',
+    track: 'avoid',
+    score: -2,
+    strongSignals: ['房地产', '房地產', '地产开发', '商業地產', '商业地产'],
+    comboRules: [['房地产', '地产开发']],
+  },
+  {
+    label: '物流',
+    track: 'low',
+    score: -1,
+    strongSignals: ['物流', '航运', '港口', '货运', '快递', '快遞'],
+    comboRules: [['物流', '货运']],
+  },
+  {
+    label: '传统制造',
+    track: 'low',
+    score: -1,
+    strongSignals: ['机械制造', '機械製造', '工业设备', '建材', '包装', '印刷', '造纸', '造紙'],
+    comboRules: [['机械制造', '工业设备'], ['建材', '水泥']],
+  },
+];
+
+const INDUSTRY_NOISE_CONTEXT_TERMS = [
+  '招股章程印刷本', '招股章程', '招股書', '申请程序', '申請程序',
+  '全球发售', '全球發售', '香港公开发售', '香港公開發售', '国际发售', '國際發售',
+  '保荐人', '保薦人', '承销商', '披露易', '退票', '股票寄发', '股票寄發', '回拨机制', '回撥機制',
+  '风险因素', '風險因素', '定义', '釋義', '监管', '監管', '附录', '附錄', '时间表', '預期時間表',
+];
+
 // ==================== 明星基石投资者名单 ====================
 // 注意：D1 Partners使用特殊标记，需要边界匹配避免误匹配"附錄D1A"等内容
 const STAR_CORNERSTONE = [
@@ -976,6 +1057,177 @@ function extractSection(text, startPatterns, endPatterns, maxLength = 50000, ski
     }
   }
   return '';
+}
+
+function getSummaryQuality(summaryText) {
+  const summaryLength = (summaryText || '').replace(/\s+/g, '').length;
+  if (summaryLength < 40) return { summaryLength, summaryQuality: 'missing' };
+  if (summaryLength < 80) return { summaryLength, summaryQuality: 'low' };
+  return { summaryLength, summaryQuality: 'high' };
+}
+
+function normalizeCodeCandidates(code) {
+  const raw = String(code || '').replace(/\D/g, '');
+  if (!raw) return [];
+  const primary = raw.padStart(5, '0');
+  const short = String(parseInt(raw, 10));
+  return [...new Set([primary, short].filter(Boolean))];
+}
+
+async function fetchEtnetIpoDetail(code) {
+  const triedCodes = normalizeCodeCandidates(code);
+  for (const c of triedCodes) {
+    const url = `https://www.etnet.com.hk/www/sc/stocks/ci_ipo_detail.php?code=${c}`;
+    try {
+      const resp = await axios.get(url, {
+        timeout: 12000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Accept-Encoding': 'gzip, deflate, br',
+        },
+        maxRedirects: 5,
+      });
+      const html = typeof resp.data === 'string' ? resp.data : '';
+      const ok = resp.status >= 200 && resp.status < 300 && html.length > 2000;
+      console.log(`[Industry][etnet][fetch] ${JSON.stringify({ code, triedCodes, url, ok, status: resp.status })}`);
+      if (ok) return { ok: true, codeUsed: c, url, html, status: resp.status, triedCodes };
+    } catch (error) {
+      console.log(`[Industry][etnet][fetch] ${JSON.stringify({ code, triedCodes, url, ok: false, status: error?.response?.status || null })}`);
+    }
+  }
+  return { ok: false, codeUsed: null, url: null, html: '', status: null, triedCodes };
+}
+
+function extractEtnetIndustryAndSummary(html) {
+  if (!html || typeof html !== 'string') {
+    return { industryL1: null, businessSummary: '', basicInfo: {} };
+  }
+  const $ = cheerio.load(html);
+  const basicInfo = {};
+
+  const basicHeader = $('div.ipoColumn').filter((_, el) => $(el).text().replace(/\s+/g, '').includes('基本资料')).first();
+  const basicTable = basicHeader.length ? basicHeader.nextAll('table.figureTable').first() : $('table.figureTable').first();
+
+  basicTable.find('tr').each((_, tr) => {
+    const tds = $(tr).find('td');
+    if (tds.length < 2) return;
+    const key = $(tds[0]).text().replace(/\s+/g, '');
+    const val = $(tds[1]).text().replace(/\s+/g, ' ').trim();
+    if (key && val) basicInfo[key] = val;
+  });
+
+  const industryL1 = basicInfo['行业'] || basicInfo['行業'] || null;
+
+  let businessSummary = '';
+  const summaryHeader = $('div,td,span').filter((_, el) => {
+    const t = $(el).text().replace(/\s+/g, '');
+    return t === '业务简介' || t === '業務簡介';
+  }).first();
+
+  if (summaryHeader.length) {
+    const chunks = [];
+    let cursor = summaryHeader.next();
+    while (cursor && cursor.length) {
+      const txt = cursor.text().replace(/\s+/g, ' ').trim();
+      if (/基本资料|基本資料|全球发售|全球發售|时间表|時間表/.test(txt)) break;
+      if (txt && txt.length > 20) chunks.push(txt);
+      cursor = cursor.next();
+    }
+    businessSummary = chunks.join('\n').trim();
+  }
+
+  if (!businessSummary) {
+    const bodyText = $('body').text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    const m = bodyText.match(/(?:业务简介|業務簡介)([\s\S]{40,2400}?)(?:基本资料|基本資料|全球发售|全球發售|时间表|時間表)/i);
+    businessSummary = m ? m[1].trim() : '';
+  }
+
+  return { industryL1, businessSummary, basicInfo };
+}
+
+function splitSentencesForIndustry(text = '') {
+  return String(text)
+    .split(/[。；;！!?？\n\r]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function detectBusinessSemantic({ code, summaryText = '', fallbackText = '', source = 'none' }) {
+  const srcText = String(summaryText || fallbackText || '');
+  const sentences = splitSentencesForIndustry(srcText);
+  const sourceBoost = source === 'etnet_summary' ? 0.12 : source === 'prospectus_business' ? 0.05 : 0;
+  const rejectedCandidates = [];
+  const candidates = [];
+
+  for (const rule of INDUSTRY_L2_PATTERNS) {
+    const matchedSignals = [];
+    const comboHits = [];
+    let signalScore = 0;
+
+    for (const sig of rule.strongSignals || []) {
+      for (const sentence of sentences) {
+        if (!sentence.includes(sig)) continue;
+        const hasNoise = INDUSTRY_NOISE_CONTEXT_TERMS.some(noise => sentence.includes(noise));
+        if (hasNoise) {
+          rejectedCandidates.push({
+            label: rule.label,
+            keyword: sig,
+            reason: 'noise_context_only',
+            context: sentence.slice(0, 120),
+          });
+          if (sig === '印刷') {
+            console.log(`[Industry][noise][reject] ${JSON.stringify({ code, keyword: sig, reason: 'noise_context_only', context: sentence.slice(0, 120) })}`);
+          }
+          continue;
+        }
+        matchedSignals.push(sig);
+        signalScore += 1;
+        break;
+      }
+    }
+
+    for (const combo of rule.comboRules || []) {
+      const comboMatchedSentence = sentences.find(s => combo.every(term => s.includes(term)));
+      if (comboMatchedSentence) {
+        comboHits.push(combo.join('+'));
+      }
+    }
+
+    const totalScore = signalScore + comboHits.length * 2;
+    const confidence = Math.min(0.97, totalScore / 12 + sourceBoost);
+    if (totalScore > 0) {
+      candidates.push({
+        ...rule,
+        totalScore,
+        matchedSignals: [...new Set(matchedSignals)],
+        comboHits,
+        confidence,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.totalScore - a.totalScore || b.confidence - a.confidence);
+  const chosen = candidates[0] || null;
+  const chosenEffective = chosen && chosen.confidence >= 0.58 ? chosen : null;
+
+  console.log(`[Industry][l2][detect] ${JSON.stringify({
+    code,
+    source,
+    topCandidates: candidates.slice(0, 3).map(c => ({
+      label: c.label,
+      score: c.totalScore,
+      matchedSignals: c.matchedSignals,
+      comboHits: c.comboHits,
+    })),
+    chosen: chosenEffective ? { label: chosenEffective.label, score: chosenEffective.totalScore, confidence: Number(chosenEffective.confidence.toFixed(2)) } : null,
+  })}`);
+
+  return {
+    chosen: chosenEffective,
+    candidates,
+    rejectedCandidates,
+    businessTags: chosenEffective ? [...new Set([...(chosenEffective.matchedSignals || []), ...((chosenEffective.comboHits || []).flatMap(x => x.split('+')))])] : [],
+  };
 }
 
 /**
@@ -4585,186 +4837,160 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     logDimensionFallback('lockup', 'exception');
   }
 
-  // ========== 5. 行业评分（基于炒作逻辑）==========
+  // ========== 5. 行业评分（L1=ETNet行业, L2=业务语义）==========
   logDimensionStart('industry');
   try {
   console.log(`\n[行业] ========== 开始 ==========`);
-
-  // 使用去空格版本搜索
-  const textNoSpaceForIndustry = text.replace(/\s+/g, '');
-  const industryMode = /INDUSTRYOVERVIEW|OURINDUSTRY|COMPETITIVELANDSCAPE|INDUSTRY/i.test(textNoSpaceForIndustry.slice(0, 300000)) ? 'english' : 'chinese';
-  console.log(`[industry][path] mode="${industryMode}"`);
-  const industrySection = extractSection(
-    textNoSpaceForIndustry,
-    [/行業概覽/i, /行业概览/i, /INDUSTRYOVERVIEW/i, /OURINDUSTRY/i, /COMPETITIVELANDSCAPE/i, /INDUSTRY/i, /業務/i, /业务/i, /BUSINESS/i],
-    [/監管/i, /监管/i, /董事/i, /REGULATORY/i, /DIRECTOR/i],
-    100000
-  );
-
-  console.log(`[行业] 行業概覽章节长度: ${industrySection?.length || 0}`);
-  console.log(`[industry][section] len=${industrySection?.length || 0}`);
-
-  const industrySearchText = (industrySection && industrySection.length > 500) ? industrySection : textNoSpaceForIndustry.slice(0, 250000);
-  const normalizedIndustryText = normalizeText(industrySearchText);
+  const codeForIndustry = formatStockCode(code);
 
   let industryScore = 0;
-  let industryReason = '中性赛道';
-  let industryDetails = '无明显偏好';
+  let industryReason = '⚪ 中性赛道';
+  let industryDetails = 'L2证据不足，按保守策略返回中性';
   let trackType = 'neutral';
   let matchedKeyword = null;
   let matchedContext = '';
+  let scoreRule = 'L2缺失或置信度不足，neutral(0)';
+  let sourceUsed = 'none';
+  let fellBackToNeutralBecauseL2Insufficient = false;
 
-  // 提取关键词上下文的辅助函数
-  const getContext = (keyword) => {
-    const idx = industrySearchText.indexOf(keyword);
-    if (idx !== -1) {
-      return industrySearchText.slice(Math.max(0, idx - 30), Math.min(industrySearchText.length, idx + keyword.length + 50)).replace(/\s+/g, ' ');
+  // L1: ETNet 基本资料中的行业
+  const etnetDetail = await fetchEtnetIpoDetail(codeForIndustry);
+  let industryL1 = etnetData?.industry || null;
+  let businessSummary = '';
+  let summaryQuality = 'missing';
+
+  if (etnetDetail.ok) {
+    try {
+      const parsed = extractEtnetIndustryAndSummary(etnetDetail.html);
+      industryL1 = parsed.industryL1 || industryL1;
+      businessSummary = parsed.businessSummary || '';
+      const summaryMeta = getSummaryQuality(businessSummary);
+      summaryQuality = summaryMeta.summaryQuality;
+      console.log(`[Industry][etnet][parsed] ${JSON.stringify({ code: codeForIndustry, industryL1, summaryLength: summaryMeta.summaryLength, summaryPreview: businessSummary.slice(0, 100) })}`);
+      console.log(`[Industry][etnet][summary_quality] ${JSON.stringify({ code: codeForIndustry, summaryLength: summaryMeta.summaryLength, summaryQuality })}`);
+    } catch (parseError) {
+      console.log(`[Industry][etnet][parse_error] ${JSON.stringify({ code: codeForIndustry, reason: parseError.message, htmlPreview: (etnetDetail.html || '').slice(0, 140) })}`);
     }
-    return '';
-  };
-
-  // ===== 行业识别引擎 v3（标题权重 + 关键词密度竞争）=====
-  //
-  // 为什么用竞争式评分而非"回避覆盖一切"：
-  //   半导体MCU公司招股书后段会提到"房地産"作为智能门锁的应用市场，
-  //   但该公司的MCU关键词出现次数远超"房地産"，竞争评分天然过滤此类噪声。
-  //   真正的房地产公司，其"房地産"/"物業管理"在行业概览开头高密度出现，
-  //   得分会远超任何正面赛道关键词，自然胜出。
-  //
-  // 算法：
-  //   1. 从章节标题提取行业名（"XXX行业/市场/产业"）→ 每次命中 ×5
-  //   2. 统计全文各类别关键词总频次 → 每次出现 ×1
-  //   3. 综合得分 = titleScore + kwScore，取最高分类别为主导行业
-
-  const escapeForRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // 计算关键词在文本中的出现次数（短英文词使用词边界匹配）
-  const countKw = (text, kw) => {
-    const escaped = escapeForRegex(kw);
-    if (/^[A-Za-z0-9]+$/.test(kw) && kw.length <= 5) {
-      // 短英文词：词边界匹配，避免"MCUS"误匹配"MCU"
-      const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`, 'gi');
-      return (text.match(re) || []).length;
-    }
-    const re = new RegExp(escaped, 'g');
-    return (text.match(re) || []).length;
-  };
-
-  // Step 1: 从标题提取行业名（匹配"XXX行业/行業/产业/產業/市场/市場"前缀词）
-  const TITLE_SUFFIX_RE = /([A-Za-z0-9\u4e00-\u9fa5]{2,20}?)(行業|行业|產業|产业|市場|市场)/g;
-  const extractedTitles = [];
-  let tm;
-  while ((tm = TITLE_SUFFIX_RE.exec(industrySearchText)) !== null) {
-    extractedTitles.push(tm[1]);
-  }
-  const uniqueTitles = [...new Set(extractedTitles)];
-  console.log(`[行业] 标题词(${uniqueTitles.length}个): ${uniqueTitles.slice(0, 8).join(' / ') || '无'}`);
-  console.log(`[industry][titleHits] ${JSON.stringify(uniqueTitles.slice(0, 20))}`);
-
-  // Step 2+3: 对每个行业类别计算综合得分
-  const industryRankings = INDUSTRY_DEFS.map(def => {
-    // 关键词频次统计（在原始文本 + 归一化文本中各查一遍，取最大值避免重复计算）
-    let kwCount = 0;
-    const matchedKws = [];
-    for (const kw of def.keywords) {
-      const cnt = Math.max(
-        countKw(industrySearchText, kw),
-        countKw(normalizedIndustryText, normalizeText(kw))
-      );
-      if (cnt > 0) {
-        kwCount += cnt;
-        matchedKws.push(`${kw}(${cnt})`);
-      }
-    }
-
-    // 标题匹配：提取的标题词中是否包含本类别的关键词
-    let titleCount = 0;
-    for (const titleWord of extractedTitles) {
-      const matched = def.keywords.some(kw =>
-        titleWord.includes(kw) ||
-        kw.includes(titleWord) ||
-        normalizeText(titleWord).includes(normalizeText(kw)) ||
-        normalizeText(kw).includes(normalizeText(titleWord))
-      );
-      if (matched) titleCount++;
-    }
-
-    const totalScore = titleCount * 5 + kwCount;
-    return { def, titleCount, kwCount, matchedKws, totalScore };
-  });
-
-  // 过滤零分，按综合得分降序，同分按priority降序
-  const ranked = industryRankings
-    .filter(r => r.totalScore > 0)
-    .sort((a, b) =>
-      b.totalScore !== a.totalScore
-        ? b.totalScore - a.totalScore
-        : b.def.priority - a.def.priority
-    );
-
-  // 日志：打印前5名
-  console.log(`[行业] 行业得分排名(前5):`);
-  ranked.slice(0, 5).forEach((r, i) => {
-    console.log(`  #${i + 1} ${r.def.name}: 总分=${r.totalScore}(标题×5=${r.titleCount * 5}, 关键词=${r.kwCount}), 匹配=[${r.matchedKws.slice(0, 4).join(', ')}]`);
-  });
-  console.log(`[industry][keywordHits] top=${JSON.stringify(ranked.slice(0, 5).map(r => ({ name: r.def.name, score: r.totalScore, keywords: r.matchedKws.slice(0, 3) })))}`);
-
-  // Step 4: 选出主导行业，写入评分变量
-  const winner = ranked.length > 0 ? ranked[0] : null;
-  if (winner) {
-    const d = winner.def;
-    industryScore = d.trackScore;
-    industryReason = d.trackReason;
-    industryDetails = d.trackDetails;
-    trackType = d.trackType;
-    // 取频次最高的关键词作为代表词
-    const topKwEntry = winner.matchedKws[0] || '';
-    matchedKeyword = topKwEntry.replace(/\(\d+\)$/, '');
-    matchedContext = getContext(matchedKeyword);
-    console.log(`[行业] ✓ 主导行业: ${d.name}, 总分=${winner.totalScore}, 赛道=${d.trackType}(${d.trackScore}分)`);
   } else {
-    console.log(`[行业] ✗ 未识别出明确行业，中性评分(0分)`);
-    logDimensionFallback('industry', 'noIndustryKeywordMatched');
+    console.log(`[Industry][etnet][parse_error] ${JSON.stringify({ code: codeForIndustry, reason: 'fetch_failed', htmlPreview: '' })}`);
   }
 
-  console.log(`[行业] 结果: score=${industryScore}, track=${trackType}, keyword=${matchedKeyword || '无'}`);
+  // 招股书业务章节 / 弱fallback（仅行业维度使用）
+  const prospectusBusinessSection = extractSection(
+    text,
+    [/行業概覽/i, /行业概览/i, /INDUSTRY\s*OVERVIEW/i, /業務/i, /业务/i, /\bBUSINESS\b/i, /概要/i, /概覽/i, /\bOVERVIEW\b/i],
+    [/監管/i, /监管/i, /風險因素/i, /风险因素/i, /董事/i, /REGULATORY/i, /RISK\s*FACTORS/i, /DIRECTOR/i],
+    90000
+  );
+  const prospectusFallbackWeak = text.slice(0, 70000);
 
-  // 构造结构化证据（供前端展示与调试）
-  const industryCategory = winner ? winner.def.name : '未识别';
-  const matchedKeywords = winner ? winner.matchedKws : [];
-  const confidenceScore = winner ? winner.totalScore : 0;
-  const titleMatchCount = winner ? winner.titleCount : 0;
+  const sourcePriority = summaryQuality === 'high'
+    ? ['etnet_summary', 'prospectus_business', 'prospectus_fallback_weak']
+    : ['prospectus_business', 'prospectus_fallback_weak', 'etnet_summary'];
+
+  let chosenSource = 'none';
+  let chosenReason = 'no_valid_input';
+  let l2DetectResult = { chosen: null, candidates: [], rejectedCandidates: [], businessTags: [] };
+
+  for (const source of sourcePriority) {
+    const sourceText = source === 'etnet_summary'
+      ? businessSummary
+      : source === 'prospectus_business'
+        ? prospectusBusinessSection
+        : prospectusFallbackWeak;
+    if (!sourceText || sourceText.replace(/\s+/g, '').length < 40) continue;
+    const detectResult = detectBusinessSemantic({
+      code: codeForIndustry,
+      summaryText: sourceText,
+      source,
+    });
+    if (detectResult.chosen) {
+      l2DetectResult = detectResult;
+      chosenSource = source;
+      chosenReason = detectResult.chosen.comboHits.length > 0 ? 'combo_match_in_summary' : 'strong_signal_match';
+      break;
+    }
+    if (chosenSource === 'none') {
+      l2DetectResult = detectResult;
+      chosenSource = source;
+      chosenReason = 'no_candidate_above_threshold';
+    }
+  }
+
+  console.log(`[Industry][source_select] ${JSON.stringify({
+    code: codeForIndustry,
+    summaryQuality,
+    sourcePriority,
+    chosenSource,
+    chosenReason,
+  })}`);
+
+  const chosenL2 = l2DetectResult.chosen;
+  if (chosenL2) {
+    industryScore = chosenL2.score;
+    trackType = chosenL2.track;
+    sourceUsed = chosenSource;
+    const reasonMap = { hot: '🔥 热门赛道', growth: '📈 成长赛道', neutral: '⚪ 中性赛道', low: '📉 低弹性赛道', avoid: '❌ 资金回避' };
+    industryReason = reasonMap[trackType] || '⚪ 中性赛道';
+    industryDetails = `L2语义命中: ${chosenL2.label}`;
+    matchedKeyword = chosenL2.matchedSignals?.[0] || null;
+    if (matchedKeyword) {
+      const sourceText = chosenSource === 'etnet_summary'
+        ? businessSummary
+        : chosenSource === 'prospectus_business'
+          ? prospectusBusinessSection
+          : prospectusFallbackWeak;
+      const idx = sourceText.indexOf(matchedKeyword);
+      matchedContext = idx >= 0 ? sourceText.slice(Math.max(0, idx - 30), Math.min(sourceText.length, idx + matchedKeyword.length + 60)).replace(/\s+/g, ' ') : '';
+    }
+    scoreRule = `L2(${chosenL2.label})命中，source=${chosenSource}，confidence=${chosenL2.confidence.toFixed(2)}`;
+  } else {
+    fellBackToNeutralBecauseL2Insufficient = true;
+    chosenSource = chosenSource === 'none' ? 'none' : chosenSource;
+    sourceUsed = chosenSource;
+    chosenReason = chosenReason === 'no_valid_input' ? 'l2_missing' : 'l2_confidence_insufficient';
+  }
 
   const industryEvidence = {
-    section: industrySection ? '行業概覽/業務章节' : '招股书前250000字',
-    sectionLength: industrySearchText.length,
-    companyIndustry: etnetData?.industry || null,
-    // v3新增字段
-    industryCategory,           // 归一化后的标准行业名称
-    matchedKeywords,            // 贡献得分的关键词列表（格式："词(次数)"）
-    confidenceScore,            // 综合置信度得分（titleMatches×5 + kwCount×1）
-    titleMatchCount,            // 标题命中次数
-    // 兼容旧字段
+    sourcePriority: ['etnet_industry', 'etnet_summary', 'prospectus_business', 'prospectus_fallback'],
+    chosenSource,
+    chosenReason,
     matchedKeyword,
     matchedContext,
-    trackCategories: {
-      hot: 'AI/机器人/自动驾驶/半导体/创新药/低空经济（+2分）',
-      growth: '医疗器械/新能源/SaaS/软件服务/新消费（+1分）',
-      neutral: '无明显偏好（0分）',
-      low: '传统消费/制造/公用事业/物流（-1分）',
-      avoid: '物管/房地产/小贷/教培/纺织/博彩（-2分）',
+    scoreRule,
+    industry: {
+      level1: {
+        value: industryL1 || null,
+        source: industryL1 ? 'etnet' : 'none',
+        confidence: industryL1 ? 1 : 0,
+      },
+      level2: {
+        value: chosenL2?.label || null,
+        source: chosenL2 ? chosenSource : 'none',
+        confidence: chosenL2 ? Number(chosenL2.confidence.toFixed(2)) : 0,
+      },
+      businessTags: l2DetectResult.businessTags || [],
+      businessSummary: businessSummary || '',
+      summaryQuality,
     },
-    scoreRule: winner
-      ? `主导行业"${industryCategory}"，置信度=${confidenceScore}（标题命中×5=${titleMatchCount * 5}，关键词总频次=${winner.kwCount}）`
-      : '未匹配到任何行业关键词',
-    // 全行业排名（调试用，前5名）
-    industryRankTop5: ranked.slice(0, 5).map(r => ({
-      name: r.def.name,
-      score: r.totalScore,
-      titleScore: r.titleCount * 5,
-      kwScore: r.kwCount,
-      topKeywords: r.matchedKws.slice(0, 3),
+    rejectedCandidates: (l2DetectResult.rejectedCandidates || []).slice(0, 10),
+    l2TopCandidates: (l2DetectResult.candidates || []).slice(0, 5).map(c => ({
+      label: c.label,
+      score: c.totalScore,
+      matchedSignals: c.matchedSignals,
+      comboHits: c.comboHits,
+      confidence: Number(c.confidence.toFixed(2)),
     })),
+    etnet: {
+      triedCodes: etnetDetail.triedCodes || [],
+      url: etnetDetail.url || '',
+      ok: !!etnetDetail.ok,
+      status: etnetDetail.status,
+    },
+    prospectus: {
+      businessSectionLength: prospectusBusinessSection?.length || 0,
+      fallbackWeakLength: prospectusFallbackWeak?.length || 0,
+    },
   };
 
   scores.industry = {
@@ -4772,8 +4998,23 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     reason: industryReason,
     details: industryDetails,
     track: trackType,
+    matchedKeyword,
+    matchedContext,
+    scoreRule,
+    industry: industryEvidence.industry,
     evidence: industryEvidence,
   };
+
+  console.log(`[Industry][final] ${JSON.stringify({
+    code: codeForIndustry,
+    level1: industryEvidence.industry.level1.value,
+    level2: industryEvidence.industry.level2.value,
+    track: trackType,
+    score: industryScore,
+    sourceUsed: sourceUsed || chosenSource,
+    confidence: industryEvidence.industry.level2.confidence,
+    fellBackToNeutralBecauseL2Insufficient,
+  })}`);
 
   logDimensionSuccess('industry', scores.industry);
   } catch (error) {
