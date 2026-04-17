@@ -386,22 +386,11 @@ const FALLBACK_SPONSORS  = {
 
 /**
  * 获取所有保荐人数据
- * 合并JSON数据和FALLBACK数据，JSON数据优先
+ * 当前策略：保荐人维度统一使用 server.js 内置的 FALLBACK_SPONSORS 基准数据
+ * 说明：为保证线上评分一致性，不再让外部 sponsors.json 覆盖该维度的数据。
  */
 function getAllSponsors() {
-  const jsonData = loadSponsorsFromJSON();
-
-  // 合并：FALLBACK为基础，JSON数据覆盖
-  const merged = { ...FALLBACK_SPONSORS };
-
-  if (jsonData) {
-    // JSON数据覆盖FALLBACK中的同名保荐人
-    for (const [name, data] of Object.entries(jsonData)) {
-      merged[name] = data;
-    }
-  }
-
-  return merged;
+  return { ...FALLBACK_SPONSORS };
 }
 
 // ==================== 行业识别引擎 v3（标题权重 + 关键词密度）====================
@@ -5303,7 +5292,7 @@ app.get('/api/sponsors', (req, res) => {
   const sponsors = getAllSponsors();
   res.json({
     count: Object.keys(sponsors).length,
-    source: fs.existsSync(SPONSORS_JSON) ? 'json' : 'fallback',
+    source: 'fallback_server_constant',
     data: sponsors,
   });
 });
@@ -6715,7 +6704,7 @@ app.listen(PORT, () => {
   console.log(`📍 服务地址: http://localhost:${PORT}`);
   console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
   console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
-  console.log(`📂 数据来源: ${fs.existsSync(SPONSORS_JSON) ? 'JSON文件' : '内置数据'}`);
+  console.log(`📂 数据来源: server.js 内置 FALLBACK_SPONSORS`);
   console.log(`${'─'.repeat(60)}`);
   console.log(`v3.0 新功能:`);
   console.log(`  ✨ 评分详情展示: 显示判断依据和匹配上下文`);
