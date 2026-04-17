@@ -3068,6 +3068,7 @@ function extractOfferPriceFromText(text) {
  */
 async function scoreProspectus(rawText, stockCode, context = {}) {
   const requestId = context.requestId || 'no-request-id';
+  const prospectusName = String(context.prospectusName || '').trim();
   const text = rawText;
   const normalizedText = normalizeText(rawText);
   const SPONSORS = getAllSponsors();
@@ -5298,12 +5299,38 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return acc;
   }, {});
 
+  const firstNonEmpty = (...values) => {
+    for (const value of values) {
+      const textValue = String(value ?? '').trim();
+      if (textValue && textValue !== '--' && textValue !== '-') return textValue;
+    }
+    return null;
+  };
+
+  const companyName = firstNonEmpty(
+    etnetParsedDetail?.basicInfo?.['公司名稱'],
+    etnetParsedDetail?.basicInfo?.['公司名称'],
+    etnetParsedDetail?.basicInfo?.['名稱'],
+    etnetParsedDetail?.basicInfo?.['名称'],
+    etnetParsedDetail?.basicInfo?.['股份名稱'],
+    etnetParsedDetail?.basicInfo?.['股份名称'],
+    prospectusName,
+  );
+  const proceedsUse = firstNonEmpty(
+    etnetParsedDetail?.globalOfferingInfo?.proceedsUse,
+    etnetParsedDetail?.basicInfo?.['售股所得款項用途'],
+    etnetParsedDetail?.basicInfo?.['售股所得款项用途'],
+    etnetData?.proceedsUse,
+  );
+
   console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
   console.log(`[评分] 各维度(对外5维): 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score}`);
   console.log(`[评分] 扩展维度(暂不对外): PE${scores.pe.score} 募资${scores.ipoSize.score}`);
 
   const result = {
     stockCode:   formatStockCode(stockCode),
+    name: companyName,
+    companyName,
     totalScore: Number.isFinite(totalScore) ? totalScore : 0,
     rating: rating || defaultRating,
     scores: publicScores,
@@ -5314,10 +5341,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     offerPrice: etnetParsedDetail?.globalOfferingInfo?.offerPrice || etnetData?.offerPrice || null,
     sponsors: normalizeSponsorNameList(etnetParsedDetail?.globalOfferingInfo?.sponsors || etnetData?.sponsors || []),
     underwriters: etnetParsedDetail?.globalOfferingInfo?.underwriters || etnetData?.underwriters || null,
-    proceedsUse: etnetParsedDetail?.globalOfferingInfo?.proceedsUse || etnetData?.proceedsUse || null,
+    proceedsUse,
+    greenShoe: hasGreenShoe,
     // 展示项（不计入总分）
     display: {
       hasGreenShoe,
+      greenShoe:            hasGreenShoe,
+      name:                 companyName,
+      companyName,
       subscriptionMultiple: etnetData?.subscriptionMultiple || null,
       listingDate:          etnetData?.listingDate || null,
       industry:             etnetParsedDetail?.industryL1 || etnetData?.industry || null,
@@ -5327,7 +5358,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       offerPrice:           etnetParsedDetail?.globalOfferingInfo?.offerPrice || etnetData?.offerPrice || null,
       sponsors:             normalizeSponsorNameList(etnetParsedDetail?.globalOfferingInfo?.sponsors || etnetData?.sponsors || []),
       underwriters:         etnetParsedDetail?.globalOfferingInfo?.underwriters || etnetData?.underwriters || null,
-      proceedsUse:          etnetParsedDetail?.globalOfferingInfo?.proceedsUse || etnetData?.proceedsUse || null,
+      proceedsUse,
     },
     _version: 'v5',
   };
@@ -5612,7 +5643,10 @@ app.get('/api/score/:code', async (req, res) => {
     // 评分
     console.log(`[scorePipeline][input] requestId=${requestId} stockCode=${formatStockCode(code)} rawTextLength=${pdfText?.length || 0}`);
     markStageStart('each dimension');
-    const scoreResultRaw = await scoreProspectus(pdfText, code, { requestId });
+    const scoreResultRaw = await scoreProspectus(pdfText, code, {
+      requestId,
+      prospectusName: prospectusInfo?.name || null,
+    });
     markStageEnd('each dimension');
     const scoreResultKeys = Object.keys(scoreResultRaw || {});
     console.log(`[scorePipeline][scoreProspectusReturn] requestId=${requestId} stockCode=${formatStockCode(code)} keys=[${scoreResultKeys.join(', ')}]`);
