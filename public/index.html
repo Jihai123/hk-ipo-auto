@@ -761,7 +761,7 @@
     /* Total score area */
     .total-score {
       text-align: center;
-      padding: 48px 32px;
+      padding: 26px 24px 22px;
       background: linear-gradient(135deg, #4f46e5 0%, #6366f1 40%, #8b5cf6 100%);
       color: #fff;
       position: relative;
@@ -793,27 +793,27 @@
     }
 
     .stock-info {
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       position: relative;
       z-index: 1;
     }
 
     .stock-name {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 700;
       margin-bottom: 4px;
     }
 
     .stock-code {
-      font-size: 14px;
-      opacity: 0.7;
+      font-size: 13px;
+      opacity: 0.82;
     }
 
     .score-display {
-      font-size: 72px;
+      font-size: 52px;
       font-weight: 900;
-      margin: 16px 0;
-      letter-spacing: -3px;
+      margin: 6px 0 10px;
+      letter-spacing: -2px;
       position: relative;
       z-index: 1;
     }
@@ -824,9 +824,9 @@
 
     .rating-badge {
       display: inline-block;
-      padding: 8px 28px;
+      padding: 5px 14px;
       border-radius: var(--radius-full);
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 700;
       position: relative;
       z-index: 1;
@@ -837,6 +837,66 @@
     .rating-consider { background: rgba(245, 158, 11, 0.25); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.3); }
     .rating-caution { background: rgba(249, 115, 22, 0.25); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.3); }
     .rating-avoid { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .company-basic-info {
+      margin: 14px 20px 4px;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+    }
+
+    .basic-info-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin-bottom: 10px;
+    }
+
+    .basic-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+    }
+
+    .basic-info-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .basic-info-row.full {
+      grid-column: 1 / -1;
+    }
+
+    .basic-info-label {
+      color: var(--color-text-muted);
+      min-width: 96px;
+      flex-shrink: 0;
+    }
+
+    .basic-info-value {
+      color: var(--color-text-primary);
+      word-break: break-word;
+    }
+
+    .basic-collapsible {
+      cursor: pointer;
+      color: var(--color-text-primary);
+    }
+
+    .basic-collapsible-toggle {
+      border: none;
+      background: transparent;
+      color: var(--color-accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 6px;
+    }
 
     /* Score details */
     .score-details {
@@ -1695,6 +1755,18 @@
         font-size: 56px;
       }
 
+      .total-score {
+        padding: 24px 18px 20px;
+      }
+
+      .company-basic-info {
+        margin: 14px 14px 4px;
+      }
+
+      .basic-info-grid {
+        grid-template-columns: 1fr;
+      }
+
       .score-item-header {
         flex-direction: column;
         gap: 12px;
@@ -2225,6 +2297,8 @@
         <div id="ratingBadge" class="rating-badge">-</div>
       </div>
 
+      <div class="company-basic-info" id="companyBasicInfo"></div>
+
       <div class="score-details" id="scoreDetails">
         <!-- Dynamic -->
       </div>
@@ -2619,16 +2693,23 @@
 
     // Display result
     function displayResult(data) {
-      document.getElementById('stockName').textContent = data.prospectus?.name || '-';
-      document.getElementById('stockCodeDisplay').textContent = `股票代码: ${data.stockCode}`;
+      const fallbackCode = String(data.stockCode || '').trim() || '--';
+      const companyName = pickDisplayCompanyName(data);
+      const displayHeadline = companyName && companyName !== '--'
+        ? (companyName === fallbackCode ? companyName : `${companyName}（${fallbackCode}）`)
+        : fallbackCode;
+      document.getElementById('stockName').textContent = displayHeadline;
+      document.getElementById('stockCodeDisplay').textContent = `股票代码：${fallbackCode}`;
 
       const totalScoreEl = document.getElementById('totalScore');
       totalScoreEl.textContent = data.totalScore > 0 ? `+${data.totalScore}` : data.totalScore;
       totalScoreEl.className = 'score-display ' + getScoreClass(data.totalScore);
 
       const ratingBadge = document.getElementById('ratingBadge');
-      ratingBadge.textContent = data.rating;
-      ratingBadge.className = 'rating-badge ' + getRatingClass(data.rating);
+      ratingBadge.textContent = '综合评分';
+      ratingBadge.className = 'rating-badge rating-consider';
+
+      renderCompanyBasicInfo(data);
 
       const detailsHtml = generateScoreDetails(data.scores);
       document.getElementById('scoreDetails').innerHTML = detailsHtml;
@@ -2683,6 +2764,73 @@
       document.getElementById('prospectusLinks').innerHTML = linksHtml;
 
       showResult();
+    }
+
+    function pickDisplayCompanyName(data) {
+      const candidates = [
+        data?.name,
+        data?.companyName,
+        data?.title,
+        data?.prospectus?.name,
+        data?.code,
+        data?.stockCode
+      ];
+      for (const item of candidates) {
+        const v = String(item || '').trim();
+        if (v && v !== '-') return v;
+      }
+      return '--';
+    }
+
+    function renderCompanyBasicInfo(data) {
+      const display = data?.display || {};
+      const valueOf = (...vals) => {
+        for (const v of vals) {
+          const text = String(v ?? '').trim();
+          if (text) return text;
+        }
+        return '--';
+      };
+      const asList = (v) => Array.isArray(v) ? v.filter(Boolean).join('、') : String(v || '').trim();
+
+      const industry = valueOf(data?.industry, data?.level1, display?.industry, display?.level1);
+      const businessSummary = valueOf(data?.businessSummary, display?.businessSummary);
+      const offerShares = valueOf(data?.offerShares, display?.offerShares);
+      const offerPrice = valueOf(data?.offerPrice, display?.offerPrice);
+      const sponsors = valueOf(asList(data?.sponsors), asList(display?.sponsors));
+      const underwriters = valueOf(data?.underwriters, display?.underwriters);
+      const proceedsUse = valueOf(data?.proceedsUse, display?.proceedsUse);
+
+      const cardEl = document.getElementById('companyBasicInfo');
+      cardEl.innerHTML = `
+        <div class="basic-info-title">公司基本信息</div>
+        <div class="basic-info-grid">
+          ${buildBasicInfoRow('所属行业', industry)}
+          ${buildBasicInfoRow('发售股份数目', offerShares)}
+          ${buildBasicInfoRow('发售价', offerPrice)}
+          ${buildBasicInfoRow('保荐人', sponsors)}
+          ${buildBasicInfoRow('承销商', underwriters)}
+          ${buildBasicInfoRow('公司简介（业务简介）', businessSummary, true)}
+          ${buildBasicInfoRow('售股所得款项用途', proceedsUse, true)}
+        </div>
+      `;
+    }
+
+    function buildBasicInfoRow(label, value, collapsible = false) {
+      const safeValue = escapeHtml(value || '--');
+      if (!collapsible || safeValue.length <= 160) {
+        return `<div class="basic-info-row ${collapsible ? 'full' : ''}"><span class="basic-info-label">${escapeHtml(label)}：</span><span class="basic-info-value">${safeValue}</span></div>`;
+      }
+      const preview = `${safeValue.slice(0, 160)}...`;
+      const previewEncoded = encodeURIComponent(preview);
+      const fullEncoded = encodeURIComponent(safeValue);
+      return `
+        <div class="basic-info-row full">
+          <span class="basic-info-label">${escapeHtml(label)}：</span>
+          <span class="basic-info-value basic-collapsible" data-preview="${previewEncoded}" data-full="${fullEncoded}" data-expanded="false">${decodeURIComponent(previewEncoded)}</span>
+          <button class="basic-collapsible-toggle" onclick="toggleBasicText(this, event)">展开</button>
+        </div>
+      `;
     }
 
     // Generate score details HTML
@@ -2876,13 +3024,6 @@
         const level1Value = industryInfo.level1?.value || '--';
         const level2Value = (industryInfo.level2?.value || '').trim();
         const hasLevel2 = Boolean(level2Value);
-        const businessSummaryRaw = (industryInfo.businessSummary || '').trim();
-        const summaryText = businessSummaryRaw || '暂无数据';
-        const summaryBrief = buildIndustryBrief(summaryText, 28, 40);
-        const summaryPreview = buildIndustrySummaryPreview(summaryText, 140);
-        const summaryPreviewHtml = formatIndustrySummaryText(summaryPreview);
-        const summaryPreviewEncoded = encodeURIComponent(summaryPreview);
-        const summaryFullEncoded = encodeURIComponent(summaryText);
 
         html += `<div class="industry-detail-row"><span class="label">行业赛道:</span> <span class="value">${escapeHtml(trackValue)}</span></div>`;
 
@@ -2894,13 +3035,11 @@
 
         html += `<div class="industry-detail-row"><span class="label">所属行业:</span> <span class="industry-sector-badge">${escapeHtml(level1Value)}</span></div>`;
 
-        html += `<div class="industry-summary-block"><span class="label">公司介绍摘要:</span>`;
-        html += `<div class="industry-summary-text industry-summary-brief">${formatIndustrySummaryText(summaryBrief)}</div></div>`;
-
-        html += `<div class="industry-summary-block"><span class="label">公司介绍:</span>`;
-        html += `<div class="industry-summary-text is-collapsed" data-preview="${summaryPreviewEncoded}" data-full="${summaryFullEncoded}" data-expanded="false">${summaryPreviewHtml}</div></div>`;
-        if (summaryText.length > summaryPreview.length) {
-          html += `<button class="industry-summary-toggle" onclick="toggleBusinessSummary(this, event)">展开全文 ↓</button>`;
+        if (ev.matchedKeyword) {
+          html += `<div class="industry-detail-row"><span class="label">关键词证据:</span> <span class="value">${escapeHtml(ev.matchedKeyword)}</span></div>`;
+        }
+        if (ev.matchedContext) {
+          html += `<div class="context">"...${escapeHtml(String(ev.matchedContext).slice(0, 180))}..."</div>`;
         }
       }
 
@@ -2913,18 +3052,16 @@
       element.classList.toggle('expanded');
     }
 
-    function toggleBusinessSummary(button, event) {
+    function toggleBasicText(button, event) {
       if (event) event.stopPropagation();
-      const summaryWrap = button.previousElementSibling;
-      const summaryEl = summaryWrap?.querySelector('.industry-summary-text');
+      const summaryEl = button.previousElementSibling;
       if (!summaryEl) return;
       const isExpanded = summaryEl.dataset.expanded === 'true';
       const previewText = decodeURIComponent(summaryEl.dataset.preview || '');
       const fullText = decodeURIComponent(summaryEl.dataset.full || '');
-      summaryEl.innerHTML = isExpanded ? formatIndustrySummaryText(previewText) : formatIndustrySummaryText(fullText);
+      summaryEl.innerHTML = isExpanded ? previewText : fullText;
       summaryEl.dataset.expanded = isExpanded ? 'false' : 'true';
-      summaryEl.classList.toggle('is-collapsed', isExpanded);
-      button.textContent = isExpanded ? '展开全文 ↓' : '收起 ↑';
+      button.textContent = isExpanded ? '展开' : '收起';
     }
 
     function buildIndustrySummaryPreview(text, maxLength = 150) {
