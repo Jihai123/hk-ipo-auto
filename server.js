@@ -1100,10 +1100,11 @@ async function fetchEtnetIpoDetail(code) {
 
 function extractEtnetIndustryAndSummary(html) {
   if (!html || typeof html !== 'string') {
-    return { industryL1: null, businessSummary: '', basicInfo: {} };
+    return { industryL1: null, businessSummary: '', basicInfo: {}, globalOfferingInfo: {} };
   }
   const $ = cheerio.load(html);
   const basicInfo = {};
+  const globalOfferingInfo = {};
 
   const basicHeader = $('div.ipoColumn').filter((_, el) => $(el).text().replace(/\s+/g, '').includes('基本资料')).first();
   const basicTable = basicHeader.length ? basicHeader.nextAll('table.figureTable').first() : $('table.figureTable').first();
@@ -1114,6 +1115,31 @@ function extractEtnetIndustryAndSummary(html) {
     const key = $(tds[0]).text().replace(/\s+/g, '');
     const val = $(tds[1]).text().replace(/\s+/g, ' ').trim();
     if (key && val) basicInfo[key] = val;
+  });
+
+  const GLOBAL_OFFERING_KEY_MAP = [
+    { normalized: ['保荐人', '保薦人'], target: 'sponsors' },
+    { normalized: ['承销商', '承銷商'], target: 'underwriters' },
+    { normalized: ['发售股份数目', '發售股份數目', '发售股份數目', '發售股份数目'], target: 'offerShares' },
+    { normalized: ['发售价', '發售價'], target: 'offerPrice' },
+    { normalized: ['售股所得款项用途', '售股所得款項用途'], target: 'proceedsUse' },
+  ];
+
+  $('table').each((_, table) => {
+    $(table).find('tr').each((__, tr) => {
+      const tds = $(tr).find('td');
+      if (tds.length < 2) return;
+      const keyRaw = $(tds[0]).text().replace(/\s+/g, '').trim();
+      const valueRaw = $(tds[1]).text().replace(/\s+/g, ' ').trim();
+      if (!keyRaw || !valueRaw) return;
+      const key = keyRaw.replace(/[:：]/g, '');
+      for (const item of GLOBAL_OFFERING_KEY_MAP) {
+        if (!item.normalized.includes(key)) continue;
+        if (!globalOfferingInfo[item.target]) {
+          globalOfferingInfo[item.target] = valueRaw;
+        }
+      }
+    });
   });
 
   const industryL1 = basicInfo['行业'] || basicInfo['行業'] || null;
@@ -1142,7 +1168,7 @@ function extractEtnetIndustryAndSummary(html) {
     businessSummary = m ? m[1].trim() : '';
   }
 
-  return { industryL1, businessSummary, basicInfo };
+  return { industryL1, businessSummary, basicInfo, globalOfferingInfo };
 }
 
 function splitSentencesForIndustry(text = '') {
@@ -1150,6 +1176,15 @@ function splitSentencesForIndustry(text = '') {
     .split(/[。；;！!?？\n\r]+/)
     .map(s => s.trim())
     .filter(Boolean);
+}
+
+function normalizeSponsorNameList(values = []) {
+  const rawItems = Array.isArray(values) ? values : [values];
+  const splitPattern = /(?:、|，|,|；|;|\/|及|和|\band\b)/i;
+  return [...new Set(rawItems
+    .flatMap(item => String(item || '').split(splitPattern))
+    .map(item => item.replace(/\s+/g, ' ').trim())
+    .filter(Boolean))];
 }
 
 function detectBusinessSemantic({ code, summaryText = '', fallbackText = '', source = 'none' }) {
@@ -3082,6 +3117,18 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
     console.warn(`[etnet] 数据获取异常: ${e.message}，降级为PDF提取`);
   }
 
+  const codeForEtnetDetail = formatStockCode(stockCode);
+  let etnetDetail = { ok: false, html: '', triedCodes: [], url: null, status: null };
+  let etnetParsedDetail = { industryL1: null, businessSummary: '', basicInfo: {}, globalOfferingInfo: {} };
+  try {
+    etnetDetail = await fetchEtnetIpoDetail(codeForEtnetDetail);
+    if (etnetDetail.ok) {
+      etnetParsedDetail = extractEtnetIndustryAndSummary(etnetDetail.html);
+    }
+  } catch (e) {
+    console.warn(`[etnet][detail] 详情抓取/解析失败: ${e.message}`);
+  }
+
   // ── V5：绿鞋检测（展示项，不计分）──
   const greenShoeKeywords = [
     '超額配股權', '超额配股权', '穩定價格操作', '稳定价格操作',
@@ -3657,6 +3704,45 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
     logDimensionFallback('sponsor', 'noEnglishSponsorBlockMatched');
   }
 
+  const prospectusSponsors = normalizeSponsorNameList(extractedSponsors);
+  const etnetSponsors = normalizeSponsorNameList(
+    etnetParsedDetail?.globalOfferingInfo?.sponsors || etnetData?.sponsors || []
+  );
+  let chosenSponsorSource = 'none';
+  let selectedSponsors = [];
+  if (etnetSponsors.length > 0) {
+    chosenSponsorSource = 'etnet';
+    selectedSponsors = etnetSponsors;
+  } else if (prospectusSponsors.length > 0) {
+    chosenSponsorSource = 'prospectus';
+    selectedSponsors = prospectusSponsors;
+  }
+
+  if (etnetSponsors.length > 0 && prospectusSponsors.length > 0) {
+    const etnetSet = new Set(etnetSponsors.map(n => normalizeText(n)));
+    const prospectusSet = new Set(prospectusSponsors.map(n => normalizeText(n)));
+    const isSame = etnetSet.size === prospectusSet.size && [...etnetSet].every(n => prospectusSet.has(n));
+    if (!isSame) {
+      console.warn(`[Sponsor][source_mismatch] ${JSON.stringify({
+        code: formatStockCode(stockCode),
+        etnetSponsors,
+        prospectusSponsors,
+      })}`);
+    }
+  }
+
+  console.log(`[Sponsor][source_select] ${JSON.stringify({
+    code: formatStockCode(stockCode),
+    etnetSponsors,
+    prospectusSponsors,
+    chosenSource: chosenSponsorSource,
+    chosenSponsors: selectedSponsors,
+  })}`);
+
+  if (chosenSponsorSource === 'etnet') {
+    extractedSponsors = selectedSponsors;
+  }
+
   const searchTextForSponsor = sponsorSection || textNoSpaceForSponsor.slice(0, 120000);
   const foundSponsors = [];
 
@@ -3723,8 +3809,11 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
   }
 
   const sponsorEvidence = {
+    source: chosenSponsorSource,
     section: sponsorSectionTitle || '參與全球發售的各方章节',
-    extractedFromText: extractedSponsors, // 直接从文本提取的保荐人名称
+    extractedFromText: prospectusSponsors, // 招股书直接提取的保荐人名称（候选）
+    backupCandidates: prospectusSponsors,
+    etnetSponsors,
     matchedCount: foundSponsors.length,
     allMatched: foundSponsors.map(s => ({
       extractedName: s.extractedName,
@@ -4856,10 +4945,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
   let fellBackToNeutralBecauseL2Insufficient = false;
 
   // L1: ETNet 基本资料中的行业
-  industryStage = 'before_etnet_fetch';
-  console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
-  const etnetDetail = await fetchEtnetIpoDetail(codeForIndustry);
-  industryStage = 'after_etnet_fetch';
+  industryStage = 'use_cached_etnet_detail';
   console.log(`[Industry][stage] ${JSON.stringify({ code: codeForIndustry, stage: industryStage })}`);
   let industryL1 = etnetData?.industry || null;
   let businessSummary = '';
@@ -4867,7 +4953,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
 
   if (etnetDetail.ok) {
     try {
-      const parsed = extractEtnetIndustryAndSummary(etnetDetail.html);
+      const parsed = etnetParsedDetail;
       industryL1 = parsed.industryL1 || industryL1;
       businessSummary = parsed.businessSummary || '';
       const summaryMeta = getSummaryQuality(businessSummary);
@@ -5221,12 +5307,27 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     totalScore: Number.isFinite(totalScore) ? totalScore : 0,
     rating: rating || defaultRating,
     scores: publicScores,
+    industry: etnetParsedDetail?.industryL1 || etnetData?.industry || null,
+    level1: etnetParsedDetail?.industryL1 || etnetData?.industry || null,
+    businessSummary: etnetParsedDetail?.businessSummary || null,
+    offerShares: etnetParsedDetail?.globalOfferingInfo?.offerShares || etnetData?.offerShares || null,
+    offerPrice: etnetParsedDetail?.globalOfferingInfo?.offerPrice || etnetData?.offerPrice || null,
+    sponsors: normalizeSponsorNameList(etnetParsedDetail?.globalOfferingInfo?.sponsors || etnetData?.sponsors || []),
+    underwriters: etnetParsedDetail?.globalOfferingInfo?.underwriters || etnetData?.underwriters || null,
+    proceedsUse: etnetParsedDetail?.globalOfferingInfo?.proceedsUse || etnetData?.proceedsUse || null,
     // 展示项（不计入总分）
     display: {
       hasGreenShoe,
       subscriptionMultiple: etnetData?.subscriptionMultiple || null,
       listingDate:          etnetData?.listingDate || null,
-      industry:             etnetData?.industry || null,
+      industry:             etnetParsedDetail?.industryL1 || etnetData?.industry || null,
+      level1:               etnetParsedDetail?.industryL1 || etnetData?.industry || null,
+      businessSummary:      etnetParsedDetail?.businessSummary || null,
+      offerShares:          etnetParsedDetail?.globalOfferingInfo?.offerShares || etnetData?.offerShares || null,
+      offerPrice:           etnetParsedDetail?.globalOfferingInfo?.offerPrice || etnetData?.offerPrice || null,
+      sponsors:             normalizeSponsorNameList(etnetParsedDetail?.globalOfferingInfo?.sponsors || etnetData?.sponsors || []),
+      underwriters:         etnetParsedDetail?.globalOfferingInfo?.underwriters || etnetData?.underwriters || null,
+      proceedsUse:          etnetParsedDetail?.globalOfferingInfo?.proceedsUse || etnetData?.proceedsUse || null,
     },
     _version: 'v5',
   };
