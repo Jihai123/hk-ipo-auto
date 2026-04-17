@@ -145,6 +145,7 @@ const CACHE_DIR = path.join(__dirname, 'cache');
 const DATA_DIR = path.join(__dirname, 'data');
 const SPONSORS_JSON = path.join(DATA_DIR, 'sponsors.json');
 const IPO_SPONSORS_JSON = path.join(DATA_DIR, 'ipo-sponsors.json');
+const SPONSOR_ALIAS_MAP_JSON = path.join(DATA_DIR, 'sponsor-alias-map.json');
 
 // 确保目录存在
 [CACHE_DIR, DATA_DIR].forEach(dir => {
@@ -164,14 +165,20 @@ function loadSponsorsFromJSON() {
   if (fs.existsSync(SPONSORS_JSON)) {
     try {
       const data = JSON.parse(fs.readFileSync(SPONSORS_JSON, 'utf-8'));
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        console.log(`[数据] 从JSON加载 ${Object.keys(data).length} 个保荐人`);
+        return data;
+      }
+
       const result = {};
-      for (const s of data.sponsors || []) {
+      for (const s of (data?.sponsors || [])) {
+        if (!s?.name) continue;
         result[s.name] = {
           rate: s.avgFirstDay,
           count: s.count,
           winRate: s.winRate,
           upCount: s.upCount,
-          downCount: s.downCount
+          downCount: s.downCount,
         };
       }
       console.log(`[数据] 从JSON加载 ${Object.keys(result).length} 个保荐人`);
@@ -390,6 +397,11 @@ const FALLBACK_SPONSORS  = {
  * 说明：为保证线上评分一致性，不再让外部 sponsors.json 覆盖该维度的数据。
  */
 function getAllSponsors() {
+  const jsonSponsors = loadSponsorsFromJSON();
+  if (jsonSponsors && Object.keys(jsonSponsors).length > 0) {
+    return { ...jsonSponsors };
+  }
+  console.warn('[数据] sponsors.json 不可用，回退到 FALLBACK_SPONSORS');
   return { ...FALLBACK_SPONSORS };
 }
 
@@ -1085,6 +1097,113 @@ function splitSentencesForIndustry(text = '') {
     .split(/[。；;！!?？\n\r]+/)
     .map(s => s.trim())
     .filter(Boolean);
+}
+
+function loadSponsorAliasMap() {
+  if (fs.existsSync(SPONSOR_ALIAS_MAP_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(SPONSOR_ALIAS_MAP_JSON, 'utf-8'));
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        console.log(`[数据] 从JSON加载 ${Object.keys(data).length} 条 sponsor alias 映射`);
+        return data;
+      }
+      console.warn('[数据] sponsor alias 映射格式异常，使用空映射');
+    } catch (e) {
+      console.error('[数据] sponsor alias 映射加载失败:', e.message);
+    }
+  }
+  return {};
+}
+
+const SPONSOR_ALIAS_MAP = loadSponsorAliasMap();
+
+function normalizeSponsorName(name = '') {
+  return String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[（]/g, '(')
+    .replace(/[）]/g, ')')
+    .replace(/[，、]/g, ',')
+    .replace(/[。]/g, '.')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s*([(),.])\s*/g, '$1')
+    .replace(/,+/g, ',')
+    .trim();
+}
+
+function buildNormalizedSponsorIndex(sponsorStats = {}) {
+  const normalizedIndex = new Map();
+  for (const canonicalName of Object.keys(sponsorStats || {})) {
+    const normalized = normalizeSponsorName(canonicalName);
+    if (!normalized) continue;
+    if (!normalizedIndex.has(normalized)) normalizedIndex.set(normalized, []);
+    normalizedIndex.get(normalized).push(canonicalName);
+  }
+  return normalizedIndex;
+}
+
+function resolveSponsorIdentity(rawName, sponsorStats = {}) {
+  const normalizedName = normalizeSponsorName(rawName);
+  const normalizedIndex = buildNormalizedSponsorIndex(sponsorStats);
+  let mappedName = null;
+
+  if (rawName && Object.prototype.hasOwnProperty.call(sponsorStats, rawName)) {
+    return {
+      rawName,
+      normalizedName,
+      mappedName,
+      matched: true,
+      canonicalName: rawName,
+      method: 'direct',
+      confidence: 'high',
+      reason: 'raw_name_hit',
+      sponsorStatsHit: true,
+    };
+  }
+
+  const normalizedCandidates = normalizedIndex.get(normalizedName) || [];
+  if (normalizedCandidates.length === 1) {
+    return {
+      rawName,
+      normalizedName,
+      mappedName,
+      matched: true,
+      canonicalName: normalizedCandidates[0],
+      method: 'normalized',
+      confidence: 'high',
+      reason: 'normalized_name_hit',
+      sponsorStatsHit: true,
+    };
+  }
+
+  mappedName = SPONSOR_ALIAS_MAP[rawName] || SPONSOR_ALIAS_MAP[normalizedName] || null;
+  if (mappedName) {
+    const sponsorStatsHit = Object.prototype.hasOwnProperty.call(sponsorStats, mappedName);
+    return {
+      rawName,
+      normalizedName,
+      mappedName,
+      matched: sponsorStatsHit,
+      canonicalName: sponsorStatsHit ? mappedName : null,
+      method: sponsorStatsHit ? 'alias_map' : 'unmatched',
+      confidence: sponsorStatsHit ? 'high' : 'low',
+      reason: sponsorStatsHit ? 'alias_map_hit' : 'alias_mapped_name_not_in_sponsor_stats',
+      sponsorStatsHit,
+    };
+  }
+
+  return {
+    rawName,
+    normalizedName,
+    mappedName,
+    matched: false,
+    canonicalName: null,
+    method: 'unmatched',
+    confidence: 'low',
+    reason: 'no_direct_normalized_or_alias_match',
+    sponsorStatsHit: false,
+  };
 }
 
 function normalizeSponsorNameList(values = []) {
@@ -3659,37 +3778,30 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
   // 如果已从文本中提取到保荐人名称，优先使用这些名称在数据库中查找业绩
   if (extractedSponsors.length > 0) {
     for (const extractedName of extractedSponsors) {
-      // 在保荐人数据库中查找匹配
-      let matched = false;
-      console.log(`[保荐人匹配] 尝试匹配: "${extractedName}"`);
-      console.log(`[保荐人匹配] 标准化后: "${normalizeText(extractedName)}"`);
-      for (const [dbName, data] of Object.entries(SPONSORS)) {
-        const match1 = matchSponsorName(extractedName, dbName);
-        const match2 = matchSponsorName(dbName, extractedName);
-        if (match1 || match2) {
-          console.log(`[保荐人匹配] ✓ 匹配成功: "${extractedName}" <-> "${dbName}"`);
-          // 找到匹配的保荐人数据
-          if (!foundSponsors.some(s => s.extractedName === extractedName)) {
-            foundSponsors.push({
-              extractedName, // 从招股书中提取的原始名称
-              name: dbName,  // 数据库中的名称
-              ...data,
-              matchContext: extractedName,
-            });
-            matched = true;
-            break;
-          }
+      const resolved = resolveSponsorIdentity(extractedName, SPONSORS);
+      console.log('[sponsor][resolve]', {
+        rawName: resolved.rawName,
+        normalizedName: resolved.normalizedName,
+        mappedName: resolved.mappedName,
+        matched: resolved.matched,
+        canonicalName: resolved.canonicalName,
+        method: resolved.method,
+        confidence: resolved.confidence,
+        sponsorStatsHit: resolved.sponsorStatsHit,
+      });
+
+      if (resolved.matched && resolved.canonicalName) {
+        const sponsorData = SPONSORS[resolved.canonicalName];
+        if (!foundSponsors.some(s => s.extractedName === extractedName)) {
+          foundSponsors.push({
+            extractedName,
+            name: resolved.canonicalName,
+            ...sponsorData,
+            matchContext: extractedName,
+          });
         }
-      }
-      if (!matched) {
-        console.log(`[保荐人匹配] ✗ 未找到匹配，数据库中的保荐人列表:`);
-        const dbNames = Object.keys(SPONSORS).slice(0, 10);
-        for (const dbName of dbNames) {
-          console.log(`[保荐人匹配]   - "${dbName}" (标准化: "${normalizeText(dbName)}")`);
-        }
-      }
-      // 即使数据库中没有匹配，也记录提取到的名称
-      if (!matched && !foundSponsors.some(s => s.extractedName === extractedName)) {
+      } else if (!foundSponsors.some(s => s.extractedName === extractedName)) {
+        console.log(`[保荐人匹配] ✗ 未匹配: "${extractedName}" -> method=${resolved.method}, reason=${resolved.reason}`);
         foundSponsors.push({
           extractedName,
           name: extractedName,
