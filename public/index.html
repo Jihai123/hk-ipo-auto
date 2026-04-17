@@ -882,6 +882,27 @@
       word-break: break-word;
     }
 
+    .basic-info-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: var(--radius-full);
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .basic-info-badge.badge-yes {
+      color: #047857;
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(16, 185, 129, 0.38);
+    }
+    .basic-info-badge.badge-no {
+      color: #b45309;
+      background: rgba(245, 158, 11, 0.14);
+      border-color: rgba(245, 158, 11, 0.42);
+    }
+
     .basic-collapsible {
       cursor: pointer;
       color: var(--color-text-primary);
@@ -2303,8 +2324,6 @@
         <!-- Dynamic -->
       </div>
 
-      <div id="greenShoeNotice"></div>
-
       <div class="prospectus-links" id="prospectusLinks">
         <!-- Dynamic -->
       </div>
@@ -2719,20 +2738,6 @@
       let linksHtml = '';
 
       const display = data.display || {};
-      const greenShoeNoticeEl = document.getElementById('greenShoeNotice');
-      if (display.hasGreenShoe !== undefined && display.hasGreenShoe !== null) {
-        greenShoeNoticeEl.innerHTML = `
-          <div class="greenshoe-highlight ${display.hasGreenShoe ? 'is-yes' : 'is-no'}">
-            <div>
-              <div class="label">⚠️ 绿鞋机制（展示项，不计分）</div>
-              <div class="value">${display.hasGreenShoe ? '有绿鞋（存在超额配售/稳定价格安排）' : '无绿鞋（未检索到超额配售条款）'}</div>
-            </div>
-            <div class="hint">评分时请重点关注</div>
-          </div>
-        `;
-      } else {
-        greenShoeNoticeEl.innerHTML = '';
-      }
       const displayMeta = [];
       if (display.industry) displayMeta.push(`所属行业: ${display.industry}`);
       if (display.hasGreenShoe !== undefined && display.hasGreenShoe !== null) {
@@ -2767,12 +2772,14 @@
     }
 
     function pickDisplayCompanyName(data) {
+      const display = data?.display || {};
       const candidates = [
-        data?.name,
         data?.companyName,
+        data?.name,
+        display?.companyName,
+        display?.name,
         data?.title,
         data?.prospectus?.name,
-        data?.code,
         data?.stockCode
       ];
       for (const item of candidates) {
@@ -2784,6 +2791,7 @@
 
     function renderCompanyBasicInfo(data) {
       const display = data?.display || {};
+      const companyName = pickDisplayCompanyName(data);
       const valueOf = (...vals) => {
         for (const v of vals) {
           const text = String(v ?? '').trim();
@@ -2799,21 +2807,32 @@
       const offerPrice = valueOf(data?.offerPrice, display?.offerPrice);
       const sponsors = valueOf(asList(data?.sponsors), asList(display?.sponsors));
       const underwriters = valueOf(data?.underwriters, display?.underwriters);
-      const proceedsUse = valueOf(data?.proceedsUse, display?.proceedsUse);
+      const proceedsUseRaw = valueOf(data?.proceedsUse, display?.proceedsUse);
+      const proceedsUse = proceedsUseRaw === '--' ? '' : proceedsUseRaw;
+      const greenShoe = data?.greenShoe ?? display?.greenShoe ?? display?.hasGreenShoe;
 
       const cardEl = document.getElementById('companyBasicInfo');
       cardEl.innerHTML = `
         <div class="basic-info-title">公司基本信息</div>
         <div class="basic-info-grid">
+          ${buildBasicInfoRow('公司名称', companyName)}
           ${buildBasicInfoRow('所属行业', industry)}
+          ${buildGreenShoeRow(greenShoe)}
           ${buildBasicInfoRow('发售股份数目', offerShares)}
           ${buildBasicInfoRow('发售价', offerPrice)}
           ${buildBasicInfoRow('保荐人', sponsors)}
           ${buildBasicInfoRow('承销商', underwriters)}
           ${buildBasicInfoRow('公司简介（业务简介）', businessSummary, true)}
-          ${buildBasicInfoRow('售股所得款项用途', proceedsUse, true)}
+          ${proceedsUse ? buildBasicInfoRow('售股所得款项用途', proceedsUse, true) : ''}
         </div>
       `;
+    }
+
+    function buildGreenShoeRow(value) {
+      if (value !== true && value !== false) return '';
+      const tone = value ? 'badge-yes' : 'badge-no';
+      const text = value ? '有绿鞋（含超额配股权）' : '无绿鞋';
+      return `<div class="basic-info-row"><span class="basic-info-label">绿鞋：</span><span class="basic-info-value"><span class="basic-info-badge ${tone}">${text}</span></span></div>`;
     }
 
     function buildBasicInfoRow(label, value, collapsible = false) {
