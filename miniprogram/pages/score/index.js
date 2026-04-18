@@ -123,11 +123,17 @@ function buildDimensionRows(key, rawEvidence = {}, fallbackEvidence = {}) {
           const name = toText(s && s.name, '未知');
           const count = Number(s && s.count);
           const rate = Number(s && s.rate);
-          const countText = Number.isFinite(count) ? `${count}单` : '0单';
-          const rateText = Number.isFinite(rate) ? `${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%` : '0.0%';
+          const countText = Number.isFinite(count) ? `${count}单` : '未提供';
+          const rateText = Number.isFinite(rate) ? `${rate >= 0 ? '+' : ''}${rate.toFixed(1)}%` : '未提供';
           return `${name} (${countText}, ${rateText})`;
         }).join('；'),
       });
+    }
+
+    if (rawEvidence.baseScore !== undefined || rawEvidence.headSponsorBonus !== undefined || rawEvidence.finalScore !== undefined) {
+      rows.push({ label: '基础规则命中结果', value: Number.isFinite(Number(rawEvidence.baseScore)) ? `${Number(rawEvidence.baseScore)}` : '未提供' });
+      rows.push({ label: '头部保荐人修正', value: Number.isFinite(Number(rawEvidence.headSponsorBonus)) ? `${Number(rawEvidence.headSponsorBonus)}` : '未提供' });
+      rows.push({ label: '最终得分', value: Number.isFinite(Number(rawEvidence.finalScore)) ? `${Number(rawEvidence.finalScore)}` : '未提供' });
     }
   }
 
