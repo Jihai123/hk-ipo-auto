@@ -144,6 +144,7 @@ function extractEvidenceSnippet(text, terms = [], radius = 80) {
 const CACHE_DIR = path.join(__dirname, 'cache');
 const DATA_DIR = path.join(__dirname, 'data');
 const SPONSORS_JSON = path.join(DATA_DIR, 'sponsors.json');
+const SPONSORS_CURRENT_JSON = path.join(DATA_DIR, 'sponsors.current.json');
 const IPO_SPONSORS_JSON = path.join(DATA_DIR, 'ipo-sponsors.json');
 const SPONSOR_ALIAS_MAP_JSON = path.join(DATA_DIR, 'sponsor-alias-map.json');
 
@@ -186,6 +187,21 @@ function loadSponsorsFromJSON() {
     } catch (e) {
       console.error('[数据] JSON加载失败:', e.message);
     }
+  }
+  return null;
+}
+
+function loadSponsorsCurrentFromJSON() {
+  if (!fs.existsSync(SPONSORS_CURRENT_JSON)) return null;
+  try {
+    const data = JSON.parse(fs.readFileSync(SPONSORS_CURRENT_JSON, 'utf-8'));
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      console.log(`[数据] 从JSON加载 ${Object.keys(data).length} 个保荐人 (sponsors.current.json)`);
+      return data;
+    }
+    console.warn('[数据] sponsors.current.json 格式异常，忽略该数据源');
+  } catch (e) {
+    console.error('[数据] sponsors.current.json 加载失败:', e.message);
   }
   return null;
 }
@@ -393,15 +409,22 @@ const FALLBACK_SPONSORS  = {
 
 /**
  * 获取所有保荐人数据
- * 当前策略：保荐人维度统一使用 server.js 内置的 FALLBACK_SPONSORS 基准数据
- * 说明：为保证线上评分一致性，不再让外部 sponsors.json 覆盖该维度的数据。
+ * 数据源优先级：
+ * 1) data/sponsors.current.json（基础 + 增量聚合）
+ * 2) data/sponsors.json（基础）
+ * 3) FALLBACK_SPONSORS（内置兜底）
  */
 function getAllSponsors() {
+  const currentSponsors = loadSponsorsCurrentFromJSON();
+  if (currentSponsors && Object.keys(currentSponsors).length > 0) {
+    return { ...currentSponsors };
+  }
+
   const jsonSponsors = loadSponsorsFromJSON();
   if (jsonSponsors && Object.keys(jsonSponsors).length > 0) {
     return { ...jsonSponsors };
   }
-  console.warn('[数据] sponsors.json 不可用，回退到 FALLBACK_SPONSORS');
+  console.warn('[数据] sponsors.current.json / sponsors.json 不可用，回退到 FALLBACK_SPONSORS');
   return { ...FALLBACK_SPONSORS };
 }
 
@@ -7211,7 +7234,7 @@ app.listen(PORT, () => {
   console.log(`📍 服务地址: http://localhost:${PORT}`);
   console.log(`📊 评分API: http://localhost:${PORT}/api/score/{股票代码}`);
   console.log(`💾 保荐人数量: ${Object.keys(getAllSponsors()).length}`);
-  console.log(`📂 数据来源: server.js 内置 FALLBACK_SPONSORS`);
+  console.log(`📂 保荐人数据优先级: sponsors.current.json -> sponsors.json -> FALLBACK_SPONSORS`);
   console.log(`${'─'.repeat(60)}`);
   console.log(`v3.0 新功能:`);
   console.log(`  ✨ 评分详情展示: 显示判断依据和匹配上下文`);
