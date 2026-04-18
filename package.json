@@ -10,6 +10,7 @@
     "crawl": "node scripts/crawl-sponsors.js",
     "add": "node scripts/manual-add-ipo.js",
     "score": "node scripts/auto-crawler.js --only-score",
+    "sponsor:update": "node scripts/update-sponsor-stats.js",
     "init": "node scripts/init-history-data.js",
     "test": "node scripts/run-qa-tests.js"
   },
