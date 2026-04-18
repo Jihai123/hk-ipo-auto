@@ -2714,6 +2714,15 @@
     function displayResult(data) {
       const fallbackCode = String(data.stockCode || '').trim() || '--';
       const companyName = pickDisplayCompanyName(data);
+      console.log('[hero][renderInput]', {
+        stockCode: data?.stockCode ?? null,
+        companyName: data?.companyName ?? null,
+        name: data?.name ?? null,
+        title: data?.title ?? null,
+        displayCompanyName: data?.display?.companyName ?? null,
+        displayName: data?.display?.name ?? null,
+        resolvedHeroName: companyName,
+      });
       const displayHeadline = companyName && companyName !== '--'
         ? (companyName === fallbackCode ? companyName : `${companyName}（${fallbackCode}）`)
         : fallbackCode;
@@ -2774,13 +2783,10 @@
     function pickDisplayCompanyName(data) {
       const display = data?.display || {};
       const candidates = [
-        data?.companyName,
-        data?.name,
-        display?.companyName,
-        display?.name,
-        data?.title,
-        data?.prospectus?.name,
-        data?.stockCode
+        data?.companyName || display?.companyName,
+        data?.name || display?.name || data?.prospectus?.name,
+        data?.title || display?.title,
+        data?.stockCode || display?.stockCode,
       ];
       for (const item of candidates) {
         const v = String(item || '').trim();
@@ -2809,6 +2815,11 @@
       const underwriters = valueOf(data?.underwriters, display?.underwriters);
       const proceedsUseRaw = valueOf(data?.proceedsUse, display?.proceedsUse);
       const proceedsUse = proceedsUseRaw === '--' ? '' : proceedsUseRaw;
+      console.log('[basicInfo][proceedsUseField]', {
+        topLevelProceedsUse: data?.proceedsUse ?? null,
+        displayProceedsUse: display?.proceedsUse ?? null,
+        resolvedProceedsUse: proceedsUse || null,
+      });
       const greenShoe = data?.greenShoe ?? display?.greenShoe ?? display?.hasGreenShoe;
 
       const cardEl = document.getElementById('companyBasicInfo');
@@ -2994,14 +3005,23 @@
 
       if (key === 'sponsor' && ev.allMatched?.length > 0) {
         html += `<div><span class="label">识别数量:</span> <span class="value">${ev.matchedCount || 0} 个保荐人</span></div>`;
-        if (ev.weightedRate !== undefined && ev.weightedRate !== null) {
+        if (ev.weightedRate !== undefined && ev.weightedRate !== null && Number.isFinite(Number(ev.weightedRate))) {
           html += `<div><span class="label">加权平均涨幅:</span> <span class="highlight">${parseFloat(ev.weightedRate) >= 0 ? '+' : ''}${ev.weightedRate}%</span></div>`;
         }
         const matchList = ev.allMatched.slice(0, 5).map(s =>
-          `${(s.name || '未知').substring(0, 20)} (${s.count || 0}单, ${(s.rate || 0) >= 0 ? '+' : ''}${(s.rate || 0).toFixed(1)}%)`
+          `${(s.name || '未知').substring(0, 20)} (${Number.isFinite(Number(s.count)) ? Number(s.count) : '未提供'}单, ${Number.isFinite(Number(s.rate)) ? `${Number(s.rate) >= 0 ? '+' : ''}${Number(s.rate).toFixed(1)}%` : '未提供'})`
         ).join('<br>');
         html += `<div style="margin-top: 8px;"><span class="label">匹配列表:</span></div>`;
         html += `<div style="margin-left: 80px; color: #64748b;">${matchList}</div>`;
+
+        if (ev.baseScore !== undefined || ev.headSponsorBonus !== undefined || ev.finalScore !== undefined) {
+          const baseScoreText = Number.isFinite(Number(ev.baseScore)) ? Number(ev.baseScore) : '未提供';
+          const bonusText = Number.isFinite(Number(ev.headSponsorBonus)) ? Number(ev.headSponsorBonus) : '未提供';
+          const finalScoreText = Number.isFinite(Number(ev.finalScore)) ? Number(ev.finalScore) : '未提供';
+          html += `<div style="margin-top: 8px;"><span class="label">基础规则命中结果:</span> <span class="value">${baseScoreText}</span></div>`;
+          html += `<div><span class="label">头部保荐人修正:</span> <span class="value">${bonusText}</span></div>`;
+          html += `<div><span class="label">最终得分:</span> <span class="highlight">${finalScoreText}</span></div>`;
+        }
       }
 
       if (key === 'cornerstone') {

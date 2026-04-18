@@ -1215,6 +1215,11 @@ function normalizeSponsorNameList(values = []) {
     .filter(Boolean))];
 }
 
+function toFiniteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function detectBusinessSemantic({ code, summaryText = '', fallbackText = '', source = 'none' }) {
   const srcText = String(summaryText || fallbackText || '');
   const sentences = splitSentencesForIndustry(srcText);
@@ -3153,6 +3158,12 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
     etnetDetail = await fetchEtnetIpoDetail(codeForEtnetDetail);
     if (etnetDetail.ok) {
       etnetParsedDetail = extractEtnetIndustryAndSummary(etnetDetail.html);
+      console.log('[etnet][detail][proceedsFields]', {
+        stockCode: formatStockCode(stockCode),
+        globalOfferingProceedsUse: etnetParsedDetail?.globalOfferingInfo?.proceedsUse ?? null,
+        basicInfoProceedsUseTraditional: etnetParsedDetail?.basicInfo?.['售股所得款項用途'] ?? null,
+        basicInfoProceedsUseSimple: etnetParsedDetail?.basicInfo?.['售股所得款项用途'] ?? null,
+      });
     }
   } catch (e) {
     console.warn(`[etnet][detail] 详情抓取/解析失败: ${e.message}`);
@@ -3791,12 +3802,26 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
       });
 
       if (resolved.matched && resolved.canonicalName) {
-        const sponsorData = SPONSORS[resolved.canonicalName];
+        const sponsorDataRaw = SPONSORS[resolved.canonicalName] || {};
+        console.log('[sponsor][stats][raw]', {
+          sponsorName: resolved.canonicalName,
+          sponsorData: sponsorDataRaw,
+        });
+        const normalizedCount = toFiniteNumber(sponsorDataRaw.count);
+        const normalizedRate = toFiniteNumber(
+          sponsorDataRaw.rate ?? sponsorDataRaw.avgFirstDay ?? sponsorDataRaw.avgReturn ?? sponsorDataRaw.winRate,
+        );
+        const normalizedWinRate = toFiniteNumber(
+          sponsorDataRaw.winRate ?? sponsorDataRaw.win_rate ?? sponsorDataRaw.winRatePct,
+        );
         if (!foundSponsors.some(s => s.extractedName === extractedName)) {
           foundSponsors.push({
             extractedName,
             name: resolved.canonicalName,
-            ...sponsorData,
+            ...sponsorDataRaw,
+            count: normalizedCount,
+            rate: normalizedRate,
+            winRate: normalizedWinRate,
             matchContext: extractedName,
           });
         }
@@ -3850,7 +3875,28 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
 
   if (foundSponsors.length > 0) {
     // 使用加权平均涨幅（按承销案例数量加权），更准确反映联席保荐人整体质量
-    const sponsorsWithData = foundSponsors.filter(s => s.rate !== null && s.count && s.count >= 8);
+    const sponsorsWithData = foundSponsors
+      .map((s) => {
+        const count = toFiniteNumber(s.count);
+        const rate = toFiniteNumber(s.rate ?? s.avgFirstDay ?? s.avgReturn ?? s.winRate);
+        const winRate = toFiniteNumber(s.winRate);
+        console.log('[sponsor][weightedInput]', {
+          sponsorName: s.name,
+          countRaw: s.count,
+          rateRaw: s.rate,
+          winRateRaw: s.winRate,
+          count,
+          rate,
+          winRate,
+        });
+        return {
+          ...s,
+          count,
+          rate,
+          winRate,
+        };
+      })
+      .filter(s => s.rate !== null && s.count !== null && s.count >= 8);
     const allSponsorsSorted = foundSponsors.slice().sort((a, b) => (b.count || 0) - (a.count || 0));
 
     let weightedRate = 0;
@@ -3867,8 +3913,8 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
     } else {
       // 所有保荐人数据不足，使用案例数最多的那个
       const mainSponsor = allSponsorsSorted[0];
-      sponsorRate = mainSponsor.rate || 0;
-      sponsorCount = mainSponsor.count || 0;
+      sponsorRate = toFiniteNumber(mainSponsor?.rate) ?? 0;
+      sponsorCount = toFiniteNumber(mainSponsor?.count) ?? 0;
     }
 
     const sponsorNamesStr = allSponsorsSorted.slice(0, 2).map(s => (s.name || '未知').substring(0, 12)).join('、');
@@ -3876,8 +3922,8 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
 
     // V5：破发率检查 — winRate < 0.4 直接 -2（首日破发概率 > 60%）
     const weightedWinRate = sponsorsWithData.length > 0
-      ? sponsorsWithData.reduce((s, sp) => s + (sp.winRate || 0) * sp.count, 0) / totalCount
-      : (allSponsorsSorted[0]?.winRate || 1);
+      ? sponsorsWithData.reduce((s, sp) => s + ((toFiniteNumber(sp.winRate) ?? 0) * sp.count), 0) / totalCount
+      : (toFiniteNumber(allSponsorsSorted[0]?.winRate) ?? 1);
 
     if (sponsorsWithData.length === 0 && sponsorCount < 5) { // V5: 阈值从8降至5
       scores.sponsor = {
@@ -3942,12 +3988,34 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
       for (const sponsorName of fallbackSponsors) {
         // 尝试完整匹配
         if (SPONSORS[sponsorName]) {
-          fallbackFoundSponsors.push({ name: sponsorName, ...SPONSORS[sponsorName] });
+          const sponsorDataRaw = SPONSORS[sponsorName] || {};
+          console.log('[sponsor][stats][raw]', {
+            sponsorName,
+            sponsorData: sponsorDataRaw,
+          });
+          fallbackFoundSponsors.push({
+            name: sponsorName,
+            ...sponsorDataRaw,
+            count: toFiniteNumber(sponsorDataRaw.count),
+            rate: toFiniteNumber(sponsorDataRaw.rate ?? sponsorDataRaw.avgFirstDay ?? sponsorDataRaw.avgReturn ?? sponsorDataRaw.winRate),
+            winRate: toFiniteNumber(sponsorDataRaw.winRate ?? sponsorDataRaw.win_rate ?? sponsorDataRaw.winRatePct),
+          });
         } else {
           // 尝试部分匹配
           for (const [dbName, data] of Object.entries(SPONSORS)) {
             if (dbName.includes(sponsorName) || sponsorName.includes(dbName)) {
-              fallbackFoundSponsors.push({ name: sponsorName, ...data, matchedName: dbName });
+              console.log('[sponsor][stats][raw]', {
+                sponsorName: dbName,
+                sponsorData: data,
+              });
+              fallbackFoundSponsors.push({
+                name: sponsorName,
+                ...data,
+                matchedName: dbName,
+                count: toFiniteNumber(data.count),
+                rate: toFiniteNumber(data.rate ?? data.avgFirstDay ?? data.avgReturn ?? data.winRate),
+                winRate: toFiniteNumber(data.winRate ?? data.win_rate ?? data.winRatePct),
+              });
               break;
             }
           }
@@ -3956,7 +4024,28 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
 
       if (fallbackFoundSponsors.length > 0) {
         const fallbackSorted = fallbackFoundSponsors.slice().sort((a, b) => (b.count || 0) - (a.count || 0));
-        const fbWithData = fallbackFoundSponsors.filter(s => s.rate !== null && s.count && s.count >= 8);
+        const fbWithData = fallbackFoundSponsors
+          .map((s) => {
+            const count = toFiniteNumber(s.count);
+            const rate = toFiniteNumber(s.rate ?? s.avgFirstDay ?? s.avgReturn ?? s.winRate);
+            const winRate = toFiniteNumber(s.winRate);
+            console.log('[sponsor][weightedInput]', {
+              sponsorName: s.name,
+              countRaw: s.count,
+              rateRaw: s.rate,
+              winRateRaw: s.winRate,
+              count,
+              rate,
+              winRate,
+            });
+            return {
+              ...s,
+              count,
+              rate,
+              winRate,
+            };
+          })
+          .filter(s => s.rate !== null && s.count !== null && s.count >= 8);
 
         let rate = 0;
         let count = 0;
@@ -3966,8 +4055,8 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
           count = totalCnt;
         } else {
           const mainSponsor = fallbackSorted[0];
-          rate = mainSponsor.rate || 0;
-          count = mainSponsor.count || 0;
+          rate = toFiniteNumber(mainSponsor?.rate) ?? 0;
+          count = toFiniteNumber(mainSponsor?.count) ?? 0;
         }
 
         const fallbackName = fallbackSorted.slice(0, 2).map(s => (s.name || '未知').substring(0, 12)).join('、');
@@ -4061,9 +4150,18 @@ async function scoreProspectus(rawText, stockCode, context = {}) {
     allExtractedNames.includes(ts) || extractedSponsors.some(n => n.includes(ts))
   );
   if (isTopSponsor && scores.sponsor.score < 2) {
-    scores.sponsor.score = Math.min(2, scores.sponsor.score + 1);
+    const baseScore = toFiniteNumber(scores.sponsor.score) ?? 0;
+    const headSponsorBonus = 1;
+    const finalScore = Math.min(2, baseScore + headSponsorBonus);
+    scores.sponsor.score = finalScore;
     scores.sponsor.reason += '（含头部保荐人+1）';
-    console.log(`[保荐人] V5头部保荐人加分 → score=${scores.sponsor.score}`);
+    scores.sponsor.evidence = {
+      ...(scores.sponsor.evidence || {}),
+      baseScore,
+      headSponsorBonus,
+      finalScore,
+    };
+    console.log(`[保荐人] V5头部保荐人加分 -> baseScore=${baseScore} headSponsorBonus=${headSponsorBonus} finalScore=${finalScore}`);
   }
 
   logDimensionSuccess('sponsor', scores.sponsor);
@@ -5280,6 +5378,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
       }
     }
     if (!ipoProceeds) {
+      console.log('[fundraising][noProceedField][sources]', {
+        stockCode: formatStockCode(stockCode),
+        etnetIpoProceeds: etnetData?.ipoProceeds ?? null,
+        etnetProceedsUse: etnetData?.proceedsUse ?? null,
+        etnetDetailGlobalProceedUse: etnetParsedDetail?.globalOfferingInfo?.proceedsUse ?? null,
+      });
       logDimensionFallback('fundraising', 'noProceedField');
     }
 
@@ -5343,6 +5447,14 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     etnetParsedDetail?.basicInfo?.['售股所得款项用途'],
     etnetData?.proceedsUse,
   );
+  console.log('[scoreProspectus][proceedsUse][source]', {
+    stockCode: formatStockCode(stockCode),
+    fromGlobalOfferingInfo: etnetParsedDetail?.globalOfferingInfo?.proceedsUse ?? null,
+    fromBasicTraditional: etnetParsedDetail?.basicInfo?.['售股所得款項用途'] ?? null,
+    fromBasicSimple: etnetParsedDetail?.basicInfo?.['售股所得款项用途'] ?? null,
+    fromEtnetData: etnetData?.proceedsUse ?? null,
+    finalProceedsUse: proceedsUse ?? null,
+  });
 
   console.log(`[评分] V5完成: 总分${totalScore}, ${rating}`);
   console.log(`[评分] 各维度(对外5维): 旧股${scores.oldShares.score} 保荐人${scores.sponsor.score} 基石${scores.cornerstone.score} 禁售${scores.lockup.score} 行业${scores.industry.score}`);
@@ -5383,6 +5495,12 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     },
     _version: 'v5',
   };
+  console.log('[scoreProspectus][returnNameFields]', {
+    stockCode: result.stockCode,
+    name: result.name ?? null,
+    companyName: result.companyName ?? null,
+    title: result.title ?? null,
+  });
   console.log(`[评分] 完成评分(V5): requestId=${requestId} stockCode=${formatStockCode(stockCode)} durationMs=${Date.now() - scoreStartAt}`);
   return result;
 }
@@ -5677,11 +5795,31 @@ app.get('/api/score/:code', async (req, res) => {
       : Number.isFinite(scoreResultRaw?.total) ? scoreResultRaw.total
       : Number.isFinite(scoreResultRaw?.score) ? scoreResultRaw.score
       : null;
+    const pickFirstNonEmpty = (...values) => {
+      for (const value of values) {
+        const textValue = String(value ?? '').trim();
+        if (textValue && textValue !== '--' && textValue !== '-') return textValue;
+      }
+      return null;
+    };
+    const mappedCompanyName = pickFirstNonEmpty(
+      scoreResultRaw?.companyName,
+      scoreResultRaw?.name,
+      scoreResultRaw?.title,
+      scoreResultRaw?.stockCode,
+    );
+    const mappedProceedsUse = pickFirstNonEmpty(
+      scoreResultRaw?.proceedsUse,
+      scoreResultRaw?.display?.proceedsUse,
+    );
     const mappedRecommendation = scoreResultRaw?.recommendation ?? scoreResultRaw?.advice ?? scoreResultRaw?.rating ?? scoreResultRaw?.ratingLabel ?? null;
     const mappedRating = scoreResultRaw?.rating ?? scoreResultRaw?.ratingLabel ?? scoreResultRaw?.recommendation ?? scoreResultRaw?.advice ?? null;
 
     const scoreResult = {
       ...(scoreResultRaw || {}),
+      name: mappedCompanyName,
+      companyName: mappedCompanyName,
+      proceedsUse: mappedProceedsUse,
       totalScore: mappedScore,
       recommendation: mappedRecommendation,
       rating: mappedRating,
@@ -5697,6 +5835,23 @@ app.get('/api/score/:code', async (req, res) => {
       console.log(`[scorePipeline][fallback] stockCode=${formatStockCode(code)} reason="recommendationMissingUsedAlias" appliedField="recommendation"`);
     }
     console.log(`[scorePipeline][apiMapping] requestId=${requestId} stockCode=${formatStockCode(code)} mappedScore=${scoreResult.totalScore} mappedRecommendation=${scoreResult.recommendation} mappedRating=${scoreResult.rating}`);
+    console.log('[scorePipeline][apiMapping][nameProceeds]', {
+      requestId,
+      stockCode: formatStockCode(code),
+      input: {
+        companyName: scoreResultRaw?.companyName ?? null,
+        name: scoreResultRaw?.name ?? null,
+        title: scoreResultRaw?.title ?? null,
+        stockCode: scoreResultRaw?.stockCode ?? null,
+        proceedsUse: scoreResultRaw?.proceedsUse ?? null,
+        displayProceedsUse: scoreResultRaw?.display?.proceedsUse ?? null,
+      },
+      output: {
+        companyName: scoreResult.companyName ?? null,
+        name: scoreResult.name ?? null,
+        proceedsUse: scoreResult.proceedsUse ?? null,
+      },
+    });
     if (!Number.isFinite(scoreResult.totalScore)) {
       console.log(`[scorePipeline][error] stockCode=${formatStockCode(code)} missingField="totalScore"`);
     }
