@@ -51,10 +51,20 @@ function normalizeWebsiteScoreResponse(resp, code) {
     .filter(function (k) { return scores[k] && Number.isFinite(scores[k].score); })
     .map(function (k) { return normalizeWebsiteDimension(k, scores[k]); });
 
+  const displayName =
+    payload.companyName ||
+    payload.name ||
+    payload.title ||
+    (payload.prospectus && payload.prospectus.name) ||
+    payload.code ||
+    payload.stockCode ||
+    code ||
+    '--';
+
   return {
     success: true,
-    code: payload.stockCode || code,
-    name: (payload.prospectus && payload.prospectus.name) || code,
+    code: payload.stockCode || payload.code || code,
+    name: displayName,
     totalScore: Number(payload.totalScore) || 0,
     ratingLabel: payload.rating || '',
     dimensions: dimensions,

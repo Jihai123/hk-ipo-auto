@@ -2589,41 +2589,17 @@
         clearInterval(progressTimer);
         clearTimeout(timeoutId);
 
-        // Handle non-JSON responses (e.g. HTML error pages, proxy timeouts)
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-          const text = await response.text();
-          // Check if it's an HTML error page
+        const responseClone = response.clone();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          const text = await responseClone.text();
           if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
             throw new Error('服务器返回异常响应，可能因请求超时或服务暂时不可用，请稍后重试');
           }
-          // Try to parse as JSON anyway (some servers don't set content-type)
-          try {
-            const data = JSON.parse(text);
-            if (!data.success) throw new Error(data.error || '评分失败');
-            setProgress(4, '生成评分完成', '分析完成！', 100);
-            console.log('[score/front/web][request][success]', {
-              triggerSource,
-              code,
-              url: requestUrl,
-              timeout: REQUEST_TIMEOUT_MS,
-              duration: Date.now() - requestStartAt,
-              requestId: response.headers.get('X-Request-Id') || '',
-              status: response.status,
-            });
-            try {
-              displayResult(data);
-            } catch (renderError) {
-              renderError.phase = 'render';
-              throw renderError;
-            }
-            return;
-          } catch (parseErr) {
-            throw new Error('服务器响应格式异常，请稍后重试');
-          }
+          throw new Error('服务器响应格式异常，请稍后重试');
         }
-
-        const data = await response.json();
 
         if (!data.success) {
           throw new Error(data.error || '评分失败');
@@ -2781,18 +2757,15 @@
     }
 
     function pickDisplayCompanyName(data) {
-      const display = data?.display || {};
-      const candidates = [
-        data?.companyName || display?.companyName,
-        data?.name || display?.name || data?.prospectus?.name,
-        data?.title || display?.title,
-        data?.stockCode || display?.stockCode,
-      ];
-      for (const item of candidates) {
-        const v = String(item || '').trim();
-        if (v && v !== '-') return v;
-      }
-      return '--';
+      const displayName =
+        data?.companyName ||
+        data?.name ||
+        data?.title ||
+        data?.prospectus?.name ||
+        data?.code ||
+        '--';
+      const normalized = String(displayName || '').trim();
+      return normalized && normalized !== '-' ? normalized : '--';
     }
 
     function renderCompanyBasicInfo(data) {

@@ -61,6 +61,16 @@ export default function NewHeroSection() {
     }
   };
 
+
+  const resolveDisplayName = (data) => (
+    data?.companyName ||
+    data?.name ||
+    data?.title ||
+    data?.prospectus?.name ||
+    data?.code ||
+    '--'
+  );
+
   const getRatingColor = (score) => {
     if (score >= 80) return 'text-positive';
     if (score >= 70) return 'text-neutral';
@@ -110,7 +120,7 @@ export default function NewHeroSection() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
-                      {searchResult.prospectus?.name || searchResult.stockCode}
+                      {resolveDisplayName(searchResult)}
                     </h3>
                     <p className="text-sm text-gray-600">股票代码: {searchResult.stockCode}</p>
                   </div>
