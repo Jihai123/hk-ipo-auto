@@ -1092,6 +1092,50 @@ function extractEtnetIndustryAndSummary(html) {
   return { industryL1, businessSummary, basicInfo, globalOfferingInfo };
 }
 
+function sanitizeHtmlCellText(value = '') {
+  return String(value || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractHtmlLabelValueCandidates(html, labelRegexList = []) {
+  if (!html || typeof html !== 'string') return [];
+  const $ = cheerio.load(html);
+  const candidates = [];
+
+  $('tr').each((_, tr) => {
+    const cells = $(tr).find('td,th');
+    if (cells.length < 2) return;
+    for (let i = 0; i < cells.length - 1; i += 1) {
+      const label = $(cells[i]).text().replace(/\s+/g, '').replace(/[:：]/g, '');
+      if (!label) continue;
+      const matched = labelRegexList.some(re => re.test(label));
+      if (!matched) continue;
+
+      const value = $(cells[i + 1]).text().replace(/\s+/g, ' ').trim();
+      if (value && value !== '--' && value !== '-') {
+        candidates.push(value);
+      }
+    }
+  });
+
+  return [...new Set(candidates)];
+}
+
+function truncateToSentenceOrNewline(text = '', maxLen = 200) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  const clipped = normalized.slice(0, maxLen);
+  const stopIdx = clipped.search(/[。！？\n\r]/);
+  if (stopIdx >= 0) return clipped.slice(0, stopIdx + 1).trim();
+  return clipped.trim();
+}
+
 function splitSentencesForIndustry(text = '') {
   return String(text)
     .split(/[。；;！!?？\n\r]+/)
@@ -5432,21 +5476,83 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return null;
   };
 
-  const companyName = firstNonEmpty(
-    etnetParsedDetail?.basicInfo?.['公司名稱'],
-    etnetParsedDetail?.basicInfo?.['公司名称'],
-    etnetParsedDetail?.basicInfo?.['名稱'],
-    etnetParsedDetail?.basicInfo?.['名称'],
-    etnetParsedDetail?.basicInfo?.['股份名稱'],
-    etnetParsedDetail?.basicInfo?.['股份名称'],
+  const etnetHtml = etnetDetail?.html || '';
+  const companyNameHtmlCandidates = extractHtmlLabelValueCandidates(etnetHtml, [
+    /^公司名稱$/i,
+    /^公司名称$/i,
+    /^名稱$/i,
+    /^名称$/i,
+  ]);
+  const companyNameRegexFallbackMatch = etnetHtml.match(/公司名稱[\s\S]{0,120}?<td[^>]*>([\s\S]{1,120}?)<\/td>/i);
+  const companyNameRegexFallback = sanitizeHtmlCellText(companyNameRegexFallbackMatch?.[1] || '');
+  const companyNameProspectusFallback = firstNonEmpty(
+    rawText?.match(/([^\s，。；:：()（）]{2,80}?股份有限公司)\s*（[「\"]?本公司[」\"]?）/)?.[1],
     prospectusName,
   );
-  const proceedsUse = firstNonEmpty(
-    etnetParsedDetail?.globalOfferingInfo?.proceedsUse,
-    etnetParsedDetail?.basicInfo?.['售股所得款項用途'],
-    etnetParsedDetail?.basicInfo?.['售股所得款项用途'],
-    etnetData?.proceedsUse,
+  const companyName = firstNonEmpty(
+    ...companyNameHtmlCandidates,
+    companyNameRegexFallback,
+    companyNameProspectusFallback,
   );
+  const companyNameSource = companyNameHtmlCandidates.length > 0 || companyNameRegexFallback
+    ? 'etnet_html'
+    : (companyNameProspectusFallback ? 'prospectus' : 'none');
+  console.log('[companyName][candidates]', {
+    stockCode: formatStockCode(stockCode),
+    htmlCandidates: companyNameHtmlCandidates,
+    htmlRegexFallback: companyNameRegexFallback || null,
+    prospectusFallback: companyNameProspectusFallback || null,
+    final: companyName || null,
+  });
+  console.log('[companyName][source_select]', {
+    stockCode: formatStockCode(stockCode),
+    source: companyNameSource,
+  });
+
+  const proceedsUseHtmlCandidates = extractHtmlLabelValueCandidates(etnetHtml, [
+    /^集資用途$/i,
+    /^所得款項用途$/i,
+    /^所得款项用途$/i,
+    /^募資用途$/i,
+    /^募集资金用途$/i,
+  ]).map(v => truncateToSentenceOrNewline(v, 200)).filter(Boolean);
+  const etnetPlainText = sanitizeHtmlCellText(etnetHtml);
+  const proceedsUseTextMatch = etnetPlainText.match(/(集資用途|所得款項用途|所得款项用途|募集资金用途)[：:\s]*([\s\S]{0,200})/i);
+  const proceedsUseTextFallback = truncateToSentenceOrNewline(proceedsUseTextMatch?.[2] || '', 200);
+  const proceedsUseProspectusFallback = truncateToSentenceOrNewline(
+    firstNonEmpty(
+      rawText?.match(/(?:集資用途|所得款項用途|所得款项用途|募集资金用途)[：:\s]*([\s\S]{10,260})/i)?.[1],
+      etnetData?.proceedsUse,
+      etnetParsedDetail?.globalOfferingInfo?.proceedsUse,
+      etnetParsedDetail?.basicInfo?.['售股所得款項用途'],
+      etnetParsedDetail?.basicInfo?.['售股所得款项用途'],
+    ),
+    200,
+  );
+  const proceedsUse = firstNonEmpty(
+    ...proceedsUseHtmlCandidates,
+    proceedsUseTextFallback,
+    proceedsUseProspectusFallback,
+  );
+  const proceedsUseSource = proceedsUseHtmlCandidates.length > 0 || proceedsUseTextFallback
+    ? 'etnet_html'
+    : (proceedsUseProspectusFallback ? 'prospectus' : 'none');
+  console.log('[proceedsUse][candidates]', {
+    stockCode: formatStockCode(stockCode),
+    htmlCandidates: proceedsUseHtmlCandidates,
+    textScan: proceedsUseTextFallback || null,
+    prospectusFallback: proceedsUseProspectusFallback || null,
+    final: proceedsUse || null,
+  });
+  console.log('[proceedsUse][fallback_text]', {
+    stockCode: formatStockCode(stockCode),
+    textScanMatched: !!proceedsUseTextMatch,
+    value: proceedsUseTextFallback || null,
+  });
+  console.log('[proceedsUse][source_select]', {
+    stockCode: formatStockCode(stockCode),
+    source: proceedsUseSource,
+  });
   console.log('[scoreProspectus][proceedsUse][source]', {
     stockCode: formatStockCode(stockCode),
     fromGlobalOfferingInfo: etnetParsedDetail?.globalOfferingInfo?.proceedsUse ?? null,
@@ -5464,6 +5570,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     stockCode:   formatStockCode(stockCode),
     name: companyName,
     companyName,
+    title: companyName,
     totalScore: Number.isFinite(totalScore) ? totalScore : 0,
     rating: rating || defaultRating,
     scores: publicScores,
