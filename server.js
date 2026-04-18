@@ -5475,6 +5475,45 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
     return null;
   };
+  const cleanCompanyNameCandidate = (input) => {
+    let value = String(input ?? '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!value) return null;
+
+    const noisePrefixes = [
+      '否則本公告所用詞彙與',
+      '否则本公告所用词汇与',
+      '除非本公告另有界定',
+      '本公告所用詞彙與',
+      '本公告所用词汇与',
+      '日期為',
+      '日期为',
+      '招股章程',
+      '本公司',
+      '股份代號',
+      '股份代号',
+    ];
+    let keepCleaning = true;
+    while (keepCleaning && value) {
+      keepCleaning = false;
+      for (const prefix of noisePrefixes) {
+        if (value.startsWith(prefix)) {
+          value = value.slice(prefix.length).trim();
+          keepCleaning = true;
+        }
+      }
+      value = value.replace(/^[\s\-—–:：,，.。;；、'"“”‘’()（）\[\]【】]+/, '').trim();
+    }
+
+    value = value.replace(/[\s\-—–:：,，.。;；、'"“”‘’()（）\[\]【】]+$/, '').trim();
+    if (!value) return null;
+    if (!/(股份有限公司|有限公司)$/.test(value)) return null;
+    if (value.length < 4 || value.length > 80) return null;
+    if (!/^[\u4e00-\u9fffA-Za-z0-9()（）\.\-·&,\s]+$/.test(value)) return null;
+    return value;
+  };
 
   const etnetHtml = etnetDetail?.html || '';
   const companyNameHtmlCandidates = extractHtmlLabelValueCandidates(etnetHtml, [
@@ -5484,29 +5523,32 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     /^名称$/i,
   ]);
   const companyNameRegexFallbackMatch = etnetHtml.match(/公司名稱[\s\S]{0,120}?<td[^>]*>([\s\S]{1,120}?)<\/td>/i);
-  const companyNameRegexFallback = sanitizeHtmlCellText(companyNameRegexFallbackMatch?.[1] || '');
+  const companyNameRegexFallback = cleanCompanyNameCandidate(sanitizeHtmlCellText(companyNameRegexFallbackMatch?.[1] || ''));
+  const companyNameProspectusMatch = rawText?.match(/([^\r\n（）]{2,100}?(?:股份有限公司|有限公司))\s*（[「"]?本公司[」"]?）/);
   const companyNameProspectusFallback = firstNonEmpty(
-    rawText?.match(/([^\s，。；:：()（）]{2,80}?股份有限公司)\s*（[「\"]?本公司[」\"]?）/)?.[1],
-    prospectusName,
+    cleanCompanyNameCandidate(companyNameProspectusMatch?.[1]),
+    cleanCompanyNameCandidate(prospectusName),
   );
+  const etnetCandidate = firstNonEmpty(...companyNameHtmlCandidates.map(cleanCompanyNameCandidate));
+  const regexCandidate = companyNameRegexFallback;
+  const prospectusCandidate = companyNameProspectusFallback;
+  const stockCodeCandidate = formatStockCode(stockCode);
   const companyName = firstNonEmpty(
-    ...companyNameHtmlCandidates,
-    companyNameRegexFallback,
-    companyNameProspectusFallback,
+    etnetCandidate,
+    regexCandidate,
+    prospectusCandidate,
+    stockCodeCandidate,
   );
-  const companyNameSource = companyNameHtmlCandidates.length > 0 || companyNameRegexFallback
-    ? 'etnet_html'
-    : (companyNameProspectusFallback ? 'prospectus' : 'none');
-  console.log('[companyName][candidates]', {
-    stockCode: formatStockCode(stockCode),
-    htmlCandidates: companyNameHtmlCandidates,
-    htmlRegexFallback: companyNameRegexFallback || null,
-    prospectusFallback: companyNameProspectusFallback || null,
-    final: companyName || null,
-  });
+  const sourceSelected = etnetCandidate
+    ? 'etnet_html_label_value'
+    : (regexCandidate ? 'etnet_html_regex' : (prospectusCandidate ? 'prospectus' : 'stockCode'));
   console.log('[companyName][source_select]', {
     stockCode: formatStockCode(stockCode),
-    source: companyNameSource,
+    etnetCandidate: etnetCandidate || null,
+    regexCandidate: regexCandidate || null,
+    prospectusCandidate: prospectusCandidate || null,
+    finalCompanyName: companyName || null,
+    sourceSelected,
   });
 
   const proceedsUseHtmlCandidates = extractHtmlLabelValueCandidates(etnetHtml, [
