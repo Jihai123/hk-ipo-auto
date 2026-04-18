@@ -5498,8 +5498,13 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     }
     return null;
   };
+  const decodeUnicodeEscapes = (input) => {
+    const raw = String(input ?? '');
+    if (!/\\u[0-9a-fA-F]{4}/.test(raw)) return raw;
+    return raw.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  };
   const cleanCompanyNameCandidate = (input) => {
-    let value = String(input ?? '')
+    let value = decodeUnicodeEscapes(input)
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -5538,7 +5543,7 @@ console.log(`[基石投资者] 匹配结果: ${foundInvestorDetails.length}个 -
     return value;
   };
   const cleanDisplayNameCandidate = (input) => {
-    let value = String(input ?? '')
+    let value = decodeUnicodeEscapes(input)
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
