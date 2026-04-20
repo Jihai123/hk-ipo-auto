@@ -84,23 +84,60 @@ const FINGERPRINT_EXCLUDE_TERMS = [
   '公告', 'Announcement', 'Notice',
 ];
 
+const ANNOUNCEMENT_SIGNAL_PATTERNS = [
+  { key: '本公告', regex: /本公告/i },
+  { key: '公告', regex: /公告/i },
+  { key: '補充招股章程', regex: /補充\s*招股章程|补充\s*招股章程/i },
+  { key: '補充文件', regex: /補充\s*文件|补充\s*文件/i },
+  { key: '更改', regex: /更改/i },
+  { key: '澄清', regex: /澄清/i },
+  { key: '延期', regex: /延期/i },
+  { key: '重新分配', regex: /重新分配/i },
+  { key: '分配結果', regex: /分配結果|分配结果/i },
+  { key: '所刊發日期為', regex: /所刊發日期為|所刊发日期为/i },
+  { key: '與.*招股章程', regex: /與.{0,24}招股章程|与.{0,24}招股章程/i },
+  { key: '除本公告另有界定外', regex: /除本公告另有界定外/i },
+];
+
+const MAIN_PROSPECTUS_SIGNAL_PATTERNS = [
+  { key: '全球發售', regex: /全球發售|全球发售/i },
+  { key: '香港公開發售', regex: /香港公開發售|香港公开发售/i },
+  { key: '國際發售', regex: /國際發售|国际发售/i },
+  { key: '股份代號', regex: /股份代號|股份代碼|股票代號|stock\s*code/i },
+  { key: '招股章程', regex: /本招股章程|招股章程|招股書|prospectus/i },
+];
+
+function calculateCandidateScoreBreakdown(metrics = {}) {
+  const nameScore = metrics.hasName ? 22 : 0;
+  const normalizedNameScore = metrics.hasNormalizedName ? 16 : 0;
+  const baseScore = (metrics.hasCode ? 30 : 0) + nameScore
+    + Math.min((metrics.matchedTerms || []).length * 5, 20);
+  const structureScore = Math.min((metrics.sectionHits || 0) * 3, 24)
+    + Math.min((metrics.strongSectionHits || 0) * 8, 32)
+    - ((metrics.strongSectionHits || 0) === 0 && (metrics.sectionHits || 0) > 0 ? 10 : 0)
+    - ((metrics.strongSectionHits || 0) === 0 && (metrics.weakSectionHits || 0) > 0 ? 6 : 0);
+  let sizeScore = Math.min(Math.floor((metrics.textLength || 0) / 60000), 12)
+    + Math.min(Math.floor((metrics.fileSize || 0) / (1024 * 1024)), 8);
+  if ((metrics.fileSize || 0) > 0 && (metrics.fileSize || 0) < 1 * 1024 * 1024) sizeScore -= 12;
+  if ((metrics.textLength || 0) < 12000) sizeScore -= 10;
+  sizeScore -= Math.min((metrics.excludeHits || 0) * 12, 24);
+  const announcementPenalty = Math.max(0, metrics.announcementPenalty || 0);
+  const mainProspectusBonus = Math.max(0, metrics.mainProspectusBonus || 0);
+  const finalScore = baseScore + normalizedNameScore + structureScore + sizeScore - announcementPenalty + mainProspectusBonus;
+  return {
+    baseScore,
+    nameScore,
+    normalizedNameScore,
+    structureScore,
+    sizeScore,
+    announcementPenalty,
+    mainProspectusBonus,
+    finalScore,
+  };
+}
+
 function scoreCandidateFingerprint(metrics) {
-  let score = 0;
-  if (metrics.hasCode) score += 30;
-  if (metrics.hasName) score += 22;
-  score += Math.min((metrics.matchedTerms || []).length * 5, 20);
-  score += Math.min((metrics.sectionHits || 0) * 3, 24);
-  score += Math.min((metrics.strongSectionHits || 0) * 8, 32);
-  score += Math.min(Math.floor((metrics.textLength || 0) / 60000), 12);
-  score += Math.min(Math.floor((metrics.fileSize || 0) / (1024 * 1024)), 8);
-
-  if ((metrics.fileSize || 0) > 0 && (metrics.fileSize || 0) < 1 * 1024 * 1024) score -= 12;
-  if ((metrics.textLength || 0) < 12000) score -= 10;
-  if ((metrics.strongSectionHits || 0) === 0 && (metrics.sectionHits || 0) > 0) score -= 10;
-  if ((metrics.strongSectionHits || 0) === 0 && (metrics.weakSectionHits || 0) > 0) score -= 6;
-  score -= Math.min((metrics.excludeHits || 0) * 12, 24);
-
-  return score;
+  return calculateCandidateScoreBreakdown(metrics).finalScore;
 }
 
 function normalizeQuickFingerprintText(input = '') {
@@ -124,6 +161,13 @@ function normalizeNoSpaceLower(input = '') {
   return String(input).replace(/\s+/g, '').toLowerCase();
 }
 
+function normalizeDenseText(input = '') {
+  return String(input || '')
+    .replace(/[\s\u3000]+/g, '')
+    .replace(/[·•｜|/\\,，.。:：;；'"“”‘’`~!！?？()（）【】\[\]{}<>《》\-—_]+/g, '')
+    .toLowerCase();
+}
+
 function findMatchedTerms(text, terms = []) {
   const normalizedText = normalizeNoSpaceLower(text);
   return terms.filter(term => normalizedText.includes(normalizeNoSpaceLower(term)));
@@ -138,6 +182,85 @@ function extractEvidenceSnippet(text, terms = [], radius = 80) {
     }
   }
   return '';
+}
+
+function detectAnnouncementLike(text = '') {
+  const hitSignals = ANNOUNCEMENT_SIGNAL_PATTERNS.filter(({ regex }) => regex.test(text)).map(({ key }) => key);
+  const hasCoreAnnouncement = /本公告/i.test(text);
+  const hasProspectusReference = /所刊發日期為|所刊发日期为|與.{0,24}招股章程|与.{0,24}招股章程|除本公告另有界定外|補充\s*招股章程|补充\s*招股章程/i.test(text);
+  const hasSupplementalAction = /補充\s*文件|补充\s*文件|更改|澄清|延期|重新分配|分配結果|分配结果/i.test(text);
+  const announcementLike = (hasCoreAnnouncement && (hasProspectusReference || hasSupplementalAction))
+    || (hasProspectusReference && hasSupplementalAction)
+    || hitSignals.length >= 3;
+  const announcementPenalty = announcementLike
+    ? Math.min(48, 18 + hitSignals.length * 6 + (hasCoreAnnouncement ? 6 : 0) + (hasProspectusReference ? 6 : 0))
+    : 0;
+  return { announcementLike, announcementSignals: hitSignals, announcementPenalty };
+}
+
+function detectMainProspectusLike(input = {}) {
+  const {
+    text = '',
+    sectionHits = 0,
+    strongSectionHits = 0,
+    fileSizeBytes = 0,
+    textLength = 0,
+    normalizedNameHit = false,
+    nameHit = false,
+    announcementLike = false,
+    announcementSignals = [],
+  } = input;
+  const signalSet = new Set();
+  let bonus = 0;
+  MAIN_PROSPECTUS_SIGNAL_PATTERNS.forEach(({ key, regex }) => {
+    if (regex.test(text)) signalSet.add(key);
+  });
+  if (normalizedNameHit || nameHit) {
+    signalSet.add('公司名稱命中');
+    bonus += normalizedNameHit ? 8 : 4;
+  }
+  if (strongSectionHits >= 2) {
+    signalSet.add('strongSectionHits>=2');
+    bonus += 12;
+  } else if (strongSectionHits >= 1) {
+    signalSet.add('strongSectionHits>=1');
+    bonus += 7;
+  }
+  if (sectionHits >= 3) {
+    signalSet.add('sectionHits>=3');
+    bonus += 6;
+  } else if (sectionHits >= 2) {
+    signalSet.add('sectionHits>=2');
+    bonus += 3;
+  }
+  if (fileSizeBytes >= 8 * 1024 * 1024) {
+    signalSet.add('size>=8MB');
+    bonus += 12;
+  } else if (fileSizeBytes >= 4 * 1024 * 1024) {
+    signalSet.add('size>=4MB');
+    bonus += 8;
+  } else if (fileSizeBytes >= 2 * 1024 * 1024) {
+    signalSet.add('size>=2MB');
+    bonus += 4;
+  }
+  if (textLength >= 40000) {
+    signalSet.add('textLength>=40000');
+    bonus += 5;
+  } else if (textLength >= 20000) {
+    signalSet.add('textLength>=20000');
+    bonus += 3;
+  }
+  if (!announcementLike && announcementSignals.length === 0) {
+    signalSet.add('noAnnouncementLead');
+    bonus += 4;
+  }
+  const blockedByAnnouncement = announcementLike && announcementSignals.length >= 2;
+  if (blockedByAnnouncement) {
+    signalSet.add('announcementConflict');
+  }
+  const mainProspectusLike = !blockedByAnnouncement && signalSet.size >= 3 && (strongSectionHits >= 1 || sectionHits >= 2);
+  const mainProspectusBonus = mainProspectusLike ? Math.min(32, bonus) : 0;
+  return { mainProspectusLike, mainProspectusSignals: [...signalSet], mainProspectusBonus };
 }
 
 // 目录配置
@@ -1499,12 +1622,21 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
       matchedTerms: [],
       codeHit: false,
       nameHit: false,
+      normalizedNameHit: false,
       nameHitStrong: false,
       nameHitWeak: false,
+      stockNameNormalizedPreview: '',
       sectionHits: 0,
       strongSectionHits: 0,
       weakSectionHits: 0,
       excludeHits: [],
+      announcementLike: false,
+      announcementSignals: [],
+      announcementPenalty: 0,
+      mainProspectusLike: false,
+      mainProspectusSignals: [],
+      mainProspectusBonus: 0,
+      scoreBreakdown: calculateCandidateScoreBreakdown({}),
       score: -999,
       scoreReason: failReason,
       failReason,
@@ -1659,10 +1791,27 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
   const nameHitStrong = nameParts.length > 0 && matchedNameParts.length === nameParts.length;
   const nameHitWeak = matchedNameParts.length > 0;
   const nameHit = nameHitStrong || nameHitWeak;
+  const normalizedText = normalizeDenseText(extractedText);
+  const normalizedStockName = normalizeDenseText(stockName);
+  const normalizedNameHit = Boolean(normalizedStockName) && normalizedText.includes(normalizedStockName);
+  const previewWindowRaw = extractedText.slice(0, 12000);
+  const { announcementLike, announcementSignals, announcementPenalty } = detectAnnouncementLike(previewWindowRaw);
+  const { mainProspectusLike, mainProspectusSignals, mainProspectusBonus } = detectMainProspectusLike({
+    text: previewWindowRaw,
+    sectionHits,
+    strongSectionHits,
+    fileSizeBytes,
+    textLength: extractedText.length,
+    normalizedNameHit,
+    nameHit,
+    announcementLike,
+    announcementSignals,
+  });
   const previewText = extractedText.slice(0, 200).replace(/\s+/g, ' ').trim();
   const metrics = {
     hasCode: codeHit,
     hasName: nameHit,
+    hasNormalizedName: normalizedNameHit,
     hasNameStrong: nameHitStrong,
     hasNameWeak: nameHitWeak,
     matchedTerms,
@@ -1672,12 +1821,15 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
     excludeHits: excludeHits.length,
     textLength: extractedText.length,
     fileSize: fileSizeBytes,
+    announcementPenalty,
+    mainProspectusBonus,
     pdftotextFailed,
     pdftotextOk,
     pdfParseTried,
     pdfParseOk,
   };
-  const score = scoreCandidateFingerprint(metrics);
+  const scoreBreakdown = calculateCandidateScoreBreakdown(metrics);
+  const score = scoreBreakdown.finalScore;
   console.log(`[lightProfile][done] url="${url}" sizeMB=${(fileSizeBytes / 1024 / 1024).toFixed(2)} extractedTextLength=${extractedText.length} score=${score} scoreReason="ok"`);
 
   return {
@@ -1693,12 +1845,21 @@ async function buildLightPdfProfile(url, stockCode, stockName = '', options = {}
     matchedTerms,
     codeHit,
     nameHit,
+    normalizedNameHit,
     nameHitStrong,
     nameHitWeak,
+    stockNameNormalizedPreview: normalizedStockName.slice(0, 80),
     sectionHits,
     strongSectionHits,
     weakSectionHits,
     excludeHits,
+    announcementLike,
+    announcementSignals,
+    announcementPenalty,
+    mainProspectusLike,
+    mainProspectusSignals,
+    mainProspectusBonus,
+    scoreBreakdown,
     score,
     scoreReason: 'ok',
   };
@@ -2714,7 +2875,7 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
 
     // 检查是否为完整招股书（而非公告）- 基于前10000字符多关键词综合判断
     stageStart('verify');
-    const verifyWindowRaw = text.slice(0, 10000);
+    const verifyWindowRaw = text.slice(0, 12000);
     const verifyWindow = verifyWindowRaw.replace(/\s+/g, '').toLowerCase();
     console.log(`[pdfVerify][window] textLength=${text.length} windowLength=${verifyWindowRaw.length}`);
 
@@ -2728,6 +2889,21 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
     const strongHits = strongTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
     const structureHits = structureTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
     const negativeHits = negativeTerms.filter(t => verifyWindow.includes(t.toLowerCase()));
+    const announcementDetection = detectAnnouncementLike(verifyWindowRaw);
+    const normalizedVerifyText = normalizeDenseText(verifyWindowRaw);
+    const normalizedStockName = normalizeDenseText(stockName || '');
+    const normalizedNameHit = Boolean(normalizedStockName) && normalizedVerifyText.includes(normalizedStockName);
+    const mainProspectusDetection = detectMainProspectusLike({
+      text: verifyWindowRaw,
+      sectionHits: structureHits.length,
+      strongSectionHits: strongHits.length,
+      fileSizeBytes: 0,
+      textLength: text.length,
+      normalizedNameHit,
+      nameHit: normalizedNameHit,
+      announcementLike: announcementDetection.announcementLike,
+      announcementSignals: announcementDetection.announcementSignals,
+    });
     console.log(`[pdfVerify][terms] strongHits=[${strongHits.join(', ')}] structureHits=[${structureHits.join(', ')}] negativeHits=[${negativeHits.join(', ')}]`);
 
     const lengthBonus = text.length >= 50000 ? 2 : text.length >= 10000 ? 1 : 0;
@@ -2739,19 +2915,27 @@ async function downloadAndParsePDF(pdfUrl, stockCode, stockName = '', skipValida
       (strongHits.length >= 1 && structureHits.length >= 1) ||
       (strongHits.length >= 1 && verifyScore >= 4)
     );
+    const relatedOfferSignals = strongHits.length + structureHits.length + (normalizedNameHit ? 1 : 0);
+    const isRelatedOfferDoc = relatedOfferSignals >= 2;
+    const isMainProspectus = likelyProspectus && !announcementDetection.announcementLike && mainProspectusDetection.mainProspectusLike;
 
     if (text.length < 1200 && strongHits.length === 0 && structureHits.length === 0) {
       console.log('[pdfVerify][decision] pass=false reason="scanLikelyNoTextAndNoTerms"');
       throw new Error('PDF可能为扫描版，无法提取文字内容');
     }
 
-    if (!likelyProspectus) {
+    if (!isMainProspectus) {
       const reason = negativeHits.length > 0
         ? `关键词更像公告，negativeHits=${negativeHits.join(',')}`
-        : `缺少招股书关键词，strong=${strongHits.length} structure=${structureHits.length}`;
+        : announcementDetection.announcementLike
+          ? `命中公告/补充组合，announcementSignals=${announcementDetection.announcementSignals.join(',')}`
+          : `缺少主招股书结构，strong=${strongHits.length} structure=${structureHits.length}`;
+      const decision = isRelatedOfferDoc ? 'relatedButNotMain' : 'notRelatedOrNotMain';
+      console.log(`[pdfVerify][docType] isRelatedOfferDoc=${isRelatedOfferDoc} isMainProspectus=${isMainProspectus} announcementSignals=[${announcementDetection.announcementSignals.join(', ')}] mainProspectusSignals=[${(mainProspectusDetection.mainProspectusSignals || []).join(', ')}] decision="${decision}"`);
       console.log(`[pdfVerify][decision] pass=false reason="${reason}"`);
       throw new Error(`PDF验证未通过：${reason}`);
     }
+    console.log(`[pdfVerify][docType] isRelatedOfferDoc=${isRelatedOfferDoc} isMainProspectus=${isMainProspectus} announcementSignals=[${announcementDetection.announcementSignals.join(', ')}] mainProspectusSignals=[${(mainProspectusDetection.mainProspectusSignals || []).join(', ')}] decision="mainProspectusPass"`);
     console.log('[pdfVerify][decision] pass=true reason="keywordCompositePass"');
 
     // 内容验证：确保PDF属于目标股票
@@ -5990,14 +6174,16 @@ app.get('/api/score/:code', async (req, res) => {
         });
         if (!profile.ok) {
           console.log(`[API][candidateProfile][fail] idx=${idx} url="${candidate.link}" failReason="${profile.failReason}"`);
-          console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=${(profile.sizeMB || 0).toFixed(2)} textLength=${profile.extractedTextLength || 0} codeHit=false nameHit=false sectionHits=0 strongSectionHits=0 score=-999 scoreReason="${profile.scoreReason}"`);
+          console.log(`[API][candidateProfile][features] idx=${idx} codeHit=false nameHit=false normalizedNameHit=false matchedTerms=[] sectionHits=0 strongSectionHits=0 excludeHits=[] announcementLike=false announcementSignals=[] announcementPenalty=0 mainProspectusLike=false mainProspectusSignals=[] mainProspectusBonus=0`);
+          console.log(`[API][candidateScoreBreakdown] idx=${idx} baseScore=0 nameScore=0 normalizedNameScore=0 structureScore=0 sizeScore=0 announcementPenalty=0 mainProspectusBonus=0 finalScore=-999`);
           return { idx, candidate, metrics: null, score: -999, scoreReason: profile.scoreReason };
         }
         console.log(`[API][candidateProfile][raw] idx=${idx} source=method1 contentLengthHeader=${profile.contentLengthHeader || 0} bufferSize=${profile.bufferSize || 0} fileSizeBytes=${profile.fileSizeBytes || 0} sizeMB=${profile.sizeMB.toFixed(2)} extractedTextLength=${profile.extractedTextLength || 0} preview="${profile.previewText}"`);
-        console.log(`[API][candidateProfile][features] idx=${idx} codeHit=${profile.codeHit} nameHit=${profile.nameHit} matchedTerms=[${(profile.matchedTerms || []).join(', ')}] sectionHits=${profile.sectionHits || 0} strongSectionHits=${profile.strongSectionHits || 0} excludeHits=[${(profile.excludeHits || []).join(', ')}]`);
+        console.log(`[API][candidateProfile][features] idx=${idx} codeHit=${profile.codeHit} nameHit=${profile.nameHit} normalizedNameHit=${profile.normalizedNameHit} stockNameNormalizedPreview="${profile.stockNameNormalizedPreview || ''}" matchedTerms=[${(profile.matchedTerms || []).join(', ')}] sectionHits=${profile.sectionHits || 0} strongSectionHits=${profile.strongSectionHits || 0} excludeHits=[${(profile.excludeHits || []).join(', ')}] announcementLike=${profile.announcementLike} announcementSignals=[${(profile.announcementSignals || []).join(', ')}] announcementPenalty=${profile.announcementPenalty || 0} mainProspectusLike=${profile.mainProspectusLike} mainProspectusSignals=[${(profile.mainProspectusSignals || []).join(', ')}] mainProspectusBonus=${profile.mainProspectusBonus || 0}`);
         const metrics = {
           hasCode: profile.codeHit,
           hasName: profile.nameHit,
+          hasNormalizedName: profile.normalizedNameHit,
           matchedTerms: profile.matchedTerms || [],
           sectionHits: profile.sectionHits || 0,
           strongSectionHits: profile.strongSectionHits || 0,
@@ -6005,9 +6191,12 @@ app.get('/api/score/:code', async (req, res) => {
           excludeHits: (profile.excludeHits || []).length,
           textLength: profile.extractedTextLength || 0,
           fileSize: profile.fileSizeBytes || 0,
+          announcementPenalty: profile.announcementPenalty || 0,
+          mainProspectusBonus: profile.mainProspectusBonus || 0,
         };
-        const score = Number.isFinite(profile.score) ? profile.score : scoreCandidateFingerprint(metrics);
-        console.log(`[API][candidateScore] idx=${idx} url="${candidate.link}" sizeMB=${profile.sizeMB.toFixed(2)} textLength=${metrics.textLength} codeHit=${metrics.hasCode} nameHit=${metrics.hasName} sectionHits=${metrics.sectionHits} strongSectionHits=${metrics.strongSectionHits} score=${score} scoreReason="${profile.scoreReason}"`);
+        const scoreBreakdown = profile.scoreBreakdown || calculateCandidateScoreBreakdown(metrics);
+        const score = Number.isFinite(profile.score) ? profile.score : scoreBreakdown.finalScore;
+        console.log(`[API][candidateScoreBreakdown] idx=${idx} baseScore=${scoreBreakdown.baseScore} nameScore=${scoreBreakdown.nameScore} normalizedNameScore=${scoreBreakdown.normalizedNameScore} structureScore=${scoreBreakdown.structureScore} sizeScore=${scoreBreakdown.sizeScore} announcementPenalty=${scoreBreakdown.announcementPenalty} mainProspectusBonus=${scoreBreakdown.mainProspectusBonus} finalScore=${score}`);
         return { idx, candidate, metrics, score, scoreReason: profile.scoreReason };
       }));
       markStageEnd('lightProfile', 'ok', `candidateCount=${scoredCandidatesRaw.length}`);
